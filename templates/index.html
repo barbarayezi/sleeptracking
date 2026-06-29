@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>睡眠追踪器 — Sleep Tracker</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+    <!-- ═══════════════════════════════════════════ -->
+    <!--  HEADER                                    -->
+    <!-- ═══════════════════════════════════════════ -->
+    <header class="app-header">
+        <h1>🌙 睡眠追踪器</h1>
+        <div class="date-navigator">
+            <button id="btn-prev-day" title="前一天">&larr;</button>
+            <span id="current-date-label">今天</span>
+            <button id="btn-next-day" title="后一天">&rarr;</button>
+            <button id="btn-today" class="btn-today">今天</button>
+        </div>
+    </header>
+
+    <main class="app-main">
+
+        <!-- ═══════════════════════════════════════ -->
+        <!--  SECTION 1: SLEEP TIMELINE              -->
+        <!-- ═══════════════════════════════════════ -->
+        <section class="card timeline-section">
+            <h2>📊 睡眠时间线</h2>
+            <div class="timeline-controls">
+                <label>显示天数：
+                    <select id="timeline-days">
+                        <option value="7">7天</option>
+                        <option value="14" selected>14天</option>
+                        <option value="30">30天</option>
+                    </select>
+                </label>
+            </div>
+            <div class="timeline-container">
+                <canvas id="timeline-canvas"></canvas>
+                <div id="timeline-empty" class="timeline-empty hidden">
+                    暂无睡眠记录，请在下方添加第一条记录。
+                </div>
+            </div>
+        </section>
+
+        <!-- ═══════════════════════════════════════ -->
+        <!--  SECTION 2: RECORD FORM                 -->
+        <!-- ═══════════════════════════════════════ -->
+        <section class="card form-section">
+            <h2>📝 记录睡眠</h2>
+            <form id="sleep-form" novalidate>
+
+                <!-- Record Date -->
+                <div class="form-row">
+                    <label class="form-label" for="record-date">日期</label>
+                    <input type="date" id="record-date" class="form-input" required>
+                </div>
+
+                <!-- Sleep Time & Wake Time -->
+                <div class="form-row form-row-2col">
+                    <div class="form-group">
+                        <label class="form-label" for="sleep-time">入睡时间</label>
+                        <input type="datetime-local" id="sleep-time" class="form-input" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="wake-time">醒来时间</label>
+                        <input type="datetime-local" id="wake-time" class="form-input" required>
+                    </div>
+                </div>
+
+                <!-- Classification (定性) -->
+                <fieldset class="form-fieldset">
+                    <legend class="form-label">定性</legend>
+                    <div class="radio-group">
+                        <label class="radio-label">
+                            <input type="radio" name="classification" value="early" required>
+                            <span class="radio-custom"></span>
+                            早睡
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="classification" value="late">
+                            <span class="radio-custom"></span>
+                            晚睡
+                        </label>
+                    </div>
+                </fieldset>
+
+                <!-- Sleep Quality (睡眠质量) -->
+                <fieldset class="form-fieldset">
+                    <legend class="form-label">睡眠质量</legend>
+                    <div class="radio-group">
+                        <label class="radio-label">
+                            <input type="radio" name="sleep_quality" value="good" required>
+                            <span class="radio-custom"></span>
+                            良好
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="sleep_quality" value="average">
+                            <span class="radio-custom"></span>
+                            一般
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="sleep_quality" value="poor">
+                            <span class="radio-custom"></span>
+                            较差
+                        </label>
+                    </div>
+                </fieldset>
+
+                <!-- Sleep Problems (睡眠问题) — conditional -->
+                <fieldset class="form-fieldset" id="sleep-problems-group" style="display:none;">
+                    <legend class="form-label">睡眠问题 <span class="label-hint">（可多选）</span></legend>
+                    <div class="checkbox-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" name="sleep_problems" value="insomnia">
+                            <span class="checkbox-custom"></span>
+                            失眠
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" name="sleep_problems" value="dreams">
+                            <span class="checkbox-custom"></span>
+                            多梦
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" name="sleep_problems" value="sweats">
+                            <span class="checkbox-custom"></span>
+                            多汗
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" name="sleep_problems" value="waking">
+                            <span class="checkbox-custom"></span>
+                            频醒
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" name="sleep_problems" value="early_waking">
+                            <span class="checkbox-custom"></span>
+                            早醒
+                        </label>
+                    </div>
+                </fieldset>
+
+                <!-- Dream Journal (梦境记录) -->
+                <div class="form-row">
+                    <label class="form-label" for="dream-journal">梦境记录</label>
+                    <textarea id="dream-journal" class="form-textarea" rows="3"
+                        placeholder="记录你的梦境..."></textarea>
+                </div>
+
+                <!-- Actions -->
+                <div class="form-actions">
+                    <button type="submit" id="btn-save" class="btn btn-primary">💾 保存记录</button>
+                    <button type="button" id="btn-delete" class="btn btn-danger hidden">🗑️ 删除记录</button>
+                    <span id="form-message" class="form-message"></span>
+                </div>
+            </form>
+        </section>
+
+        <!-- ═══════════════════════════════════════ -->
+        <!--  SECTION 3: REPORT PANEL                -->
+        <!-- ═══════════════════════════════════════ -->
+        <section class="card report-section">
+            <h2>📈 睡眠分析报告</h2>
+            <div class="report-controls">
+                <label>
+                    报告周期：
+                    <select id="report-period">
+                        <option value="weekly">周报告</option>
+                        <option value="monthly">月报告</option>
+                    </select>
+                </label>
+                <button id="btn-generate-report" class="btn btn-primary">生成报告</button>
+            </div>
+            <div id="report-output" class="report-output">
+                <p class="report-placeholder">点击"生成报告"查看睡眠分析。</p>
+            </div>
+        </section>
+
+    </main>
+
+    <footer class="app-footer">
+        <p>Sleep Tracker &copy; 2026 — 本地数据，安全私密</p>
+    </footer>
+
+    <script src="/static/form.js"></script>
+    <script src="/static/timeline.js"></script>
+    <script src="/static/reports.js"></script>
+    <script src="/static/app.js"></script>
+</body>
+</html>
