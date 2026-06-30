@@ -155,13 +155,24 @@ class FormManager {
 
             if (resp.ok) {
                 const saved = await resp.json();
-                this._existingRecord = saved;
-                this.btnDelete.classList.remove('hidden');
                 this._showMessage('✅ 保存成功！', 'success');
 
                 // Notify app to refresh timeline
                 if (typeof App !== 'undefined' && App.onRecordSaved) {
                     App.onRecordSaved(saved);
+                }
+
+                if (isUpdate) {
+                    // Update: keep form populated with updated data
+                    this._existingRecord = saved;
+                    this.btnDelete.classList.remove('hidden');
+                } else {
+                    // New record: reset form to blank for next entry
+                    this._existingRecord = null;
+                    this.btnDelete.classList.add('hidden');
+                    this._resetForm();
+                    document.getElementById('record-date').value = this._selectedDate;
+                    this._setDefaultTimes();
                 }
             } else {
                 const err = await resp.json();
