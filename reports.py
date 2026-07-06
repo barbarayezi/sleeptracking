@@ -9,7 +9,7 @@ import sys
 import io
 from datetime import datetime, date, timedelta
 from collections import Counter
-from database import get_connection, DB_PATH
+from developing.sleeptracking.database import get_connection, DB_PATH
 
 
 def generate_report(period='weekly', from_date=None):
@@ -36,8 +36,7 @@ def generate_report(period='weekly', from_date=None):
     to_dt = today
 
     conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute(
+    cursor = conn.execute(
         "SELECT * FROM sleep_records WHERE record_date BETWEEN ? AND ? ORDER BY record_date ASC",
         (from_dt.isoformat(), to_dt.isoformat())
     )
@@ -178,8 +177,7 @@ def get_quick_stats(days=30):
     from_dt = today - timedelta(days=days)
 
     conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute(
+    cursor = conn.execute(
         "SELECT * FROM sleep_records WHERE record_date >= ? ORDER BY record_date DESC",
         (from_dt.isoformat(),)
     )

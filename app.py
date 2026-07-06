@@ -3,10 +3,19 @@ Sleep Tracker — Flask application entry point.
 All REST API routes for CRUD operations, statistics, and reports.
 """
 
+import os
+import sys
+# Ensure the project root (vscode/) is in the Python path
+_project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, _project_root)
+
+from dotenv import load_dotenv
+load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
+
 from flask import Flask, request, jsonify, render_template
-from database import init_db
-from reports import generate_report, get_quick_stats
-import models
+from developing.sleeptracking.database import init_db
+from developing.sleeptracking.reports import generate_report, get_quick_stats
+import developing.sleeptracking.models as models
 
 app = Flask(__name__)
 
@@ -162,6 +171,6 @@ if __name__ == '__main__':
     init_db()
     print("=" * 50)
     print("  Sleep Tracker")
-    print("  Open http://localhost:5000 in your browser")
+    print("  Open http://localhost:5001 in your browser")
     print("=" * 50)
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=True, host='0.0.0.0', port=5001)

@@ -3,3 +3,5 @@ sleep_tracker.db-shm
 sleep_tracker.db-wal
 __pycache__/
 *.pyc
+.env
+venv/

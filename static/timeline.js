@@ -74,8 +74,8 @@ class Timeline {
         const ctx = this.ctx;
         const chartWidth = containerWidth - this.LEFT_MARGIN - this.RIGHT_MARGIN;
 
-        // 12-hour window: 18:00 to 06:00
-        const TOTAL_MINUTES = 720; // 12 * 60
+        // 24-hour window: 18:00 to 18:00 (next day)
+        const TOTAL_MINUTES = 1440; // 24 * 60
         const pxPerMinute = chartWidth / TOTAL_MINUTES;
 
         // Clear
@@ -88,8 +88,8 @@ class Timeline {
         ctx.strokeStyle = '#334155';
         ctx.lineWidth = 0.5;
 
-        const hourLabels = ['18', '19', '20', '21', '22', '23', '0', '1', '2', '3', '4', '5', '6'];
-        for (let i = 0; i <= 12; i++) {
+        const hourLabels = ['18', '19', '20', '21', '22', '23', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18'];
+        for (let i = 0; i <= 24; i++) {
             const x = this.LEFT_MARGIN + i * 60 * pxPerMinute;
             // Grid line
             ctx.beginPath();
