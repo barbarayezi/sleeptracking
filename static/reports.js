@@ -46,10 +46,10 @@ class ReportManager {
 
         // Summary stats
         html += '<div class="report-summary">';
-        html += this._statCard(report.average_sleep_hours + 'h', '平均睡眠时长');
-        html += this._statCard(report.average_sleep_time, '平均入睡时间');
-        html += this._statCard(report.average_wake_time, '平均醒来时间');
+        html += this._statCard(report.average_sleep_hours + 'h', '平均每日睡眠');
         html += this._statCard(report.total_days_recorded + '天', '记录天数');
+        html += this._statCard(report.total_records + '条', '总记录数');
+        html += this._statCard(report.average_sleep_time, '平均入睡时间');
         html += '</div>';
 
         // Breakdown
@@ -68,11 +68,24 @@ class ReportManager {
         html += '<div class="breakdown-group">';
         html += '<h4>⏰ 入睡分类</h4>';
         html += '<div class="breakdown-bars">';
-        html += this._barRow('早睡', report.classification_breakdown.early, report.total_days_recorded, 'early');
-        html += this._barRow('晚睡', report.classification_breakdown.late, report.total_days_recorded, 'late');
+        html += this._barRow('早睡', report.classification_breakdown.early, report.total_records, 'early');
+        html += this._barRow('晚睡', report.classification_breakdown.late, report.total_records, 'late');
         html += '</div></div>';
 
         html += '</div>';
+
+        // Type breakdown
+        if (report.type_breakdown) {
+            html += '<div class="report-breakdown">';
+            html += '<div class="breakdown-group">';
+            html += '<h4>🏷️ 记录类型</h4>';
+            html += '<div class="breakdown-bars">';
+            html += this._barRow('夜间睡眠', report.type_breakdown.night, report.total_records, 'night');
+            html += this._barRow('午睡', report.type_breakdown.nap, report.total_records, 'nap');
+            html += this._barRow('分段睡眠', report.type_breakdown.segment, report.total_records, 'segment');
+            html += '</div></div>';
+            html += '</div>';
+        }
 
         // Problem frequency
         if (report.problem_frequency && Object.keys(report.problem_frequency).length > 0) {
@@ -119,18 +132,21 @@ class ReportManager {
         if (report.daily_hours && report.daily_hours.length > 0) {
             html += '<h4 style="margin-bottom:8px;color:var(--text-muted);font-size:0.85rem;">📅 每日详情</h4>';
             html += '<table class="report-daily-table"><thead><tr>';
-            html += '<th>日期</th><th>时长</th><th>分类</th><th>质量</th>';
+            html += '<th>日期</th><th>总时长</th><th>记录</th>';
             html += '</tr></thead><tbody>';
 
             const qualLabels = { good: '良好', average: '一般', poor: '较差' };
+            const typeLabels = { night: '夜间', nap: '午睡', segment: '分段' };
             for (const d of report.daily_hours) {
-                const clsLabel = d.classification === 'early' ? '早睡' : '晚睡';
-                const qualLabel = qualLabels[d.quality] || d.quality;
+                const recordDetails = (d.records || []).map(r => {
+                    const typeLabel = typeLabels[r.type] || r.type;
+                    return `<span class="daily-record-detail">${typeLabel} ${r.hours.toFixed(1)}h</span>`;
+                }).join('');
+
                 html += `<tr>
                     <td>${d.date}</td>
-                    <td>${d.hours.toFixed(1)}h</td>
-                    <td>${clsLabel}</td>
-                    <td><span class="quality-dot ${d.quality}"></span>${qualLabel}</td>
+                    <td><strong>${d.hours.toFixed(1)}h</strong></td>
+                    <td>${recordDetails || '—'}</td>
                 </tr>`;
             }
             html += '</tbody></table>';

@@ -5,17 +5,17 @@ All REST API routes for CRUD operations, statistics, and reports.
 
 import os
 import sys
-# Ensure the project root (vscode/) is in the Python path
-_project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Ensure the project root is in the Python path
+_project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _project_root)
 
 from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
 from flask import Flask, request, jsonify, render_template
-from developing.sleeptracking.database import init_db
-from developing.sleeptracking.reports import generate_report, get_quick_stats
-import developing.sleeptracking.models as models
+from sleep_traking.database import init_db
+from sleep_traking.reports import generate_report, get_quick_stats
+import sleep_traking.models as models
 
 app = Flask(__name__)
 
@@ -30,88 +30,31 @@ def index():
 
 
 # ──────────────────────────────────────────────
-#  CRUD: /api/records
+#  Validation helpers
 # ──────────────────────────────────────────────
 
-@app.route('/api/records', methods=['GET'])
-def list_records():
-    """List all records, optionally filtered by date range."""
-    from_date = request.args.get('from')
-    to_date = request.args.get('to')
-    records = models.get_all_records(from_date=from_date, to_date=to_date)
-    return jsonify(records)
 
-
-@app.route('/api/records/<record_date>', methods=['GET'])
-def get_record(record_date):
-    """Get a single record by date."""
-    record = models.get_record_by_date(record_date)
-    if record is None:
-        return jsonify({'error': 'Record not found'}), 404
-    return jsonify(record)
-
-
-@app.route('/api/records', methods=['POST'])
-def create_record():
-    """Create a new sleep record."""
-    data = request.get_json()
-    if not data:
-        return jsonify({'error': 'Request body must be JSON'}), 400
+def _validate_record_data(data):
+    """Validate sleep record data. Returns (errors, cleaned_data)."""
+    errors = []
 
     # Validate required fields
     required = ['record_date', 'sleep_time', 'wake_time', 'classification', 'sleep_quality']
     for field in required:
         if field not in data:
-            return jsonify({'error': f'Missing required field: {field}'}), 400
+            errors.append(f'Missing required field: {field}')
 
     # Validate classification
-    if data['classification'] not in ('early', 'late'):
-        return jsonify({'error': 'classification must be "early" or "late"'}), 400
+    if 'classification' in data and data['classification'] not in ('early', 'late'):
+        errors.append('classification must be "early" or "late"')
 
     # Validate sleep quality
-    if data['sleep_quality'] not in ('good', 'average', 'poor'):
-        return jsonify({'error': 'sleep_quality must be "good", "average", or "poor"'}), 400
-
-    # Auto-clear sleep problems if quality is good
-    if data['sleep_quality'] == 'good':
-        data['sleep_problems'] = []
-
-    # Validate sleep problems when quality is not good
-    if data['sleep_quality'] in ('average', 'poor'):
-        problems = data.get('sleep_problems', [])
-        if not problems:
-            return jsonify({'error': 'sleep_problems is required when quality is average or poor'}), 400
-        valid_problems = {'insomnia', 'dreams', 'sweats', 'waking', 'early_waking'}
-        for p in problems:
-            if p not in valid_problems:
-                return jsonify({'error': f'Invalid sleep problem: {p}'}), 400
-
-    # Check if record for this date already exists
-    existing = models.get_record_by_date(data['record_date'])
-    if existing:
-        return jsonify({
-            'error': 'Record already exists for this date. Use PUT to update.',
-            'existing': existing
-        }), 409
-
-    record = models.create_record(data)
-    return jsonify(record), 201
-
-
-@app.route('/api/records/<record_date>', methods=['PUT'])
-def update_record(record_date):
-    """Update an existing sleep record."""
-    data = request.get_json()
-    if not data:
-        return jsonify({'error': 'Request body must be JSON'}), 400
-
-    # Validate classification if present
-    if 'classification' in data and data['classification'] not in ('early', 'late'):
-        return jsonify({'error': 'classification must be "early" or "late"'}), 400
-
-    # Validate sleep quality if present
     if 'sleep_quality' in data and data['sleep_quality'] not in ('good', 'average', 'poor'):
-        return jsonify({'error': 'sleep_quality must be "good", "average", or "poor"'}), 400
+        errors.append('sleep_quality must be "good", "average", or "poor"')
+
+    # Validate record_type if present
+    if 'record_type' in data and data['record_type'] not in ('night', 'nap', 'segment'):
+        errors.append('record_type must be "night", "nap", or "segment"')
 
     # Auto-clear sleep problems if quality is good
     if data.get('sleep_quality') == 'good':
@@ -121,18 +64,76 @@ def update_record(record_date):
     if data.get('sleep_quality') in ('average', 'poor'):
         problems = data.get('sleep_problems', [])
         if not problems:
-            return jsonify({'error': 'sleep_problems is required when quality is average or poor'}), 400
+            errors.append('sleep_problems is required when quality is average or poor')
+        else:
+            valid_problems = {'insomnia', 'dreams', 'sweats', 'waking', 'early_waking'}
+            for p in problems:
+                if p not in valid_problems:
+                    errors.append(f'Invalid sleep problem: {p}')
+                    break
 
-    record = models.update_record(record_date, data)
+    return errors
+
+
+# ──────────────────────────────────────────────
+#  CRUD: /api/records
+# ──────────────────────────────────────────────
+
+@app.route('/api/records', methods=['GET'])
+def list_records():
+    """List all records, optionally filtered by date range or specific date."""
+    from_date = request.args.get('from')
+    to_date = request.args.get('to')
+    date = request.args.get('date')
+    records = models.get_all_records(from_date=from_date, to_date=to_date, date=date)
+    return jsonify(records)
+
+
+@app.route('/api/records/<int:record_id>', methods=['GET'])
+def get_record(record_id):
+    """Get a single record by ID."""
+    record = models.get_record_by_id(record_id)
     if record is None:
         return jsonify({'error': 'Record not found'}), 404
     return jsonify(record)
 
 
-@app.route('/api/records/<record_date>', methods=['DELETE'])
-def delete_record(record_date):
-    """Delete a sleep record by date."""
-    deleted = models.delete_record(record_date)
+@app.route('/api/records', methods=['POST'])
+def create_record():
+    """Create a new sleep record. Multiple records per date are allowed."""
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Request body must be JSON'}), 400
+
+    errors = _validate_record_data(data)
+    if errors:
+        return jsonify({'error': errors[0]}), 400
+
+    record = models.create_record(data)
+    return jsonify(record), 201
+
+
+@app.route('/api/records/<int:record_id>', methods=['PUT'])
+def update_record(record_id):
+    """Update an existing sleep record by ID."""
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Request body must be JSON'}), 400
+
+    errors = _validate_record_data(data)
+    if errors:
+        return jsonify({'error': errors[0]}), 400
+
+    record = models.update_record_by_id(record_id, data)
+    if record is None:
+        return jsonify({'error': 'Record not found'}), 404
+    return jsonify(record)
+
+
+@app.route('/api/records/<int:record_id>', methods=['DELETE'])
+def delete_record(record_id):
+    """Delete a sleep record by ID."""
+    deleted = models.delete_record_by_id(record_id)
     if not deleted:
         return jsonify({'error': 'Record not found'}), 404
     return '', 204

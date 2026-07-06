@@ -9,7 +9,7 @@ import sys
 import io
 from datetime import datetime, date, timedelta
 from collections import Counter
-from developing.sleeptracking.database import get_connection, DB_PATH
+from sleep_traking.database import get_connection, DB_PATH
 
 
 def generate_report(period='weekly', from_date=None):
@@ -58,6 +58,7 @@ def generate_report(period='weekly', from_date=None):
             'period': period,
             'date_range': {'from': from_dt.isoformat(), 'to': to_dt.isoformat()},
             'total_days_recorded': 0,
+            'total_records': 0,
             'message': 'No sleep records found in this period.',
             'average_sleep_hours': 0,
             'earliest_sleep': None,
@@ -66,39 +67,58 @@ def generate_report(period='weekly', from_date=None):
             'average_wake_time': None,
             'classification_breakdown': {'early': 0, 'late': 0},
             'quality_breakdown': {'good': 0, 'average': 0, 'poor': 0},
+            'type_breakdown': {'night': 0, 'nap': 0, 'segment': 0},
             'problem_frequency': {},
             'daily_hours': [],
             'trend': 'insufficient_data',
             'patterns': []
         }
 
-    # Calculate durations
+    # Group records by date
+    from collections import defaultdict
+    by_date = defaultdict(list)
+    for r in rows:
+        by_date[r['record_date']].append(r)
+
+    # Calculate durations grouped by date
     daily_hours = []
     sleep_times = []
     wake_times = []
 
-    for r in rows:
-        sleep_dt = _parse_datetime(r['sleep_time'])
-        wake_dt = _parse_datetime(r['wake_time'])
+    for date_str in sorted(by_date.keys()):
+        day_records = by_date[date_str]
+        total_hours = 0
+        records_detail = []
 
-        # Handle overnight sleep (wake on next day)
-        if wake_dt <= sleep_dt:
-            wake_dt += timedelta(days=1)
+        for r in day_records:
+            sleep_dt = _parse_datetime(r['sleep_time'])
+            wake_dt = _parse_datetime(r['wake_time'])
 
-        duration = (wake_dt - sleep_dt).total_seconds() / 3600.0
+            if wake_dt <= sleep_dt:
+                wake_dt += timedelta(days=1)
+
+            duration = (wake_dt - sleep_dt).total_seconds() / 3600.0
+            total_hours += duration
+
+            records_detail.append({
+                'type': r.get('record_type', 'night'),
+                'hours': round(duration, 2),
+                'classification': r['classification'],
+                'quality': r['sleep_quality'],
+                'sleep_time': r['sleep_time'],
+                'wake_time': r['wake_time'],
+                'problems': r['sleep_problems']
+            })
+
+            sleep_times.append(sleep_dt.time())
+            wake_times.append(wake_dt.time())
 
         daily_hours.append({
-            'date': r['record_date'],
-            'hours': round(duration, 2),
-            'classification': r['classification'],
-            'quality': r['sleep_quality'],
-            'sleep_time': r['sleep_time'],
-            'wake_time': r['wake_time'],
-            'problems': r['sleep_problems']
+            'date': date_str,
+            'hours': round(total_hours, 2),
+            'record_count': len(day_records),
+            'records': records_detail
         })
-
-        sleep_times.append(sleep_dt.time())
-        wake_times.append(wake_dt.time())
 
     # Compute statistics
     total_days = len(rows)
@@ -128,11 +148,14 @@ def generate_report(period='weekly', from_date=None):
     earliest = sorted_sleep[0].strftime('%H:%M')
     latest = sorted_sleep[-1].strftime('%H:%M')
 
-    # Classification breakdown
+    # Classification breakdown (per-record)
     class_counts = Counter(r['classification'] for r in rows)
 
-    # Quality breakdown
+    # Quality breakdown (per-record)
     quality_counts = Counter(r['sleep_quality'] for r in rows)
+
+    # Type breakdown
+    type_counts = Counter(r.get('record_type', 'night') for r in rows)
 
     # Problem frequency
     problem_counter = Counter()
@@ -149,7 +172,8 @@ def generate_report(period='weekly', from_date=None):
     return {
         'period': period,
         'date_range': {'from': from_dt.isoformat(), 'to': to_dt.isoformat()},
-        'total_days_recorded': total_days,
+        'total_days_recorded': len(by_date),
+        'total_records': len(rows),
         'average_sleep_hours': round(avg_hours, 2),
         'earliest_sleep': earliest,
         'latest_sleep': latest,
@@ -163,6 +187,11 @@ def generate_report(period='weekly', from_date=None):
             'good': quality_counts.get('good', 0),
             'average': quality_counts.get('average', 0),
             'poor': quality_counts.get('poor', 0)
+        },
+        'type_breakdown': {
+            'night': type_counts.get('night', 0),
+            'nap': type_counts.get('nap', 0),
+            'segment': type_counts.get('segment', 0)
         },
         'problem_frequency': dict(problem_counter),
         'daily_hours': daily_hours,
@@ -178,7 +207,7 @@ def get_quick_stats(days=30):
 
     conn = get_connection()
     cursor = conn.execute(
-        "SELECT * FROM sleep_records WHERE record_date >= ? ORDER BY record_date DESC",
+        "SELECT * FROM sleep_records WHERE record_date >= ? ORDER BY record_date DESC, record_type ASC",
         (from_dt.isoformat(),)
     )
     rows = [dict(r) for r in cursor.fetchall()]
@@ -190,29 +219,46 @@ def get_quick_stats(days=30):
             'average_duration': 0,
             'streak_early_sleep': 0,
             'most_common_quality': None,
-            'total_records': 0
+            'total_records': 0,
+            'total_days': 0
         }
 
-    # Average duration
-    durations = []
+    # Group by date for per-day average
+    from collections import defaultdict
+    by_date = defaultdict(list)
     for r in rows:
-        sleep_dt = _parse_datetime(r['sleep_time'])
-        wake_dt = _parse_datetime(r['wake_time'])
-        if wake_dt <= sleep_dt:
-            wake_dt += timedelta(days=1)
-        durations.append((wake_dt - sleep_dt).total_seconds() / 3600.0)
+        by_date[r['record_date']].append(r)
 
-    avg_duration = round(sum(durations) / len(durations), 2)
+    # Average daily total duration
+    daily_totals = []
+    for date_records in by_date.values():
+        day_total = 0
+        for r in date_records:
+            sleep_dt = _parse_datetime(r['sleep_time'])
+            wake_dt = _parse_datetime(r['wake_time'])
+            if wake_dt <= sleep_dt:
+                wake_dt += timedelta(days=1)
+            day_total += (wake_dt - sleep_dt).total_seconds() / 3600.0
+        daily_totals.append(day_total)
 
-    # Streak of early sleep (consecutive from most recent)
+    avg_duration = round(sum(daily_totals) / len(daily_totals), 2) if daily_totals else 0
+
+    # Streak of early sleep — check night records consecutively from most recent
+    sorted_dates = sorted(by_date.keys(), reverse=True)
     streak = 0
-    for r in rows:
-        if r['classification'] == 'early':
+    for d in sorted_dates:
+        day_records = by_date[d]
+        night_records = [r for r in day_records if r.get('record_type', 'night') == 'night']
+        if not night_records:
+            # Skip days with no night record (only naps)
+            continue
+        # Check if all night records for this day are early
+        if all(r['classification'] == 'early' for r in night_records):
             streak += 1
         else:
             break
 
-    # Most common quality
+    # Most common quality (across all records)
     quality_counts = Counter(r['sleep_quality'] for r in rows)
     most_common = quality_counts.most_common(1)[0][0] if quality_counts else None
 
@@ -220,7 +266,8 @@ def get_quick_stats(days=30):
         'average_duration': avg_duration,
         'streak_early_sleep': streak,
         'most_common_quality': most_common,
-        'total_records': total_records
+        'total_records': total_records,
+        'total_days': len(by_date)
     }
 
 

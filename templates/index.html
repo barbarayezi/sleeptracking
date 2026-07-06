@@ -50,6 +50,10 @@
         <!-- ═══════════════════════════════════════ -->
         <section class="card form-section">
             <h2>📝 记录睡眠</h2>
+
+            <!-- Record list for current date -->
+            <div id="records-list" class="records-list hidden"></div>
+
             <form id="sleep-form" novalidate>
 
                 <!-- Record Date -->
@@ -57,6 +61,28 @@
                     <label class="form-label" for="record-date">日期</label>
                     <input type="date" id="record-date" class="form-input" required>
                 </div>
+
+                <!-- Record Type -->
+                <fieldset class="form-fieldset">
+                    <legend class="form-label">记录类型</legend>
+                    <div class="radio-group">
+                        <label class="radio-label">
+                            <input type="radio" name="record_type" value="night" checked>
+                            <span class="radio-custom"></span>
+                            🌙 夜间睡眠
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="record_type" value="nap">
+                            <span class="radio-custom"></span>
+                            ☀️ 午睡
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="record_type" value="segment">
+                            <span class="radio-custom"></span>
+                            🔄 分段睡眠
+                        </label>
+                    </div>
+                </fieldset>
 
                 <!-- Sleep Time & Wake Time -->
                 <div class="form-row form-row-2col">
@@ -151,6 +177,7 @@
                 <!-- Actions -->
                 <div class="form-actions">
                     <button type="submit" id="btn-save" class="btn btn-primary">💾 保存记录</button>
+                    <button type="button" id="btn-cancel-edit" class="btn btn-secondary hidden">取消编辑</button>
                     <button type="button" id="btn-delete" class="btn btn-danger hidden">🗑️ 删除记录</button>
                     <span id="form-message" class="form-message"></span>
                 </div>

@@ -110,7 +110,7 @@ class CursorStub:
 def get_connection():
     """Return a new database connection (Turso or local SQLite)."""
     if USE_TURSO:
-        import libsql_experimental as libsql
+        import libsql
 
         raw_conn = libsql.connect(
             database=TURSO_URL,
@@ -128,14 +128,126 @@ def get_connection():
         return conn
 
 
+def _get_schema_version(conn):
+    """Return current schema version, or 0 if not set."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS _meta (
+            key   TEXT PRIMARY KEY,
+            value TEXT
+        )
+    """)
+    cursor = conn.execute("SELECT value FROM _meta WHERE key = 'schema_version'")
+    row = cursor.fetchone()
+    if row:
+        return int(row[0])
+    return 0
+
+
+def _set_schema_version(conn, version):
+    """Set the schema version."""
+    conn.execute(
+        "INSERT OR REPLACE INTO _meta (key, value) VALUES ('schema_version', ?)",
+        (str(version),)
+    )
+    conn.commit()
+
+
+def _migrate_v2(conn):
+    """Migrate from v1 (one record per date) to v2 (multiple records per date).
+
+    Changes:
+    - Remove UNIQUE constraint on record_date
+    - Add record_type column (night/nap/segment)
+    """
+    print("  Running migration v1 -> v2 ...")
+
+    # Step 1: Create new table with updated schema
+    conn.execute("""
+        CREATE TABLE sleep_records_v2 (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            record_date     DATE NOT NULL,
+            record_type     TEXT NOT NULL DEFAULT 'night'
+                            CHECK(record_type IN ('night', 'nap', 'segment')),
+            sleep_time      TEXT NOT NULL,
+            wake_time       TEXT NOT NULL,
+            classification  TEXT NOT NULL CHECK(classification IN ('early', 'late')),
+            sleep_quality   TEXT NOT NULL CHECK(sleep_quality IN ('good', 'average', 'poor')),
+            sleep_problems  TEXT DEFAULT NULL,
+            dream_journal   TEXT DEFAULT '',
+            created_at      TEXT DEFAULT (datetime('now', 'localtime')),
+            updated_at      TEXT DEFAULT (datetime('now', 'localtime'))
+        )
+    """)
+
+    # Step 2: Copy existing data (default record_type='night')
+    conn.execute("""
+        INSERT INTO sleep_records_v2
+            (id, record_date, record_type, sleep_time, wake_time,
+             classification, sleep_quality, sleep_problems, dream_journal,
+             created_at, updated_at)
+        SELECT id, record_date, 'night', sleep_time, wake_time,
+               classification, sleep_quality, sleep_problems, dream_journal,
+               created_at, updated_at
+        FROM sleep_records
+    """)
+
+    # Step 3: Drop old table
+    conn.execute("DROP TABLE sleep_records")
+
+    # Step 4: Rename new table
+    conn.execute("ALTER TABLE sleep_records_v2 RENAME TO sleep_records")
+
+    # Step 5: Recreate indexes
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_sleep_records_date
+        ON sleep_records(record_date)
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_sleep_records_type
+        ON sleep_records(record_type)
+    """)
+
+    _set_schema_version(conn, 2)
+    print("  Migration v1 -> v2 completed.")
+
+
+def _migrate(conn):
+    """Run pending migrations based on current schema version."""
+    version = _get_schema_version(conn)
+
+    if version < 2:
+        # Check if the old v1 table exists (no record_type column)
+        cursor = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='sleep_records'"
+        )
+        if cursor.fetchone():
+            # Table exists — check if it's v1 (no record_type column)
+            col_cursor = conn.execute("PRAGMA table_info('sleep_records')")
+            columns = [row[1] for row in col_cursor.fetchall()]
+            if 'record_type' not in columns:
+                _migrate_v2(conn)
+            else:
+                # Already v2, just update version
+                _set_schema_version(conn, 2)
+        else:
+            # No table yet — fresh install
+            _set_schema_version(conn, 2)
+
+
 def init_db():
-    """Create the database schema if it doesn't already exist."""
+    """Create the database schema or migrate from an older version."""
     conn = get_connection()
 
+    # Check if schema_version table exists and run migrations
+    _migrate(conn)
+
+    # For fresh installs (no table yet), create the v2 schema
     conn.execute("""
         CREATE TABLE IF NOT EXISTS sleep_records (
             id              INTEGER PRIMARY KEY AUTOINCREMENT,
-            record_date     DATE NOT NULL UNIQUE,
+            record_date     DATE NOT NULL,
+            record_type     TEXT NOT NULL DEFAULT 'night'
+                            CHECK(record_type IN ('night', 'nap', 'segment')),
             sleep_time      TEXT NOT NULL,
             wake_time       TEXT NOT NULL,
             classification  TEXT NOT NULL CHECK(classification IN ('early', 'late')),
@@ -150,6 +262,10 @@ def init_db():
     conn.execute("""
         CREATE INDEX IF NOT EXISTS idx_sleep_records_date
         ON sleep_records(record_date)
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_sleep_records_type
+        ON sleep_records(record_type)
     """)
 
     conn.commit()

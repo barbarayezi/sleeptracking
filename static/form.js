@@ -1,5 +1,6 @@
 /**
  * form.js — Sleep record form handling, conditional logic, validation, and submission.
+ * Supports multiple records per date (night sleep, nap, segmented sleep).
  * Exposes: FormManager class
  */
 
@@ -8,38 +9,42 @@ class FormManager {
         this.form = document.getElementById('sleep-form');
         this.btnSave = document.getElementById('btn-save');
         this.btnDelete = document.getElementById('btn-delete');
+        this.btnCancel = document.getElementById('btn-cancel-edit');
         this.msgEl = document.getElementById('form-message');
         this.problemsGroup = document.getElementById('sleep-problems-group');
+        this.recordsListEl = document.getElementById('records-list');
 
         this._selectedDate = this._todayStr();
-        this._existingRecord = null;
+        this._recordsForDate = [];     // All records for current date
+        this._editingRecordId = null;  // ID being edited, null = new record
 
         this._initEvents();
     }
 
     /* ── Public API ───────────────────────── */
 
-    /** Load the record for a given date (YYYY-MM-DD) into the form. */
+    /** Load all records for a given date (YYYY-MM-DD) into the form. */
     async loadDate(dateStr) {
         this._selectedDate = dateStr;
+        this._editingRecordId = null;
         this._resetForm();
         document.getElementById('record-date').value = dateStr;
+        this._setDefaultTimes();
+        this._updateFormMode();
 
         try {
-            const resp = await fetch(`/api/records/${dateStr}`);
+            const resp = await fetch(`/api/records?date=${dateStr}`);
             if (resp.ok) {
-                const record = await resp.json();
-                this._existingRecord = record;
-                this._populateForm(record);
-                this.btnDelete.classList.remove('hidden');
+                this._recordsForDate = await resp.json();
             } else {
-                this._existingRecord = null;
-                this.btnDelete.classList.add('hidden');
-                this._setDefaultTimes();
+                this._recordsForDate = [];
             }
         } catch (err) {
+            this._recordsForDate = [];
             this._showMessage('加载失败: ' + err.message, 'error');
         }
+
+        this._renderRecordList();
     }
 
     /** Return the currently selected date. */
@@ -64,6 +69,9 @@ class FormManager {
 
         // Delete button
         this.btnDelete.addEventListener('click', () => this._deleteRecord());
+
+        // Cancel edit button
+        this.btnCancel.addEventListener('click', () => this._cancelEdit());
     }
 
     /* ── Conditional Logic ────────────────── */
@@ -74,11 +82,99 @@ class FormManager {
 
         if (selected.value === 'good') {
             this.problemsGroup.style.display = 'none';
-            // Clear all problem checkboxes
             this.form.querySelectorAll('input[name="sleep_problems"]')
                 .forEach(cb => { cb.checked = false; });
         } else {
             this.problemsGroup.style.display = 'block';
+        }
+    }
+
+    /* ── Record List Rendering ────────────── */
+
+    _renderRecordList() {
+        if (this._recordsForDate.length === 0) {
+            this.recordsListEl.classList.add('hidden');
+            this.recordsListEl.innerHTML = '';
+            return;
+        }
+
+        this.recordsListEl.classList.remove('hidden');
+
+        const typeLabels = { night: '🌙 夜间', nap: '☀️ 午睡', segment: '🔄 分段' };
+        const qualLabels = { good: '良好', average: '一般', poor: '较差' };
+        const qualColors = { good: 'var(--green)', average: 'var(--yellow)', poor: 'var(--red)' };
+
+        let html = '';
+        for (const r of this._recordsForDate) {
+            const isEditing = (this._editingRecordId === r.id);
+            const duration = this._calcDuration(r.sleep_time, r.wake_time);
+            const typeLabel = typeLabels[r.record_type] || r.record_type;
+            const qualLabel = qualLabels[r.sleep_quality] || r.sleep_quality;
+            const qualColor = qualColors[r.sleep_quality] || '#94a3b8';
+
+            html += `<div class="record-card${isEditing ? ' record-card--editing' : ''}">`;
+            html += '<div class="record-card__body">';
+            html += `<span class="record-type-badge record-type--${r.record_type}">${typeLabel}</span>`;
+            html += `<span class="record-card__time">${this._formatTime(r.sleep_time)} → ${this._formatTime(r.wake_time)}</span>`;
+            html += `<span class="record-card__duration">${duration.toFixed(1)}h</span>`;
+            html += `<span class="record-card__quality" style="color:${qualColor}">● ${qualLabel}</span>`;
+            html += '</div>';
+            html += '<div class="record-card__actions">';
+            if (!isEditing) {
+                html += `<button class="btn-record-edit" data-id="${r.id}" title="编辑">✏️</button>`;
+                html += `<button class="btn-record-delete" data-id="${r.id}" title="删除">🗑️</button>`;
+            }
+            html += '</div>';
+            html += '</div>';
+        }
+        this.recordsListEl.innerHTML = html;
+
+        // Wire edit buttons
+        this.recordsListEl.querySelectorAll('.btn-record-edit').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const id = parseInt(e.currentTarget.dataset.id);
+                this._editRecord(id);
+            });
+        });
+
+        // Wire delete buttons
+        this.recordsListEl.querySelectorAll('.btn-record-delete').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const id = parseInt(e.currentTarget.dataset.id);
+                this._deleteRecord(id);
+            });
+        });
+    }
+
+    /* ── Edit / Cancel ─────────────────────── */
+
+    _editRecord(recordId) {
+        const record = this._recordsForDate.find(r => r.id === recordId);
+        if (!record) return;
+
+        this._editingRecordId = recordId;
+        this._populateForm(record);
+        this._updateFormMode();
+        this._renderRecordList();
+    }
+
+    _cancelEdit() {
+        this._editingRecordId = null;
+        this._resetForm();
+        document.getElementById('record-date').value = this._selectedDate;
+        this._setDefaultTimes();
+        this._updateFormMode();
+        this._renderRecordList();
+    }
+
+    _updateFormMode() {
+        const isEditing = (this._editingRecordId !== null);
+        this.btnSave.textContent = isEditing ? '💾 更新记录' : '💾 保存记录';
+        this.btnCancel.classList.toggle('hidden', !isEditing);
+        if (isEditing) {
+            this.btnDelete.classList.remove('hidden');
+        } else {
+            this.btnDelete.classList.add('hidden');
         }
     }
 
@@ -88,13 +184,14 @@ class FormManager {
         this.form.reset();
         this.problemsGroup.style.display = 'none';
         this._showMessage('', '');
+        // Reset record_type to default
+        const nightRadio = this.form.querySelector('input[name="record_type"][value="night"]');
+        if (nightRadio) nightRadio.checked = true;
     }
 
     _setDefaultTimes() {
-        // Default: sleep at 23:00, wake at 07:00
         const d = this._selectedDate;
         document.getElementById('sleep-time').value = `${d}T23:00`;
-        // Wake time defaults to next day
         const nextDay = this._addDays(d, 1);
         document.getElementById('wake-time').value = `${nextDay}T07:00`;
     }
@@ -105,6 +202,10 @@ class FormManager {
         // Format datetimes for datetime-local input
         document.getElementById('sleep-time').value = this._formatForInput(record.sleep_time);
         document.getElementById('wake-time').value = this._formatForInput(record.wake_time);
+
+        // Record type
+        const typeRadio = this.form.querySelector(`input[name="record_type"][value="${record.record_type || 'night'}"]`);
+        if (typeRadio) typeRadio.checked = true;
 
         // Classification
         const clsRadio = this.form.querySelector(`input[name="classification"][value="${record.classification}"]`);
@@ -143,8 +244,8 @@ class FormManager {
         this.btnSave.textContent = '保存中...';
 
         try {
-            const isUpdate = !!this._existingRecord;
-            const url = isUpdate ? `/api/records/${data.record_date}` : '/api/records';
+            const isUpdate = (this._editingRecordId !== null);
+            const url = isUpdate ? `/api/records/${this._editingRecordId}` : '/api/records';
             const method = isUpdate ? 'PUT' : 'POST';
 
             const resp = await fetch(url, {
@@ -157,23 +258,26 @@ class FormManager {
                 const saved = await resp.json();
                 this._showMessage('✅ 保存成功！', 'success');
 
+                if (isUpdate) {
+                    // Update in-place in the records list
+                    const idx = this._recordsForDate.findIndex(r => r.id === saved.id);
+                    if (idx >= 0) this._recordsForDate[idx] = saved;
+                } else {
+                    this._recordsForDate.push(saved);
+                }
+
                 // Notify app to refresh timeline
                 if (typeof App !== 'undefined' && App.onRecordSaved) {
                     App.onRecordSaved(saved);
                 }
 
-                if (isUpdate) {
-                    // Update: keep form populated with updated data
-                    this._existingRecord = saved;
-                    this.btnDelete.classList.remove('hidden');
-                } else {
-                    // New record: reset form to blank for next entry
-                    this._existingRecord = null;
-                    this.btnDelete.classList.add('hidden');
-                    this._resetForm();
-                    document.getElementById('record-date').value = this._selectedDate;
-                    this._setDefaultTimes();
-                }
+                // Reset form for next entry
+                this._editingRecordId = null;
+                this._resetForm();
+                document.getElementById('record-date').value = this._selectedDate;
+                this._setDefaultTimes();
+                this._updateFormMode();
+                this._renderRecordList();
             } else {
                 const err = await resp.json();
                 this._showMessage('❌ ' + (err.error || '保存失败'), 'error');
@@ -186,18 +290,25 @@ class FormManager {
         }
     }
 
-    async _deleteRecord() {
-        if (!this._existingRecord) return;
-        if (!confirm(`确定要删除 ${this._selectedDate} 的睡眠记录吗？`)) return;
+    async _deleteRecord(recordId) {
+        if (!recordId) return;
+        if (!confirm('确定要删除这条睡眠记录吗？')) return;
 
         try {
-            const resp = await fetch(`/api/records/${this._selectedDate}`, { method: 'DELETE' });
+            const resp = await fetch(`/api/records/${recordId}`, { method: 'DELETE' });
             if (resp.ok || resp.status === 204) {
-                this._existingRecord = null;
-                this._resetForm();
-                document.getElementById('record-date').value = this._selectedDate;
-                this._setDefaultTimes();
-                this.btnDelete.classList.add('hidden');
+                this._recordsForDate = this._recordsForDate.filter(r => r.id !== recordId);
+
+                // If we were editing this record, reset form
+                if (this._editingRecordId === recordId) {
+                    this._editingRecordId = null;
+                    this._resetForm();
+                    document.getElementById('record-date').value = this._selectedDate;
+                    this._setDefaultTimes();
+                    this._updateFormMode();
+                }
+
+                this._renderRecordList();
                 this._showMessage('已删除。', 'success');
 
                 if (typeof App !== 'undefined' && App.onRecordDeleted) {
@@ -220,9 +331,11 @@ class FormManager {
             .forEach(cb => sleepProblems.push(cb.value));
 
         const quality = this.form.querySelector('input[name="sleep_quality"]:checked');
+        const recordType = this.form.querySelector('input[name="record_type"]:checked');
 
         return {
             record_date: document.getElementById('record-date').value,
+            record_type: recordType?.value || 'night',
             sleep_time: document.getElementById('sleep-time').value,
             wake_time: document.getElementById('wake-time').value,
             classification: this.form.querySelector('input[name="classification"]:checked')?.value || '',
@@ -240,13 +353,10 @@ class FormManager {
         if (!data.classification) errors.push('请选择定性（早睡/晚睡）。');
         if (!data.sleep_quality) errors.push('请选择睡眠质量。');
 
-        // Validate sleep < wake chronologically
         if (data.sleep_time && data.wake_time) {
             const sleep = new Date(data.sleep_time);
             const wake = new Date(data.wake_time);
             if (wake <= sleep) {
-                // Wake is on the next day — that's fine
-                // But if wake is more than 24h after sleep, that's suspicious
                 const diffMs = wake.getTime() - sleep.getTime() + (24 * 60 * 60 * 1000);
                 if (diffMs > 24 * 60 * 60 * 1000) {
                     errors.push('醒来时间与入睡时间相差过大。');
@@ -256,7 +366,6 @@ class FormManager {
             }
         }
 
-        // If quality is average/poor, at least one problem must be checked
         if (data.sleep_quality === 'average' || data.sleep_quality === 'poor') {
             if (data.sleep_problems.length === 0) {
                 errors.push('请至少选择一个睡眠问题。');
@@ -271,7 +380,7 @@ class FormManager {
         this.msgEl.className = 'form-message ' + type;
     }
 
-    /* ── Date Utilities ───────────────────── */
+    /* ── Date & Time Utilities ────────────── */
 
     _todayStr() {
         const d = new Date();
@@ -289,11 +398,22 @@ class FormManager {
     }
 
     _formatForInput(dtStr) {
-        // Convert various datetime formats to "YYYY-MM-DDTHH:MM"
         if (!dtStr) return '';
-        // Replace space with T, strip seconds
         let s = dtStr.replace(' ', 'T');
         if (s.length > 16) s = s.substring(0, 16);
         return s;
+    }
+
+    _formatTime(dtStr) {
+        const match = dtStr.match(/[T ](\d{2}):(\d{2})/);
+        return match ? match[1] + ':' + match[2] : dtStr;
+    }
+
+    _calcDuration(sleepTime, wakeTime) {
+        const sleep = new Date(sleepTime);
+        const wake = new Date(wakeTime);
+        let diff = (wake - sleep) / 3600000;
+        if (diff <= 0) diff += 24;
+        return diff;
     }
 }

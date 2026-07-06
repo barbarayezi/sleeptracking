@@ -6,7 +6,7 @@ Works with both local SQLite and Turso (cloud SQLite).
 
 import json
 from datetime import datetime, date
-from developing.sleeptracking.database import get_connection
+from sleep_traking.database import get_connection
 
 
 def row_to_dict(row):
@@ -25,24 +25,48 @@ def row_to_dict(row):
     return d
 
 
-def get_all_records(from_date=None, to_date=None):
-    """Return all sleep records, optionally filtered by date range."""
+# ── Query helpers ─────────────────────────────────
+
+
+def get_all_records(from_date=None, to_date=None, date=None):
+    """Return all sleep records, optionally filtered by date range or a specific date.
+
+    Args:
+        from_date: ISO date string for lower bound (inclusive)
+        to_date: ISO date string for upper bound (inclusive)
+        date: ISO date string for exact match on a single date
+
+    Returns:
+        List of record dicts, ordered by record_date DESC then record_type.
+    """
     conn = get_connection()
 
     query = "SELECT * FROM sleep_records"
     params = []
+    conditions = []
 
-    if from_date and to_date:
-        query += " WHERE record_date BETWEEN ? AND ?"
-        params = [from_date, to_date]
-    elif from_date:
-        query += " WHERE record_date >= ?"
-        params = [from_date]
-    elif to_date:
-        query += " WHERE record_date <= ?"
-        params = [to_date]
+    if date:
+        conditions.append("record_date = ?")
+        params.append(date)
+    else:
+        if from_date:
+            conditions.append("record_date >= ?")
+            params.append(from_date)
+        if to_date:
+            conditions.append("record_date <= ?")
+            params.append(to_date)
 
-    query += " ORDER BY record_date DESC"
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
+
+    query += """
+        ORDER BY record_date DESC,
+            CASE record_type
+                WHEN 'night' THEN 1
+                WHEN 'segment' THEN 2
+                WHEN 'nap' THEN 3
+            END
+    """
 
     cursor = conn.execute(query, params)
     rows = cursor.fetchall()
@@ -50,13 +74,29 @@ def get_all_records(from_date=None, to_date=None):
     return [row_to_dict(r) for r in rows]
 
 
-def get_record_by_date(record_date):
-    """Return a single record by its date, or None if not found."""
+def get_record_by_id(record_id):
+    """Return a single record by its ID, or None if not found."""
     conn = get_connection()
-    cursor = conn.execute("SELECT * FROM sleep_records WHERE record_date = ?", (record_date,))
+    cursor = conn.execute("SELECT * FROM sleep_records WHERE id = ?", (record_id,))
     row = cursor.fetchone()
     conn.close()
     return row_to_dict(row)
+
+
+def get_records_by_date(record_date):
+    """Return all records for a given date. Returns a list (may be empty)."""
+    return get_all_records(date=record_date)
+
+
+def get_record_by_date(record_date):
+    """Return the first (night) record for a date, or None.
+    Kept for backward compatibility; prefer get_records_by_date().
+    """
+    records = get_records_by_date(record_date)
+    return records[0] if records else None
+
+
+# ── CRUD operations ───────────────────────────────
 
 
 def create_record(data):
@@ -64,16 +104,18 @@ def create_record(data):
     conn = get_connection()
 
     sleep_problems = json.dumps(data.get("sleep_problems", []), ensure_ascii=False)
+    record_type = data.get("record_type", "night")
 
-    conn.execute(
+    cursor = conn.execute(
         """
         INSERT INTO sleep_records
-            (record_date, sleep_time, wake_time, classification,
+            (record_date, record_type, sleep_time, wake_time, classification,
              sleep_quality, sleep_problems, dream_journal)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             data["record_date"],
+            record_type,
             data["sleep_time"],
             data["wake_time"],
             data["classification"],
@@ -83,26 +125,22 @@ def create_record(data):
         ),
     )
 
+    record_id = cursor.lastrowid
     conn.commit()
 
-    # Read back on the same connection (necessary for Turso replication)
-    cursor = conn.execute(
-        "SELECT * FROM sleep_records WHERE record_date = ?",
-        (data["record_date"],)
-    )
+    # Read back by id (works reliably with both SQLite and Turso)
+    cursor = conn.execute("SELECT * FROM sleep_records WHERE id = ?", (record_id,))
     row = cursor.fetchone()
     conn.close()
     return row_to_dict(row)
 
 
-def update_record(record_date, data):
-    """Update an existing sleep record. Returns the updated record dict or None."""
+def update_record_by_id(record_id, data):
+    """Update an existing sleep record by ID. Returns the updated record dict or None."""
     conn = get_connection()
 
     # Check record exists
-    cursor = conn.execute(
-        "SELECT * FROM sleep_records WHERE record_date = ?", (record_date,)
-    )
+    cursor = conn.execute("SELECT * FROM sleep_records WHERE id = ?", (record_id,))
     existing = cursor.fetchone()
     if not existing:
         conn.close()
@@ -110,48 +148,72 @@ def update_record(record_date, data):
 
     sleep_problems = json.dumps(data.get("sleep_problems", []), ensure_ascii=False)
 
+    # Build SET clause dynamically for partial updates
+    fields = []
+    params = []
+
+    if "sleep_time" in data:
+        fields.append("sleep_time = ?")
+        params.append(data["sleep_time"])
+    if "wake_time" in data:
+        fields.append("wake_time = ?")
+        params.append(data["wake_time"])
+    if "classification" in data:
+        fields.append("classification = ?")
+        params.append(data["classification"])
+    if "sleep_quality" in data:
+        fields.append("sleep_quality = ?")
+        params.append(data["sleep_quality"])
+    if "record_type" in data:
+        fields.append("record_type = ?")
+        params.append(data["record_type"])
+    if "dream_journal" in data:
+        fields.append("dream_journal = ?")
+        params.append(data["dream_journal"])
+
+    fields.append("sleep_problems = ?")
+    params.append(sleep_problems)
+    fields.append("updated_at = datetime('now', 'localtime')")
+    params.append(record_id)
+
     conn.execute(
-        """
-        UPDATE sleep_records
-        SET sleep_time = ?,
-            wake_time = ?,
-            classification = ?,
-            sleep_quality = ?,
-            sleep_problems = ?,
-            dream_journal = ?,
-            updated_at = datetime('now', 'localtime')
-        WHERE record_date = ?
-        """,
-        (
-            data["sleep_time"],
-            data["wake_time"],
-            data["classification"],
-            data["sleep_quality"],
-            sleep_problems,
-            data.get("dream_journal", ""),
-            record_date,
-        ),
+        f"UPDATE sleep_records SET {', '.join(fields)} WHERE id = ?",
+        params,
     )
 
     conn.commit()
 
-    # Read back on the same connection (necessary for Turso replication)
-    cursor = conn.execute(
-        "SELECT * FROM sleep_records WHERE record_date = ?",
-        (record_date,)
-    )
+    # Read back
+    cursor = conn.execute("SELECT * FROM sleep_records WHERE id = ?", (record_id,))
     row = cursor.fetchone()
     conn.close()
     return row_to_dict(row)
 
 
+def update_record(record_date, data):
+    """Update the first (night) record for a date. Kept for backward compatibility."""
+    records = get_records_by_date(record_date)
+    if not records:
+        return None
+    return update_record_by_id(records[0]["id"], data)
+
+
+def delete_record_by_id(record_id):
+    """Delete a sleep record by ID. Returns True if deleted, False if not found."""
+    conn = get_connection()
+    cursor = conn.execute("DELETE FROM sleep_records WHERE id = ?", (record_id,))
+    deleted = cursor.rowcount > 0
+    conn.commit()
+    conn.close()
+    return deleted
+
+
 def delete_record(record_date):
-    """Delete a sleep record by date. Returns True if deleted, False if not found."""
+    """Delete all records for a date. Kept for backward compatibility.
+    Returns True if any were deleted."""
     conn = get_connection()
     cursor = conn.execute("DELETE FROM sleep_records WHERE record_date = ?", (record_date,))
     deleted = cursor.rowcount > 0
-
     conn.commit()
-
     conn.close()
     return deleted
