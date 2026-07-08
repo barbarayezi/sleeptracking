@@ -229,6 +229,28 @@ body {
     font-weight: 500;
 }
 
+.health-metrics-row {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.health-metric-item {
+    flex: 1;
+    min-width: 120px;
+}
+
+.health-metric-label {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+}
+
+.health-metric-item .input-with-unit .form-input {
+    max-width: 100%;
+}
+
 .form-textarea {
     resize: vertical;
     min-height: 80px;

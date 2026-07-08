@@ -12,7 +12,7 @@ class FormManager {
         this.btnCancel = document.getElementById('btn-cancel-edit');
         this.msgEl = document.getElementById('form-message');
         this.problemsGroup = document.getElementById('sleep-problems-group');
-        this.weightGroup = document.getElementById('weight-group');
+        this.healthMetricsGroup = document.getElementById('health-metrics-group');
         this.recordsListEl = document.getElementById('records-list');
 
         this._selectedDate = this._todayStr();
@@ -101,10 +101,12 @@ class FormManager {
         if (!selected) return;
 
         if (selected.value === 'night') {
-            this.weightGroup.style.display = '';
+            this.healthMetricsGroup.style.display = '';
         } else {
-            this.weightGroup.style.display = 'none';
+            this.healthMetricsGroup.style.display = 'none';
             document.getElementById('weight').value = '';
+            document.getElementById('water-cups').value = '';
+            document.getElementById('steps').value = '';
         }
     }
 
@@ -206,10 +208,14 @@ class FormManager {
         // Reset record_type to default
         const nightRadio = this.form.querySelector('input[name="record_type"][value="night"]');
         if (nightRadio) nightRadio.checked = true;
-        // Reset weight field and show weight group (default is night)
-        if (this.weightGroup) this.weightGroup.style.display = '';
+        // Reset health metrics and show group (default is night)
+        if (this.healthMetricsGroup) this.healthMetricsGroup.style.display = '';
         const weightInput = document.getElementById('weight');
         if (weightInput) weightInput.value = '';
+        const waterInput = document.getElementById('water-cups');
+        if (waterInput) waterInput.value = '';
+        const stepsInput = document.getElementById('steps');
+        if (stepsInput) stepsInput.value = '';
     }
 
     _setDefaultTimes() {
@@ -252,13 +258,17 @@ class FormManager {
         // Dream journal
         document.getElementById('dream-journal').value = record.dream_journal || '';
 
-        // Weight (only show for night records)
+        // Health metrics (only show for night records)
         if (record.record_type === 'night') {
-            this.weightGroup.style.display = '';
+            this.healthMetricsGroup.style.display = '';
             document.getElementById('weight').value = record.weight != null ? record.weight : '';
+            document.getElementById('water-cups').value = record.water_cups != null ? record.water_cups : '';
+            document.getElementById('steps').value = record.steps != null ? record.steps : '';
         } else {
-            this.weightGroup.style.display = 'none';
+            this.healthMetricsGroup.style.display = 'none';
             document.getElementById('weight').value = '';
+            document.getElementById('water-cups').value = '';
+            document.getElementById('steps').value = '';
         }
     }
 
@@ -367,6 +377,10 @@ class FormManager {
 
         const weightInput = document.getElementById('weight');
         const weightValue = weightInput.value.trim();
+        const waterInput = document.getElementById('water-cups');
+        const waterValue = waterInput.value.trim();
+        const stepsInput = document.getElementById('steps');
+        const stepsValue = stepsInput.value.trim();
         const data = {
             record_date: document.getElementById('record-date').value,
             record_type: recordType?.value || 'night',
@@ -378,9 +392,11 @@ class FormManager {
             dream_journal: document.getElementById('dream-journal').value.trim()
         };
 
-        // Only include weight for night sleep records
-        if (recordType?.value === 'night' && weightValue) {
-            data.weight = parseFloat(weightValue);
+        // Only include health metrics for night sleep records
+        if (recordType?.value === 'night') {
+            if (weightValue) data.weight = parseFloat(weightValue);
+            if (waterValue) data.water_cups = parseFloat(waterValue);
+            if (stepsValue) data.steps = parseInt(stepsValue, 10);
         }
 
         return data;

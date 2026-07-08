@@ -219,6 +219,15 @@ def _migrate_v3(conn):
     print("  Migration v2 -> v3 completed.")
 
 
+def _migrate_v4(conn):
+    """Migrate from v3 to v4: add water_cups and steps columns."""
+    print("  Running migration v3 -> v4 ...")
+    conn.execute("ALTER TABLE sleep_records ADD COLUMN water_cups INTEGER DEFAULT NULL")
+    conn.execute("ALTER TABLE sleep_records ADD COLUMN steps INTEGER DEFAULT NULL")
+    _set_schema_version(conn, 4)
+    print("  Migration v3 -> v4 completed.")
+
+
 def _migrate(conn):
     """Run pending migrations based on current schema version."""
     version = _get_schema_version(conn)
@@ -246,6 +255,11 @@ def _migrate(conn):
     if version < 3:
         _migrate_v3(conn)
 
+    # Re-read version after potential v3 migration
+    version = _get_schema_version(conn)
+    if version < 4:
+        _migrate_v4(conn)
+
 
 def init_db():
     """Create the database schema or migrate from an older version."""
@@ -268,6 +282,8 @@ def init_db():
             sleep_problems  TEXT DEFAULT NULL,
             dream_journal   TEXT DEFAULT '',
             weight          REAL DEFAULT NULL,
+            water_cups      INTEGER DEFAULT NULL,
+            steps           INTEGER DEFAULT NULL,
             created_at      TEXT DEFAULT (datetime('now', 'localtime')),
             updated_at      TEXT DEFAULT (datetime('now', 'localtime'))
         )

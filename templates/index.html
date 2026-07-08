@@ -167,20 +167,41 @@
                     </div>
                 </fieldset>
 
-                <!-- Dream Journal (梦境记录) -->
+                <!-- Daily Journal (日有所感) -->
                 <div class="form-row">
-                    <label class="form-label" for="dream-journal">梦境记录</label>
+                    <label class="form-label" for="dream-journal">日有所感</label>
                     <textarea id="dream-journal" class="form-textarea" rows="3"
-                        placeholder="记录你的梦境..."></textarea>
+                        placeholder="记录梦境、身体状况、心情...任何你想记录的"></textarea>
                 </div>
 
-                <!-- Weight (体重) — only for night sleep, optional -->
-                <div class="form-row" id="weight-group">
-                    <label class="form-label" for="weight">体重 <span class="label-hint">（选填，仅夜间睡眠）</span></label>
-                    <div class="input-with-unit">
-                        <input type="number" id="weight" class="form-input" step="0.1" min="20" max="500"
-                            placeholder="输入体重">
-                        <span class="input-unit">kg</span>
+                <!-- Health metrics (体重/喝水/步数) — only for night sleep, optional -->
+                <div class="form-row" id="health-metrics-group">
+                    <label class="form-label">昨日健康数据 <span class="label-hint">（选填，仅夜间睡眠）</span></label>
+                    <div class="health-metrics-row">
+                        <div class="health-metric-item">
+                            <label class="health-metric-label" for="weight">体重</label>
+                            <div class="input-with-unit">
+                                <input type="number" id="weight" class="form-input" step="0.1" min="20" max="500"
+                                    placeholder="-">
+                                <span class="input-unit">kg</span>
+                            </div>
+                        </div>
+                        <div class="health-metric-item">
+                            <label class="health-metric-label" for="water-cups">喝水</label>
+                            <div class="input-with-unit">
+                                <input type="number" id="water-cups" class="form-input" step="0.5" min="0" max="100"
+                                    placeholder="-">
+                                <span class="input-unit">杯</span>
+                            </div>
+                        </div>
+                        <div class="health-metric-item">
+                            <label class="health-metric-label" for="steps">步数</label>
+                            <div class="input-with-unit">
+                                <input type="number" id="steps" class="form-input" step="100" min="0" max="200000"
+                                    placeholder="-">
+                                <span class="input-unit">步</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
 

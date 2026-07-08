@@ -33,7 +33,7 @@ class Timeline {
         this.typeAlpha = {
             night: 1.0,
             segment: 0.7,
-            nap: 0.45
+            nap: 0.7
         };
 
         this._initClickHandler();
@@ -169,6 +169,17 @@ class Timeline {
         ctx.fillStyle = color;
         this._roundRect(ctx, barX, barY, barWidth, this.BAR_HEIGHT, 4);
         ctx.fill();
+
+        // For nap type, draw a dotted border to distinguish from night
+        if (record.record_type === 'nap') {
+            ctx.globalAlpha = 1.0;
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([2, 4]);
+            this._roundRect(ctx, barX, barY, barWidth, this.BAR_HEIGHT, 4);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
 
         // For segment type, draw a dashed border
         if (record.record_type === 'segment') {

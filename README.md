@@ -6,9 +6,10 @@
 
 - 📝 记录每日睡眠（入睡/起床时间、质量、分类、睡眠问题）
 - 🌙 支持多种记录类型：夜间睡眠、午睡、分段睡眠
+- ⚖️ 记录健康指标：体重、喝水杯数、步数（仅夜间睡眠，选填）
+- 📓 日有所感：记录梦境、身体状态、心情等
 - 📊 自动生成周报/月报（睡眠时长、趋势、模式识别）
-- 🎨 时间线可视化展示
-- 💬 梦境日记记录
+- 🎨 时间线可视化展示（夜间/午睡/分段 不同样式区分）
 
 ## 技术栈
 
@@ -27,10 +28,10 @@ cp .env.example .env
 # 编辑 .env 填入 Turso 凭据（可选，不填则使用本地 SQLite）
 
 # 启动
-python -m sleep_traking.app
+python app.py
 ```
 
-打开 http://localhost:5001
+打开 http://localhost:5001（端口冲突时尝试 5002）
 
 ## API
 
@@ -48,10 +49,16 @@ python -m sleep_traking.app
 ```
 sleep_traking/
 ├── app.py              # Flask 应用入口
-├── database.py         # 数据库连接管理
+├── database.py         # 数据库连接管理（自动迁移到 v4）
 ├── models.py           # 数据访问层
 ├── reports.py          # 报告生成模块
-├── templates/          # 前端模板
-├── static/             # 静态资源
+├── templates/
+│   └── index.html      # 前端单页
+├── static/
+│   ├── app.js          # 主逻辑
+│   ├── form.js         # 表单/多记录/健康指标
+│   ├── timeline.js     # 时间线可视化
+│   ├── reports.js      # 报告面板
+│   └── style.css       # 样式
 └── reports/            # 分析报告存档
 ```

@@ -25,14 +25,14 @@ sleep_traking/
 
 - **生产环境：Turso**（`libsql://sleep-tracker-barbarayezi.aws-ap-northeast-1.turso.io`），凭据在 `.env`
 - **本地回退：** `sleep_tracker.db`（SQLite），`.env` 中无 Turso 配置时自动使用
-- Schema v2：`sleep_records` 表，支持 `record_type`（night/nap/segment）
+- Schema v4：`sleep_records` 表，支持 `record_type`（night/nap/segment）+ 健康指标（weight / water_cups / steps）
 - 查询 Turso 用 `libsql` 库直接连接
 
 ## 运行方式
 
 ```bash
 pip install -r requirements.txt
-python -m sleep_traking.app    # 启动在 localhost:5001
+python app.py    # 启动在 localhost:5001（或 5002，端口冲突时自动切换）
 ```
 
 ## API 路由
@@ -56,7 +56,10 @@ python -m sleep_traking.app    # 启动在 localhost:5001
 - `classification` — early / late
 - `sleep_quality` — good / average / poor
 - `sleep_problems` — JSON 数组（insomnia, dreams, sweats, waking, early_waking）
-- `dream_journal` — 纯文本
+- `dream_journal` — 纯文本（日有所感：记录梦境、身体状况、心情等）
+- `weight` — 体重（kg，选填，仅夜间睡眠）
+- `water_cups` — 喝水杯数（选填，仅夜间睡眠，1 杯 ≈ 250ml）
+- `steps` — 步数（选填，仅夜间睡眠）
 
 ## 分析报告存档
 

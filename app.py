@@ -69,6 +69,24 @@ def _validate_record_data(data):
         except (ValueError, TypeError):
             errors.append('weight must be a valid number')
 
+    # Validate water_cups (optional, non-negative integer)
+    if 'water_cups' in data and data['water_cups'] is not None and data['water_cups'] != '':
+        try:
+            cups = int(data['water_cups'])
+            if cups < 0 or cups > 100:
+                errors.append('water_cups must be between 0 and 100')
+        except (ValueError, TypeError):
+            errors.append('water_cups must be a valid integer')
+
+    # Validate steps (optional, non-negative integer)
+    if 'steps' in data and data['steps'] is not None and data['steps'] != '':
+        try:
+            s = int(data['steps'])
+            if s < 0 or s > 200000:
+                errors.append('steps must be between 0 and 200000')
+        except (ValueError, TypeError):
+            errors.append('steps must be a valid integer')
+
     # Validate sleep problems when quality is not good
     if data.get('sleep_quality') in ('average', 'poor'):
         problems = data.get('sleep_problems', [])
