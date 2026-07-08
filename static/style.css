@@ -212,6 +212,23 @@ body {
     box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.15);
 }
 
+.input-with-unit {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.input-with-unit .form-input {
+    flex: 1;
+    max-width: 200px;
+}
+
+.input-unit {
+    font-size: 0.95rem;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
 .form-textarea {
     resize: vertical;
     min-height: 80px;

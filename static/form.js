@@ -12,6 +12,7 @@ class FormManager {
         this.btnCancel = document.getElementById('btn-cancel-edit');
         this.msgEl = document.getElementById('form-message');
         this.problemsGroup = document.getElementById('sleep-problems-group');
+        this.weightGroup = document.getElementById('weight-group');
         this.recordsListEl = document.getElementById('records-list');
 
         this._selectedDate = this._todayStr();
@@ -72,6 +73,12 @@ class FormManager {
 
         // Cancel edit button
         this.btnCancel.addEventListener('click', () => this._cancelEdit());
+
+        // Show/hide weight field based on record type
+        const typeRadios = this.form.querySelectorAll('input[name="record_type"]');
+        typeRadios.forEach(radio => {
+            radio.addEventListener('change', () => this._handleRecordTypeChange());
+        });
     }
 
     /* ── Conditional Logic ────────────────── */
@@ -86,6 +93,18 @@ class FormManager {
                 .forEach(cb => { cb.checked = false; });
         } else {
             this.problemsGroup.style.display = 'block';
+        }
+    }
+
+    _handleRecordTypeChange() {
+        const selected = this.form.querySelector('input[name="record_type"]:checked');
+        if (!selected) return;
+
+        if (selected.value === 'night') {
+            this.weightGroup.style.display = '';
+        } else {
+            this.weightGroup.style.display = 'none';
+            document.getElementById('weight').value = '';
         }
     }
 
@@ -187,6 +206,10 @@ class FormManager {
         // Reset record_type to default
         const nightRadio = this.form.querySelector('input[name="record_type"][value="night"]');
         if (nightRadio) nightRadio.checked = true;
+        // Reset weight field and show weight group (default is night)
+        if (this.weightGroup) this.weightGroup.style.display = '';
+        const weightInput = document.getElementById('weight');
+        if (weightInput) weightInput.value = '';
     }
 
     _setDefaultTimes() {
@@ -228,6 +251,15 @@ class FormManager {
 
         // Dream journal
         document.getElementById('dream-journal').value = record.dream_journal || '';
+
+        // Weight (only show for night records)
+        if (record.record_type === 'night') {
+            this.weightGroup.style.display = '';
+            document.getElementById('weight').value = record.weight != null ? record.weight : '';
+        } else {
+            this.weightGroup.style.display = 'none';
+            document.getElementById('weight').value = '';
+        }
     }
 
     /* ── Save / Delete ────────────────────── */
@@ -333,7 +365,9 @@ class FormManager {
         const quality = this.form.querySelector('input[name="sleep_quality"]:checked');
         const recordType = this.form.querySelector('input[name="record_type"]:checked');
 
-        return {
+        const weightInput = document.getElementById('weight');
+        const weightValue = weightInput.value.trim();
+        const data = {
             record_date: document.getElementById('record-date').value,
             record_type: recordType?.value || 'night',
             sleep_time: document.getElementById('sleep-time').value,
@@ -343,6 +377,13 @@ class FormManager {
             sleep_problems: quality?.value === 'good' ? [] : sleepProblems,
             dream_journal: document.getElementById('dream-journal').value.trim()
         };
+
+        // Only include weight for night sleep records
+        if (recordType?.value === 'night' && weightValue) {
+            data.weight = parseFloat(weightValue);
+        }
+
+        return data;
     }
 
     _validate(data) {

@@ -211,6 +211,14 @@ def _migrate_v2(conn):
     print("  Migration v1 -> v2 completed.")
 
 
+def _migrate_v3(conn):
+    """Migrate from v2 to v3: add weight column."""
+    print("  Running migration v2 -> v3 ...")
+    conn.execute("ALTER TABLE sleep_records ADD COLUMN weight REAL DEFAULT NULL")
+    _set_schema_version(conn, 3)
+    print("  Migration v2 -> v3 completed.")
+
+
 def _migrate(conn):
     """Run pending migrations based on current schema version."""
     version = _get_schema_version(conn)
@@ -233,6 +241,11 @@ def _migrate(conn):
             # No table yet — fresh install
             _set_schema_version(conn, 2)
 
+    # Re-read version after potential v2 migration
+    version = _get_schema_version(conn)
+    if version < 3:
+        _migrate_v3(conn)
+
 
 def init_db():
     """Create the database schema or migrate from an older version."""
@@ -254,6 +267,7 @@ def init_db():
             sleep_quality   TEXT NOT NULL CHECK(sleep_quality IN ('good', 'average', 'poor')),
             sleep_problems  TEXT DEFAULT NULL,
             dream_journal   TEXT DEFAULT '',
+            weight          REAL DEFAULT NULL,
             created_at      TEXT DEFAULT (datetime('now', 'localtime')),
             updated_at      TEXT DEFAULT (datetime('now', 'localtime'))
         )

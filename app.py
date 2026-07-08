@@ -60,6 +60,15 @@ def _validate_record_data(data):
     if data.get('sleep_quality') == 'good':
         data['sleep_problems'] = []
 
+    # Validate weight (optional, must be a reasonable positive number if provided)
+    if 'weight' in data and data['weight'] is not None and data['weight'] != '':
+        try:
+            w = float(data['weight'])
+            if w < 20 or w > 500:
+                errors.append('weight must be between 20 and 500 kg')
+        except (ValueError, TypeError):
+            errors.append('weight must be a valid number')
+
     # Validate sleep problems when quality is not good
     if data.get('sleep_quality') in ('average', 'poor'):
         problems = data.get('sleep_problems', [])
