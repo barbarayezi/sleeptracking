@@ -29,7 +29,6 @@ class FormManager {
         this._selectedDate = dateStr;
         this._editingRecordId = null;
         this._resetForm();
-        document.getElementById('record-date').value = dateStr;
         this._setDefaultTimes();
         this._updateFormMode();
 
@@ -182,7 +181,6 @@ class FormManager {
     _cancelEdit() {
         this._editingRecordId = null;
         this._resetForm();
-        document.getElementById('record-date').value = this._selectedDate;
         this._setDefaultTimes();
         this._updateFormMode();
         this._renderRecordList();
@@ -219,15 +217,15 @@ class FormManager {
     }
 
     _setDefaultTimes() {
-        const d = this._selectedDate;
-        document.getElementById('sleep-time').value = `${d}T23:00`;
-        const nextDay = this._addDays(d, 1);
-        document.getElementById('wake-time').value = `${nextDay}T07:00`;
+        // Default: last night's sleep → wake up today
+        // e.g. viewing 2026-07-09 → sleep 2026-07-08T23:00, wake 2026-07-09T07:00
+        const wakeDate = this._selectedDate;
+        const sleepDate = this._addDays(wakeDate, -1);
+        document.getElementById('sleep-time').value = `${sleepDate}T23:00`;
+        document.getElementById('wake-time').value = `${wakeDate}T07:00`;
     }
 
     _populateForm(record) {
-        document.getElementById('record-date').value = record.record_date;
-
         // Format datetimes for datetime-local input
         document.getElementById('sleep-time').value = this._formatForInput(record.sleep_time);
         document.getElementById('wake-time').value = this._formatForInput(record.wake_time);
@@ -316,7 +314,6 @@ class FormManager {
                 // Reset form for next entry
                 this._editingRecordId = null;
                 this._resetForm();
-                document.getElementById('record-date').value = this._selectedDate;
                 this._setDefaultTimes();
                 this._updateFormMode();
                 this._renderRecordList();
@@ -345,7 +342,6 @@ class FormManager {
                 if (this._editingRecordId === recordId) {
                     this._editingRecordId = null;
                     this._resetForm();
-                    document.getElementById('record-date').value = this._selectedDate;
                     this._setDefaultTimes();
                     this._updateFormMode();
                 }
@@ -381,11 +377,12 @@ class FormManager {
         const waterValue = waterInput.value.trim();
         const stepsInput = document.getElementById('steps');
         const stepsValue = stepsInput.value.trim();
+        const wakeTimeVal = document.getElementById('wake-time').value;
         const data = {
-            record_date: document.getElementById('record-date').value,
+            record_date: wakeTimeVal.slice(0, 10),  // derived from wake_time date
             record_type: recordType?.value || 'night',
             sleep_time: document.getElementById('sleep-time').value,
-            wake_time: document.getElementById('wake-time').value,
+            wake_time: wakeTimeVal,
             classification: this.form.querySelector('input[name="classification"]:checked')?.value || '',
             sleep_quality: quality?.value || '',
             sleep_problems: quality?.value === 'good' ? [] : sleepProblems,
@@ -404,7 +401,6 @@ class FormManager {
 
     _validate(data) {
         const errors = [];
-        if (!data.record_date) errors.push('请选择日期。');
         if (!data.sleep_time) errors.push('请选择入睡时间。');
         if (!data.wake_time) errors.push('请选择醒来时间。');
         if (!data.classification) errors.push('请选择定性（早睡/晚睡）。');

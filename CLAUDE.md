@@ -50,7 +50,7 @@ python app.py    # 启动在 localhost:5001（或 5002，端口冲突时自动�
 
 ## 记录字段
 
-- `record_date` — 日期（一个日期可有多个记录）
+- `record_date` — 日期，前端由 `wake_time` 自动推导（一个日期可有多个记录）
 - `record_type` — night / nap / segment
 - `sleep_time` / `wake_time` — ISO 格式（`YYYY-MM-DDTHH:MM`）
 - `classification` — early / late
@@ -60,6 +60,12 @@ python app.py    # 启动在 localhost:5001（或 5002，端口冲突时自动�
 - `weight` — 体重（kg，选填，仅夜间睡眠）
 - `water_cups` — 喝水杯数（选填，仅夜间睡眠，1 杯 ≈ 250ml）
 - `steps` — 步数（选填，仅夜间睡眠）
+
+## 前端设计约定
+
+- **日期归组逻辑：** 睡眠记录按"醒来日期"归组。例如 7月8日 23:00 → 7月9日 07:00 的睡眠，显示在 7月9日 下。
+- **表单日期推导：** 表单不再显示日期选择器，`record_date` 由 `wake_time` 的日期部分自动提取。默认入睡时间为所选日期前一天 23:00，醒来时间为所选日期 07:00。
+- **时间线：** `timeline.js` 按 `wake_time` 提取日期进行分组，而非 `record_date`。
 
 ## 分析报告存档
 

@@ -155,6 +155,9 @@ def update_record_by_id(record_id, data):
     fields = []
     params = []
 
+    if "record_date" in data:
+        fields.append("record_date = ?")
+        params.append(data["record_date"])
     if "sleep_time" in data:
         fields.append("sleep_time = ?")
         params.append(data["sleep_time"])

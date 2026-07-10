@@ -59,13 +59,23 @@ class Timeline {
     _groupByDate() {
         this._grouped = {};
         for (const r of this.records) {
-            if (!this._grouped[r.record_date]) {
-                this._grouped[r.record_date] = [];
+            // 按醒来日期归组：睡眠属于"醒来那天"
+            // 例：7月8日 23:00 → 7月9日 07:00 的睡眠归到 7月9日
+            const displayDate = this._extractDate(r.wake_time) || r.record_date;
+            if (!this._grouped[displayDate]) {
+                this._grouped[displayDate] = [];
             }
-            this._grouped[r.record_date].push(r);
+            this._grouped[displayDate].push(r);
         }
         // Sort dates descending
         this._dates = Object.keys(this._grouped).sort().reverse();
+    }
+
+    /** Extract YYYY-MM-DD from an ISO datetime string. */
+    _extractDate(dtStr) {
+        if (!dtStr) return null;
+        const match = dtStr.match(/^(\d{4}-\d{2}-\d{2})/);
+        return match ? match[1] : null;
     }
 
     /* ── Render ───────────────────────────── */
