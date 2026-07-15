@@ -6,19 +6,21 @@ Sleep Tracker — Flask + Turso (cloud SQLite) 睡眠追踪应用。
 
 ```
 sleep_traking/
-├── app.py              # Flask 入口，REST API 路由
-├── database.py         # 数据库连接管理（Turso 优先，本地 SQLite 回退）
-├── models.py           # CRUD 数据访问层
-├── reports.py          # 报告生成（结构化数据 + CLI 接口）
+├── app.py               # Flask 入口，REST API 路由
+├── database.py          # 数据库连接管理（Turso 优先，本地 SQLite 回退）
+├── models.py            # CRUD 数据访问层
+├── reports.py           # 报告生成（结构化数据 + CLI 接口）
+├── requirements.txt     # Python 依赖
+├── .env.example         # 环境变量模板
 ├── templates/index.html # 前端单页
 ├── static/
-│   ├── app.js          # 主前端逻辑
-│   ├── form.js         # 表单/多记录展示
-│   ├── timeline.js     # 时间线视图
-│   ├── reports.js      # 报告页面
-│   └── style.css       # 样式
-├── reports/            # 分析报告存档（Markdown）
-└── sleep_tracker.db    # 本地回退数据库（已 gitignore）
+│   ├── app.js           # 主前端逻辑
+│   ├── form.js          # 表单/多记录展示
+│   ├── timeline.js      # 时间线视图
+│   ├── reports.js       # 报告页面
+│   └── style.css        # 样式
+├── reports/             # 分析报告存档（Markdown）
+└── sleep_tracker.db     # 本地回退数据库（已 gitignore）
 ```
 
 ## 数据库

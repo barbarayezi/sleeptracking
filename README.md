@@ -52,6 +52,8 @@ sleep_traking/
 ├── database.py         # 数据库连接管理（自动迁移到 v4）
 ├── models.py           # 数据访问层
 ├── reports.py          # 报告生成模块
+├── requirements.txt    # Python 依赖
+├── .env.example        # 环境变量模板
 ├── templates/
 │   └── index.html      # 前端单页
 ├── static/
