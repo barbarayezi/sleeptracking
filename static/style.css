@@ -688,6 +688,48 @@ body {
     color: #c4b5fd;
 }
 
+/* ── Meal Type Badge ────────────────────────────── */
+.meal-type-badge.meal-type--breakfast {
+    background: rgba(251, 191, 36, 0.2);
+    color: #fcd34d;
+}
+
+.meal-type-badge.meal-type--lunch {
+    background: rgba(74, 222, 128, 0.2);
+    color: #6ee7b7;
+}
+
+.meal-type-badge.meal-type--dinner {
+    background: rgba(129, 140, 248, 0.2);
+    color: #a5b4fc;
+}
+
+.meal-type-badge.meal-type--snack {
+    background: rgba(244, 114, 182, 0.2);
+    color: #f9a8d4;
+}
+
+/* ── Meal Card Details ─────────────────────────── */
+.meal-card__name {
+    font-size: 0.9rem;
+    color: var(--text);
+    font-weight: 500;
+}
+
+.meal-card__quantity {
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    background: var(--bg-card);
+    padding: 1px 8px;
+    border-radius: 10px;
+}
+
+.meal-card__allergy {
+    font-size: 0.8rem;
+    color: var(--red);
+    cursor: help;
+}
+
 /* ── Cancel Button ─────────────────────────────── */
 .btn-secondary {
     background: transparent;

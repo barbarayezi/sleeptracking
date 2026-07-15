@@ -228,6 +228,40 @@ def _migrate_v4(conn):
     print("  Migration v3 -> v4 completed.")
 
 
+def _migrate_v5(conn):
+    """Migrate from v4 to v5: add meal_records table for diet tracking."""
+    print("  Running migration v4 -> v5 ...")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS meal_records (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            meal_date       DATE NOT NULL,
+            meal_type       TEXT NOT NULL
+                            CHECK(meal_type IN ('breakfast', 'lunch', 'dinner', 'snack')),
+            meal_time       TEXT NOT NULL,
+            meal_name       TEXT DEFAULT '',
+            meal_content    TEXT DEFAULT '',
+            meal_quantity   TEXT DEFAULT 'normal'
+                            CHECK(meal_quantity IN ('light', 'normal', 'heavy')),
+            health_rating   TEXT DEFAULT 'average'
+                            CHECK(health_rating IN ('good', 'average', 'poor')),
+            notes           TEXT DEFAULT '',
+            allergy_reaction TEXT DEFAULT '',
+            created_at      TEXT DEFAULT (datetime('now', 'localtime')),
+            updated_at      TEXT DEFAULT (datetime('now', 'localtime'))
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_meal_records_date
+        ON meal_records(meal_date)
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_meal_records_type
+        ON meal_records(meal_type)
+    """)
+    _set_schema_version(conn, 5)
+    print("  Migration v4 -> v5 completed.")
+
+
 def _migrate(conn):
     """Run pending migrations based on current schema version."""
     version = _get_schema_version(conn)
@@ -259,6 +293,11 @@ def _migrate(conn):
     version = _get_schema_version(conn)
     if version < 4:
         _migrate_v4(conn)
+
+    # Re-read version after potential v4 migration
+    version = _get_schema_version(conn)
+    if version < 5:
+        _migrate_v5(conn)
 
 
 def init_db():
@@ -296,6 +335,35 @@ def init_db():
     conn.execute("""
         CREATE INDEX IF NOT EXISTS idx_sleep_records_type
         ON sleep_records(record_type)
+    """)
+
+    # Meal records table (v5)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS meal_records (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            meal_date       DATE NOT NULL,
+            meal_type       TEXT NOT NULL
+                            CHECK(meal_type IN ('breakfast', 'lunch', 'dinner', 'snack')),
+            meal_time       TEXT NOT NULL,
+            meal_name       TEXT DEFAULT '',
+            meal_content    TEXT DEFAULT '',
+            meal_quantity   TEXT DEFAULT 'normal'
+                            CHECK(meal_quantity IN ('light', 'normal', 'heavy')),
+            health_rating   TEXT DEFAULT 'average'
+                            CHECK(health_rating IN ('good', 'average', 'poor')),
+            notes           TEXT DEFAULT '',
+            allergy_reaction TEXT DEFAULT '',
+            created_at      TEXT DEFAULT (datetime('now', 'localtime')),
+            updated_at      TEXT DEFAULT (datetime('now', 'localtime'))
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_meal_records_date
+        ON meal_records(meal_date)
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_meal_records_type
+        ON meal_records(meal_type)
     """)
 
     conn.commit()

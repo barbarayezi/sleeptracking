@@ -16,6 +16,7 @@ from flask import Flask, request, jsonify, render_template
 from sleep_traking.database import init_db
 from sleep_traking.reports import generate_report, get_quick_stats
 import sleep_traking.models as models
+import sleep_traking.meal_models as meal_models
 
 app = Flask(__name__)
 
@@ -189,6 +190,96 @@ def get_stats():
     days = request.args.get('days', 30, type=int)
     stats = get_quick_stats(days=days)
     return jsonify(stats)
+
+
+# ──────────────────────────────────────────────
+#  Meal (Diet) CRUD: /api/meals
+# ──────────────────────────────────────────────
+
+
+def _validate_meal_data(data):
+    """Validate meal record data. Returns (errors, cleaned_data)."""
+    errors = []
+
+    # Validate required fields
+    required = ['meal_date', 'meal_type', 'meal_time']
+    for field in required:
+        if field not in data:
+            errors.append(f'Missing required field: {field}')
+
+    # Validate meal_type
+    if 'meal_type' in data and data['meal_type'] not in ('breakfast', 'lunch', 'dinner', 'snack'):
+        errors.append('meal_type must be "breakfast", "lunch", "dinner", or "snack"')
+
+    # Validate meal_quantity
+    if 'meal_quantity' in data and data['meal_quantity'] not in ('light', 'normal', 'heavy'):
+        errors.append('meal_quantity must be "light", "normal", or "heavy"')
+
+    # Validate health_rating
+    if 'health_rating' in data and data['health_rating'] not in ('good', 'average', 'poor'):
+        errors.append('health_rating must be "good", "average", or "poor"')
+
+    return errors
+
+
+@app.route('/api/meals', methods=['GET'])
+def list_meals():
+    """List all meal records, optionally filtered by date range or specific date."""
+    from_date = request.args.get('from')
+    to_date = request.args.get('to')
+    date = request.args.get('date')
+    meals = meal_models.get_all_meals(from_date=from_date, to_date=to_date, date=date)
+    return jsonify(meals)
+
+
+@app.route('/api/meals/<int:meal_id>', methods=['GET'])
+def get_meal(meal_id):
+    """Get a single meal record by ID."""
+    meal = meal_models.get_meal_by_id(meal_id)
+    if meal is None:
+        return jsonify({'error': 'Meal record not found'}), 404
+    return jsonify(meal)
+
+
+@app.route('/api/meals', methods=['POST'])
+def create_meal():
+    """Create a new meal record."""
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Request body must be JSON'}), 400
+
+    errors = _validate_meal_data(data)
+    if errors:
+        return jsonify({'error': errors[0]}), 400
+
+    meal = meal_models.create_meal(data)
+    return jsonify(meal), 201
+
+
+@app.route('/api/meals/<int:meal_id>', methods=['PUT'])
+def update_meal(meal_id):
+    """Update an existing meal record by ID."""
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Request body must be JSON'}), 400
+
+    errors = _validate_meal_data(data)
+    if errors:
+        return jsonify({'error': errors[0]}), 400
+
+    meal = meal_models.update_meal_by_id(meal_id, data)
+    if meal is None:
+        return jsonify({'error': 'Meal record not found'}), 404
+    return jsonify(meal)
+
+
+@app.route('/api/meals/<int:meal_id>', methods=['DELETE'])
+def delete_meal(meal_id):
+    """Delete a meal record by ID."""
+    deleted = meal_models.delete_meal_by_id(meal_id)
+    if not deleted:
+        return jsonify({'error': 'Meal record not found'}), 404
+    return '', 204
 
 
 # ──────────────────────────────────────────────

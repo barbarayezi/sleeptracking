@@ -5,6 +5,7 @@
 
 const App = {
     form: null,
+    meal: null,
     timeline: null,
     report: null,
     currentDate: null,
@@ -13,6 +14,7 @@ const App = {
     async init() {
         // Create module instances
         this.form = new FormManager();
+        this.meal = new MealManager();
         this.timeline = new Timeline('timeline-canvas', 'timeline-empty');
         this.report = new ReportManager();
 
@@ -28,6 +30,7 @@ const App = {
         this.currentDate = this._todayStr();
         this._updateDateLabel();
         await this.form.loadDate(this.currentDate);
+        await this.meal.loadDate(this.currentDate);
         await this._refreshTimeline();
     },
 
@@ -45,6 +48,7 @@ const App = {
         this.currentDate = dateStr;
         this._updateDateLabel();
         this.form.loadDate(dateStr);
+        this.meal.loadDate(dateStr);
     },
 
     /* ── Date Navigation ──────────────────── */
@@ -54,18 +58,21 @@ const App = {
             this.currentDate = this._addDays(this.currentDate, -1);
             this._updateDateLabel();
             this.form.loadDate(this.currentDate);
+            this.meal.loadDate(this.currentDate);
         });
 
         document.getElementById('btn-next-day').addEventListener('click', () => {
             this.currentDate = this._addDays(this.currentDate, 1);
             this._updateDateLabel();
             this.form.loadDate(this.currentDate);
+            this.meal.loadDate(this.currentDate);
         });
 
         document.getElementById('btn-today').addEventListener('click', () => {
             this.currentDate = this._todayStr();
             this._updateDateLabel();
             this.form.loadDate(this.currentDate);
+            this.meal.loadDate(this.currentDate);
         });
     },
 
