@@ -97,10 +97,17 @@ const App = {
 
     async _refreshTimeline() {
         try {
-            const resp = await fetch('/api/records');
-            if (resp.ok) {
-                const records = await resp.json();
+            const [recordsResp, mealsResp] = await Promise.all([
+                fetch('/api/records'),
+                fetch('/api/meals')
+            ]);
+            if (recordsResp.ok) {
+                const records = await recordsResp.json();
                 this.timeline.setRecords(records);
+            }
+            if (mealsResp.ok) {
+                const meals = await mealsResp.json();
+                this.timeline.setMeals(meals);
             }
         } catch (err) {
             console.error('Failed to refresh timeline:', err);

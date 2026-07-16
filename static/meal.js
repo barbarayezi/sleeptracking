@@ -70,13 +70,17 @@ class MealManager {
     /* ── Meal List Rendering ──────────────── */
 
     _renderMealList() {
+        const emptyEl = document.getElementById('meals-empty');
+
         if (this._mealsForDate.length === 0) {
-            this.listEl.classList.add('hidden');
+            // Show placeholder, hide empty message
             this.listEl.innerHTML = '';
+            if (emptyEl) emptyEl.style.display = '';
             return;
         }
 
-        this.listEl.classList.remove('hidden');
+        // Hide empty message, show list
+        if (emptyEl) emptyEl.style.display = 'none';
 
         const typeLabels = {
             breakfast: '🌅 早餐',
