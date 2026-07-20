@@ -286,6 +286,7 @@ def delete_meal(meal_id):
 #  Startup
 # ──────────────────────────────────────────────
 
+
 def _find_port(start=5001, max_attempts=10):
     """Find an available port starting from `start`, trying up to `max_attempts`."""
     import socket
@@ -296,11 +297,30 @@ def _find_port(start=5001, max_attempts=10):
                 return port
     return start  # fallback, let Flask raise the error
 
-if __name__ == '__main__':
-    init_db()
+
+def run_app():
+    """Initialize DB and start Flask with explicit error handling."""
+    try:
+        init_db()
+    except Exception as e:
+        print(f"[FATAL] Database initialization failed: {e}")
+        sys.exit(1)
+
     port = int(os.environ.get('PORT', 0)) or _find_port(5001)
     print("=" * 50)
-    print("  Sleep Tracker")
+    print("  Sleep Tracker — Production Mode")
     print(f"  Open http://localhost:{port} in your browser")
     print("=" * 50)
-    app.run(debug=True, host='0.0.0.0', port=port)
+
+    try:
+        # debug=False — no reloader, no double processes, stable long-running
+        app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
+    except OSError as e:
+        print(f"[FATAL] Cannot bind to port {port}: {e}")
+        print(f"  Try: set PORT=XXXX environment variable to use a different port,")
+        print(f"       or kill the process holding port {port}.")
+        sys.exit(1)
+
+
+if __name__ == '__main__':
+    run_app()

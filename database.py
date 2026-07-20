@@ -214,7 +214,11 @@ def _migrate_v2(conn):
 def _migrate_v3(conn):
     """Migrate from v2 to v3: add weight column."""
     print("  Running migration v2 -> v3 ...")
-    conn.execute("ALTER TABLE sleep_records ADD COLUMN weight REAL DEFAULT NULL")
+    # Check column exists first (handles recovery from partial migration)
+    col_cursor = conn.execute("PRAGMA table_info('sleep_records')")
+    columns = [row[1] for row in col_cursor.fetchall()]
+    if 'weight' not in columns:
+        conn.execute("ALTER TABLE sleep_records ADD COLUMN weight REAL DEFAULT NULL")
     _set_schema_version(conn, 3)
     print("  Migration v2 -> v3 completed.")
 
@@ -222,8 +226,12 @@ def _migrate_v3(conn):
 def _migrate_v4(conn):
     """Migrate from v3 to v4: add water_cups and steps columns."""
     print("  Running migration v3 -> v4 ...")
-    conn.execute("ALTER TABLE sleep_records ADD COLUMN water_cups INTEGER DEFAULT NULL")
-    conn.execute("ALTER TABLE sleep_records ADD COLUMN steps INTEGER DEFAULT NULL")
+    col_cursor = conn.execute("PRAGMA table_info('sleep_records')")
+    columns = [row[1] for row in col_cursor.fetchall()]
+    if 'water_cups' not in columns:
+        conn.execute("ALTER TABLE sleep_records ADD COLUMN water_cups INTEGER DEFAULT NULL")
+    if 'steps' not in columns:
+        conn.execute("ALTER TABLE sleep_records ADD COLUMN steps INTEGER DEFAULT NULL")
     _set_schema_version(conn, 4)
     print("  Migration v3 -> v4 completed.")
 
@@ -281,8 +289,9 @@ def _migrate(conn):
                 # Already v2, just update version
                 _set_schema_version(conn, 2)
         else:
-            # No table yet — fresh install
-            _set_schema_version(conn, 2)
+            # No table yet — fresh install. init_db() creates the full schema below,
+            # so skip directly to the latest version to avoid ALTER TABLE on nothing.
+            _set_schema_version(conn, 5)
 
     # Re-read version after potential v2 migration
     version = _get_schema_version(conn)
@@ -304,10 +313,8 @@ def init_db():
     """Create the database schema or migrate from an older version."""
     conn = get_connection()
 
-    # Check if schema_version table exists and run migrations
-    _migrate(conn)
-
-    # For fresh installs (no table yet), create the v2 schema
+    # Create tables FIRST (IF NOT EXISTS makes this safe for re-runs).
+    # Migrations below will ALTER these tables if upgrading from an older schema.
     conn.execute("""
         CREATE TABLE IF NOT EXISTS sleep_records (
             id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -365,6 +372,9 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_meal_records_type
         ON meal_records(meal_type)
     """)
+
+    # Now run pending migrations (ALTER TABLE for older schemas)
+    _migrate(conn)
 
     conn.commit()
     conn.close()
