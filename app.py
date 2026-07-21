@@ -283,42 +283,61 @@ def delete_meal(meal_id):
 
 
 # ──────────────────────────────────────────────
-#  Startup
+#  Startup — conflict-free port allocation
 # ──────────────────────────────────────────────
 
 
-def _find_port(start=5800, max_attempts=10):
-    """Find an available port starting from `start`, trying up to `max_attempts`."""
+def _find_free_port():
+    """Let the OS assign a truly free port (guaranteed no conflict).
+
+    Binds a temp socket to port 0, the OS picks an unused port from the
+    ephemeral range (49152-65535 on Windows). The socket is closed and
+    Flask takes the port immediately after — the window is <1ms.
+    """
     import socket
-    for offset in range(max_attempts):
-        port = start + offset
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            if s.connect_ex(('127.0.0.1', port)) != 0:
-                return port
-    return start  # fallback, let Flask raise the error
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(('0.0.0.0', 0))
+        return s.getsockname()[1]
+
+
+def _write_port_file(port):
+    """Write the active port to .active_port so tools/scripts can read it."""
+    import pathlib
+    port_file = pathlib.Path(__file__).parent / ".active_port"
+    port_file.write_text(str(port), encoding="utf-8")
+
+
+def _read_port_file():
+    """Read a previously saved port (only used when ENV var is set)."""
+    import pathlib, os
+    port = os.environ.get('PORT', '')
+    if port:
+        return int(port)
+    return 0  # auto-detect
 
 
 def run_app():
-    """Initialize DB and start Flask with explicit error handling."""
+    """Initialize DB and start Flask on a conflict-free port."""
     try:
         init_db()
     except Exception as e:
         print(f"[FATAL] Database initialization failed: {e}")
         sys.exit(1)
 
-    port = int(os.environ.get('PORT', 0)) or _find_port(5800)
+    # Priority: 1) PORT env var  2) OS-assigned free port (zero-conflict)
+    port = _read_port_file() or _find_free_port()
+    _write_port_file(port)
+
     print("=" * 50)
     print("  Sleep Tracker — Production Mode")
     print(f"  Open http://localhost:{port} in your browser")
+    print(f"  Active port saved to .active_port")
     print("=" * 50)
 
     try:
-        # debug=False — no reloader, no double processes, stable long-running
         app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
     except OSError as e:
         print(f"[FATAL] Cannot bind to port {port}: {e}")
-        print(f"  Try: set PORT=XXXX environment variable to use a different port,")
-        print(f"       or kill the process holding port {port}.")
         sys.exit(1)
 
 

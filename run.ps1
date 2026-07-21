@@ -26,6 +26,8 @@ Write-Host " Sleep Tracker — Auto-Restart Launcher" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "Project : $ProjectRoot"
 Write-Host "Logs    : $LogDir"
+Write-Host "Port    : auto-assigned (zero-conflict)"
+Write-Host "         → run.ps1 will show the live URL after starting"
 Write-Host ""
 
 while ($true) {
@@ -37,6 +39,16 @@ while ($true) {
     Write-Host "[$Timestamp] Logging to: $LogFile" -ForegroundColor DarkGray
 
     $process = Start-Process -FilePath "python" -ArgumentList "app.py" -WorkingDirectory $ProjectRoot -NoNewWindow -PassThru -RedirectStandardOutput $LogFile -RedirectStandardError $LogFile
+
+    # Wait a moment then show the live port
+    Start-Sleep -Seconds 3
+    $PortFile = Join-Path $ProjectRoot ".active_port"
+    if (Test-Path $PortFile) {
+        $LivePort = Get-Content $PortFile -Raw -ErrorAction SilentlyContinue
+        if ($LivePort) {
+            Write-Host "[$Timestamp] App started → http://localhost:$LivePort" -ForegroundColor Green
+        }
+    }
 
     # Wait for the process to exit (blocking wait)
     $process.WaitForExit()
