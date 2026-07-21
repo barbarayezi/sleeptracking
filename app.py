@@ -287,7 +287,7 @@ def delete_meal(meal_id):
 # ──────────────────────────────────────────────
 
 
-def _find_port(start=5001, max_attempts=10):
+def _find_port(start=5800, max_attempts=10):
     """Find an available port starting from `start`, trying up to `max_attempts`."""
     import socket
     for offset in range(max_attempts):
@@ -306,7 +306,7 @@ def run_app():
         print(f"[FATAL] Database initialization failed: {e}")
         sys.exit(1)
 
-    port = int(os.environ.get('PORT', 0)) or _find_port(5001)
+    port = int(os.environ.get('PORT', 0)) or _find_port(5800)
     print("=" * 50)
     print("  Sleep Tracker — Production Mode")
     print(f"  Open http://localhost:{port} in your browser")
