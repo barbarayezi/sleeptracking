@@ -311,6 +311,7 @@ def whoop_auth():
 def whoop_callback():
     """OAuth callback — exchange code for tokens."""
     code = request.args.get('code')
+    state = request.args.get('state')
     error = request.args.get('error')
     if error:
         return jsonify({'error': f'Whoop authorization denied: {error}'}), 400
@@ -320,7 +321,7 @@ def whoop_callback():
     from sleep_traking.whoop.client import WhoopClient
     client = WhoopClient()
     try:
-        client.exchange_code(code)
+        client.exchange_code(code, state=state)
         return jsonify({'message': 'Whoop connected successfully!'})
     except Exception as e:
         return jsonify({'error': f'Failed to exchange code: {e}'}), 500

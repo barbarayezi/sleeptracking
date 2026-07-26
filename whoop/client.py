@@ -12,10 +12,14 @@ Usage:
 import os
 import json
 import time
+import secrets
 import urllib.request
 import urllib.parse
 import urllib.error
 from datetime import datetime, date
+
+# ── CSRF state (stored in memory, single-user app) ──
+_auth_state = None
 
 # ── Constants ────────────────────────────────────────
 
@@ -120,17 +124,28 @@ class WhoopClient:
     # ── Auth flow ─────────────────────────────────────
 
     def get_authorization_url(self):
-        """Return the URL the user must visit to authorize the app."""
+        """Return the URL the user must visit to authorize the app.
+        Includes a CSRF state parameter (required by Whoop)."""
+        global _auth_state
+        _auth_state = secrets.token_hex(16)  # 32-char hex string
         params = {
             "client_id": self.client_id,
             "redirect_uri": self.redirect_uri,
             "response_type": "code",
             "scope": " ".join(SCOPES),
+            "state": _auth_state,
         }
         return f"{AUTH_URL}?{urllib.parse.urlencode(params)}"
 
-    def exchange_code(self, code):
-        """Exchange an authorization code for access+refresh tokens."""
+    def exchange_code(self, code, state=None):
+        """Exchange an authorization code for access+refresh tokens.
+        Validates the state parameter to prevent CSRF attacks."""
+        global _auth_state
+        if state and _auth_state and state != _auth_state:
+            _auth_state = None
+            raise PermissionError("State mismatch — possible CSRF attack")
+        _auth_state = None  # Consumed
+
         data = {
             "client_id": self.client_id,
             "client_secret": self.client_secret,
