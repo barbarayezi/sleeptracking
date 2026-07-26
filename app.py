@@ -316,6 +316,17 @@ def _read_port_file():
     return 0  # auto-detect
 
 
+def _open_browser_after_delay(port, delay=2.5):
+    """Automatically open the browser after Flask starts (non-blocking)."""
+    import threading, time, webbrowser
+    def _open():
+        time.sleep(delay)
+        url = f'http://localhost:{port}'
+        print(f"  Auto-opening browser: {url}")
+        webbrowser.open(url)
+    threading.Thread(target=_open, daemon=True).start()
+
+
 def run_app():
     """Initialize DB and start Flask on a conflict-free port."""
     try:
@@ -334,6 +345,35 @@ def run_app():
     print(f"  Active port saved to .active_port")
     print("=" * 50)
 
+    # Auto-open browser after a short delay (Firefox / default browser)
+    _open_browser_after_delay(port)
+
+    try:
+        app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
+    except OSError as e:
+        print(f"[FATAL] Cannot bind to port {port}: {e}")
+        sys.exit(1)
+
+
+def run_app_headless():
+    """Same as run_app but without auto-opening the browser.
+    Used by the scheduled task / run.ps1 background launcher.
+    Set environment variable HEADLESS=1 to suppress the browser."""
+    try:
+        init_db()
+    except Exception as e:
+        print(f"[FATAL] Database initialization failed: {e}")
+        sys.exit(1)
+
+    port = _read_port_file() or _find_free_port()
+    _write_port_file(port)
+
+    print("=" * 50)
+    print("  Sleep Tracker — Headless Mode (scheduled task)")
+    print(f"  Open http://localhost:{port} in your browser")
+    print(f"  Active port saved to .active_port")
+    print("=" * 50)
+
     try:
         app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
     except OSError as e:
@@ -342,4 +382,8 @@ def run_app():
 
 
 if __name__ == '__main__':
-    run_app()
+    # HEADLESS=1 → silent (scheduled task / run.ps1), no browser popup
+    if os.environ.get('HEADLESS', ''):
+        run_app_headless()
+    else:
+        run_app()

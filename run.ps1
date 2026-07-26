@@ -27,7 +27,6 @@ Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "Project : $ProjectRoot"
 Write-Host "Logs    : $LogDir"
 Write-Host "Port    : auto-assigned (zero-conflict)"
-Write-Host "         → run.ps1 will show the live URL after starting"
 Write-Host ""
 
 while ($true) {
@@ -38,7 +37,7 @@ while ($true) {
     Write-Host "[$Timestamp] Starting app.py ..." -ForegroundColor Green
     Write-Host "[$Timestamp] Logging to: $LogFile" -ForegroundColor DarkGray
 
-    $process = Start-Process -FilePath "python" -ArgumentList "app.py" -WorkingDirectory $ProjectRoot -NoNewWindow -PassThru -RedirectStandardOutput $LogFile -RedirectStandardError $LogFile
+    $process = Start-Process -FilePath "python" -ArgumentList "app.py" -WorkingDirectory $ProjectRoot -NoNewWindow -PassThru -RedirectStandardOutput $LogFile -RedirectStandardError $LogFile -Environment @{"HEADLESS"="1"}
 
     # Wait a moment then show the live port
     Start-Sleep -Seconds 3
