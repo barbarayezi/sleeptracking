@@ -7,3 +7,4 @@ __pycache__/
 venv/
 .logs/
 .active_port
+.last_started

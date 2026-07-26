@@ -138,6 +138,9 @@ class FormManager {
             html += `<span class="record-card__time">${this._formatTime(r.sleep_time)} → ${this._formatTime(r.wake_time)}</span>`;
             html += `<span class="record-card__duration">${duration.toFixed(1)}h</span>`;
             html += `<span class="record-card__quality" style="color:${qualColor}">● ${qualLabel}</span>`;
+            if (r.device_score != null) {
+                html += `<span class="record-card__device-score" title="手环评分">⌚ ${r.device_score}</span>`;
+            }
             html += '</div>';
             html += '<div class="record-card__actions">';
             if (!isEditing) {
@@ -214,6 +217,8 @@ class FormManager {
         if (waterInput) waterInput.value = '';
         const stepsInput = document.getElementById('steps');
         if (stepsInput) stepsInput.value = '';
+        const deviceScoreInput = document.getElementById('device-score');
+        if (deviceScoreInput) deviceScoreInput.value = '';
     }
 
     _setDefaultTimes() {
@@ -241,6 +246,9 @@ class FormManager {
         // Quality
         const qualRadio = this.form.querySelector(`input[name="sleep_quality"][value="${record.sleep_quality}"]`);
         if (qualRadio) qualRadio.checked = true;
+
+        // Device score (handicap bracelet)
+        document.getElementById('device-score').value = record.device_score != null ? record.device_score : '';
 
         // Sleep problems (conditional)
         if (record.sleep_quality !== 'good' && record.sleep_problems && record.sleep_problems.length > 0) {
@@ -377,6 +385,8 @@ class FormManager {
         const waterValue = waterInput.value.trim();
         const stepsInput = document.getElementById('steps');
         const stepsValue = stepsInput.value.trim();
+        const deviceScoreInput = document.getElementById('device-score');
+        const deviceScoreValue = deviceScoreInput?.value.trim();
         const wakeTimeVal = document.getElementById('wake-time').value;
         const data = {
             record_date: wakeTimeVal.slice(0, 10),  // derived from wake_time date
@@ -389,7 +399,10 @@ class FormManager {
             dream_journal: document.getElementById('dream-journal').value.trim()
         };
 
-        // Only include health metrics for night sleep records
+        // Device score (handicap bracelet) — available for all record types
+        if (deviceScoreValue) data.device_score = parseInt(deviceScoreValue, 10);
+
+        // Health metrics only for night sleep records
         if (recordType?.value === 'night') {
             if (weightValue) data.weight = parseFloat(weightValue);
             if (waterValue) data.water_cups = parseFloat(waterValue);

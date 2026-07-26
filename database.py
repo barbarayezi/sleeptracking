@@ -308,6 +308,22 @@ def _migrate(conn):
     if version < 5:
         _migrate_v5(conn)
 
+    # Re-read version after potential v5 migration
+    version = _get_schema_version(conn)
+    if version < 6:
+        _migrate_v6(conn)
+
+
+def _migrate_v6(conn):
+    """Migrate from v5 to v6: add device_score column (smart bracelet score)."""
+    print("  Running migration v5 -> v6 ...")
+    col_cursor = conn.execute("PRAGMA table_info('sleep_records')")
+    columns = [row[1] for row in col_cursor.fetchall()]
+    if 'device_score' not in columns:
+        conn.execute("ALTER TABLE sleep_records ADD COLUMN device_score INTEGER DEFAULT NULL")
+    _set_schema_version(conn, 6)
+    print("  Migration v5 -> v6 completed.")
+
 
 def init_db():
     """Create the database schema or migrate from an older version."""
@@ -330,6 +346,7 @@ def init_db():
             weight          REAL DEFAULT NULL,
             water_cups      INTEGER DEFAULT NULL,
             steps           INTEGER DEFAULT NULL,
+            device_score    INTEGER DEFAULT NULL,
             created_at      TEXT DEFAULT (datetime('now', 'localtime')),
             updated_at      TEXT DEFAULT (datetime('now', 'localtime'))
         )

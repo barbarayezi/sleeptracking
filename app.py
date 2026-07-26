@@ -88,6 +88,15 @@ def _validate_record_data(data):
         except (ValueError, TypeError):
             errors.append('steps must be a valid integer')
 
+    # Validate device_score (optional, smart bracelet sleep score, 0-100)
+    if 'device_score' in data and data['device_score'] is not None and data['device_score'] != '':
+        try:
+            s = int(data['device_score'])
+            if s < 0 or s > 100:
+                errors.append('device_score must be between 0 and 100')
+        except (ValueError, TypeError):
+            errors.append('device_score must be a valid integer')
+
     # Validate sleep problems when quality is not good
     if data.get('sleep_quality') in ('average', 'poor'):
         problems = data.get('sleep_problems', [])

@@ -110,8 +110,8 @@ def create_record(data):
         """
         INSERT INTO sleep_records
             (record_date, record_type, sleep_time, wake_time, classification,
-             sleep_quality, sleep_problems, dream_journal, weight, water_cups, steps)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             sleep_quality, sleep_problems, dream_journal, weight, water_cups, steps, device_score)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             data["record_date"],
@@ -125,6 +125,7 @@ def create_record(data):
             data.get("weight"),
             data.get("water_cups"),
             data.get("steps"),
+            data.get("device_score"),
         ),
     )
 
@@ -185,6 +186,9 @@ def update_record_by_id(record_id, data):
     if "steps" in data:
         fields.append("steps = ?")
         params.append(data["steps"])
+    if "device_score" in data:
+        fields.append("device_score = ?")
+        params.append(data["device_score"])
 
     fields.append("sleep_problems = ?")
     params.append(sleep_problems)

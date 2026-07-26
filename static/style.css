@@ -636,6 +636,16 @@ body {
     font-size: 0.8rem;
 }
 
+.record-card__device-score {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    background: var(--bg);
+    padding: 2px 8px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    font-variant-numeric: tabular-nums;
+}
+
 .record-card__actions {
     display: flex;
     gap: 4px;
