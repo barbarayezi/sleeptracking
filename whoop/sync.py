@@ -11,8 +11,8 @@ Key mapping:
 
 import json
 from datetime import datetime, timedelta
-from sleep_traking.database import get_connection
-from sleep_traking.whoop.client import WhoopClient
+from database import get_connection
+from whoop.client import WhoopClient
 
 
 # ── Helpers ──────────────────────────────────────────

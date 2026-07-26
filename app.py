@@ -4,20 +4,15 @@ All REST API routes for CRUD operations, statistics, and reports.
 """
 
 import os
-import sys
 import urllib.parse
-# Ensure the project root is in the Python path
-_project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, _project_root)
-
 from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
 from flask import Flask, request, jsonify, render_template, redirect
-from sleep_traking.database import init_db
-from sleep_traking.reports import generate_report, get_quick_stats
-import sleep_traking.models as models
-import sleep_traking.meal_models as meal_models
+from database import init_db
+from reports import generate_report, get_quick_stats
+import models as models
+import meal_models as meal_models
 
 app = Flask(__name__)
 
@@ -300,7 +295,7 @@ def delete_meal(meal_id):
 @app.route('/api/whoop/auth')
 def whoop_auth():
     """Redirect to Whoop OAuth authorization page."""
-    from sleep_traking.whoop.client import WhoopClient
+    from whoop.client import WhoopClient
     client = WhoopClient()
     if not client.client_id:
         return jsonify({'error': 'Whoop API not configured. Set WHOOP_CLIENT_ID and WHOOP_CLIENT_SECRET in .env'}), 400
@@ -319,7 +314,7 @@ def whoop_callback():
     if not code:
         return jsonify({'error': 'No authorization code provided'}), 400
 
-    from sleep_traking.whoop.client import WhoopClient
+    from whoop.client import WhoopClient
     client = WhoopClient()
     try:
         client.exchange_code(code, state=state)
@@ -334,7 +329,7 @@ def whoop_callback():
 @app.route('/api/whoop/status')
 def whoop_status():
     """Check Whoop connection status."""
-    from sleep_traking.whoop.client import WhoopClient
+    from whoop.client import WhoopClient
     client = WhoopClient()
     authenticated = client.is_authenticated()
     result = {'authenticated': authenticated}
@@ -348,7 +343,7 @@ def whoop_status():
 def whoop_sync():
     """Trigger a Whoop data sync."""
     days_back = request.args.get('days', 30, type=int)
-    from sleep_traking.whoop.sync import sync_sleep_data
+    from whoop.sync import sync_sleep_data
     try:
         stats = sync_sleep_data(days_back=days_back)
         return jsonify(stats)
@@ -361,7 +356,7 @@ def whoop_sync():
 @app.route('/api/whoop/disconnect', methods=['POST'])
 def whoop_disconnect():
     """Disconnect Whoop — remove stored tokens."""
-    from sleep_traking.whoop.client import WhoopClient
+    from whoop.client import WhoopClient
     client = WhoopClient()
     client.disconnect()
     return jsonify({'message': 'Whoop disconnected.'})

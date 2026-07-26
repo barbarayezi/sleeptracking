@@ -35,7 +35,7 @@ SCOPES = ["offline", "read:sleep", "read:recovery", "read:cycles", "read:workout
 def _load_tokens():
     """Load tokens from the database."""
     try:
-        from sleep_traking.database import get_connection
+        from database import get_connection
         conn = get_connection()
         cursor = conn.execute("SELECT access_token, refresh_token, expires_at FROM whoop_tokens WHERE id = 1")
         row = cursor.fetchone()
@@ -53,7 +53,7 @@ def _load_tokens():
 
 def _save_tokens(tokens):
     """Save tokens to the database."""
-    from sleep_traking.database import get_connection
+    from database import get_connection
     conn = get_connection()
     conn.execute(
         """INSERT OR REPLACE INTO whoop_tokens (id, access_token, refresh_token, expires_at, updated_at)
@@ -67,7 +67,7 @@ def _save_tokens(tokens):
 def _delete_tokens():
     """Remove stored tokens (logout)."""
     try:
-        from sleep_traking.database import get_connection
+        from database import get_connection
         conn = get_connection()
         conn.execute("DELETE FROM whoop_tokens WHERE id = 1")
         conn.commit()

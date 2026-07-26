@@ -4,7 +4,7 @@ All CRUD operations against the meal_records table.
 Works with both local SQLite and Turso (cloud SQLite).
 """
 
-from sleep_traking.database import get_connection
+from database import get_connection
 
 
 def row_to_dict(row):
