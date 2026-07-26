@@ -814,3 +814,51 @@ body {
     width: 100%;
     font-size: 0.85rem;
 }
+
+/* ── Whoop Record Detail Panel ───────────────────── */
+.btn-whoop-toggle {
+    background: none;
+    border: none;
+    color: var(--accent);
+    cursor: pointer;
+    font-size: 0.78rem;
+    padding: 4px 12px 6px;
+    opacity: 0.7;
+    transition: opacity var(--transition);
+}
+.btn-whoop-toggle:hover {
+    opacity: 1;
+}
+
+.whoop-detail {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 6px;
+    padding: 8px 12px 10px;
+    border-top: 1px solid var(--border);
+    margin-top: 2px;
+    background: var(--bg);
+    border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+}
+
+.whoop-metric {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 4px 6px;
+    border-radius: 6px;
+    background: var(--bg-card);
+}
+
+.whoop-metric em {
+    font-style: normal;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+}
+
+.whoop-metric strong {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+}

@@ -148,9 +148,30 @@ class FormManager {
                 html += `<button class="btn-record-delete" data-id="${r.id}" title="删除">🗑️</button>`;
             }
             html += '</div>';
+
+            // Whoop health detail (collapsible)
+            const whoopRows = this._whoopDetailRows(r);
+            if (whoopRows) {
+                html += `<button class="btn-whoop-toggle" data-id="${r.id}" title="查看详细健康数据">📊 详情</button>`;
+                html += `<div class="whoop-detail" id="whoop-detail-${r.id}" style="display:none;">${whoopRows}</div>`;
+            }
+
             html += '</div>';
         }
         this.recordsListEl.innerHTML = html;
+
+        // Wire Whoop detail toggles
+        this.recordsListEl.querySelectorAll('.btn-whoop-toggle').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const id = e.currentTarget.dataset.id;
+                const detail = document.getElementById(`whoop-detail-${id}`);
+                if (detail) {
+                    const isHidden = detail.style.display === 'none';
+                    detail.style.display = isHidden ? '' : 'none';
+                    e.currentTarget.textContent = isHidden ? '📊 收起' : '📊 详情';
+                }
+            });
+        });
 
         // Wire edit buttons
         this.recordsListEl.querySelectorAll('.btn-record-edit').forEach(btn => {
@@ -168,6 +189,37 @@ class FormManager {
             });
         });
     }
+
+    /* ── Whoop Health Detail Helper ─────────── */
+
+    _whoopDetailRows(r) {
+        // Check if there's any Whoop data
+        const hasWhoop = r.device_score != null || r.respiratory_rate != null ||
+            r.recovery_score != null || r.resting_heart_rate != null ||
+            r.hrv != null || r.deep_sleep_minutes != null ||
+            r.sleep_efficiency != null;
+        if (!hasWhoop) return null;
+
+        const rows = [];
+        const add = (label, val, unit) => {
+            if (val != null) rows.push(`<span class="whoop-metric"><em>${label}</em><strong>${val}${unit}</strong></span>`);
+        };
+
+        add('睡眠评分', r.device_score, '');
+        add('呼吸率', r.respiratory_rate, '次/分');
+        add('睡眠效率', r.sleep_efficiency, '%');
+        add('作息规律性', r.sleep_consistency, '%');
+        add('深睡', r.deep_sleep_minutes, 'min');
+        add('浅睡', r.light_sleep_minutes, 'min');
+        add('REM', r.rem_sleep_minutes, 'min');
+        add('中途醒来', r.awake_minutes, 'min');
+        add('夜间扰动', r.disturbance_count, '次');
+        add('恢复评分', r.recovery_score, '');
+        add('静息心率', r.resting_heart_rate, 'bpm');
+        add('HRV', r.hrv, 'ms');
+
+        return rows.join('');
+    },
 
     /* ── Edit / Cancel ─────────────────────── */
 

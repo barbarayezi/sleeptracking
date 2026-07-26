@@ -291,7 +291,7 @@ def _migrate(conn):
         else:
             # No table yet — fresh install. init_db() creates the full schema below,
             # so skip directly to the latest version to avoid ALTER TABLE on nothing.
-            _set_schema_version(conn, 7)
+            _set_schema_version(conn, 8)
 
     # Re-read version after potential v2 migration
     version = _get_schema_version(conn)
@@ -317,6 +317,11 @@ def _migrate(conn):
     version = _get_schema_version(conn)
     if version < 7:
         _migrate_v7(conn)
+
+    # Re-read version after potential v7 migration
+    version = _get_schema_version(conn)
+    if version < 8:
+        _migrate_v8(conn)
 
 
 def _migrate_v6(conn):
@@ -346,6 +351,32 @@ def _migrate_v7(conn):
     print("  Migration v6 -> v7 completed.")
 
 
+def _migrate_v8(conn):
+    """Migrate from v7 to v8: add Whoop health metrics columns."""
+    print("  Running migration v7 -> v8 ...")
+    col_cursor = conn.execute("PRAGMA table_info('sleep_records')")
+    existing = {row[1] for row in col_cursor.fetchall()}
+
+    additions = {
+        "respiratory_rate": "ALTER TABLE sleep_records ADD COLUMN respiratory_rate REAL DEFAULT NULL",
+        "sleep_efficiency": "ALTER TABLE sleep_records ADD COLUMN sleep_efficiency REAL DEFAULT NULL",
+        "sleep_consistency": "ALTER TABLE sleep_records ADD COLUMN sleep_consistency REAL DEFAULT NULL",
+        "deep_sleep_minutes": "ALTER TABLE sleep_records ADD COLUMN deep_sleep_minutes INTEGER DEFAULT NULL",
+        "light_sleep_minutes": "ALTER TABLE sleep_records ADD COLUMN light_sleep_minutes INTEGER DEFAULT NULL",
+        "rem_sleep_minutes": "ALTER TABLE sleep_records ADD COLUMN rem_sleep_minutes INTEGER DEFAULT NULL",
+        "awake_minutes": "ALTER TABLE sleep_records ADD COLUMN awake_minutes INTEGER DEFAULT NULL",
+        "disturbance_count": "ALTER TABLE sleep_records ADD COLUMN disturbance_count INTEGER DEFAULT NULL",
+        "recovery_score": "ALTER TABLE sleep_records ADD COLUMN recovery_score INTEGER DEFAULT NULL",
+        "resting_heart_rate": "ALTER TABLE sleep_records ADD COLUMN resting_heart_rate INTEGER DEFAULT NULL",
+        "hrv": "ALTER TABLE sleep_records ADD COLUMN hrv REAL DEFAULT NULL",
+    }
+    for col, sql in additions.items():
+        if col not in existing:
+            conn.execute(sql)
+    _set_schema_version(conn, 8)
+    print("  Migration v7 -> v8 completed.")
+
+
 def init_db():
     """Create the database schema or migrate from an older version."""
     conn = get_connection()
@@ -367,8 +398,19 @@ def init_db():
             weight          REAL DEFAULT NULL,
             water_cups      INTEGER DEFAULT NULL,
             steps           INTEGER DEFAULT NULL,
-            device_score    INTEGER DEFAULT NULL,
-            created_at      TEXT DEFAULT (datetime('now', 'localtime')),
+            device_score        INTEGER DEFAULT NULL,
+            respiratory_rate    REAL DEFAULT NULL,
+            sleep_efficiency    REAL DEFAULT NULL,
+            sleep_consistency   REAL DEFAULT NULL,
+            deep_sleep_minutes  INTEGER DEFAULT NULL,
+            light_sleep_minutes INTEGER DEFAULT NULL,
+            rem_sleep_minutes   INTEGER DEFAULT NULL,
+            awake_minutes       INTEGER DEFAULT NULL,
+            disturbance_count   INTEGER DEFAULT NULL,
+            recovery_score      INTEGER DEFAULT NULL,
+            resting_heart_rate  INTEGER DEFAULT NULL,
+            hrv                 REAL DEFAULT NULL,
+            created_at          TEXT DEFAULT (datetime('now', 'localtime')),
             updated_at      TEXT DEFAULT (datetime('now', 'localtime'))
         )
     """)
