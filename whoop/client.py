@@ -13,10 +13,9 @@ import os
 import json
 import time
 import secrets
-import urllib.request
 import urllib.parse
-import urllib.error
 from datetime import datetime, date
+import requests
 
 # ── CSRF state (stored in memory, single-user app) ──
 _auth_state = None
@@ -34,8 +33,7 @@ SCOPES = ["read:sleep", "read:recovery", "read:cycles", "read:workout", "read:pr
 
 
 def _load_tokens():
-    """Load tokens from the database or fallback file."""
-    # Try database first
+    """Load tokens from the database."""
     try:
         from sleep_traking.database import get_connection
         conn = get_connection()
@@ -82,28 +80,27 @@ def _delete_tokens():
 
 
 def _api_request(method, path, access_token, body=None):
-    """Make an authenticated API request to Whoop."""
+    """Make an authenticated API request to Whoop using requests."""
     url = f"{API_BASE}{path}"
     headers = {
         "Authorization": f"Bearer {access_token}",
         "User-Agent": "SleepTracker/1.0",
     }
-    if body is not None:
-        headers["Content-Type"] = "application/json"
-        data = json.dumps(body).encode("utf-8")
-    else:
-        data = None
-
-    req = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            return json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:
-        if e.code == 401:
+        if body is not None:
+            resp = requests.request(method, url, headers=headers, json=body, timeout=30)
+        else:
+            resp = requests.request(method, url, headers=headers, timeout=30)
+        resp.raise_for_status()
+        return resp.json()
+    except requests.exceptions.HTTPError as e:
+        status = e.response.status_code
+        text = e.response.text[:300]
+        if status == 401:
             raise PermissionError("Access token expired or invalid")
-        elif e.code == 429:
+        elif status == 429:
             raise RuntimeError("Rate limited by Whoop API")
-        raise RuntimeError(f"Whoop API error {e.code}: {e.read().decode('utf-8', errors='replace')}")
+        raise RuntimeError(f"Whoop API error {status}: {text}")
 
 
 # ── Main Client ──────────────────────────────────────
@@ -147,6 +144,8 @@ class WhoopClient:
         _auth_state = None  # Consumed
 
         data = {
+            "client_id": self.client_id,
+            "client_secret": self.client_secret,
             "redirect_uri": self.redirect_uri,
             "grant_type": "authorization_code",
             "code": code,
@@ -167,6 +166,8 @@ class WhoopClient:
             raise PermissionError("No refresh token available — re-authenticate")
 
         data = {
+            "client_id": self.client_id,
+            "client_secret": self.client_secret,
             "redirect_uri": self.redirect_uri,
             "grant_type": "refresh_token",
             "refresh_token": self._tokens["refresh_token"],
@@ -181,23 +182,15 @@ class WhoopClient:
 
     def _token_request(self, data):
         """Make a token exchange request to the Whoop OAuth endpoint.
-        Uses HTTP Basic Auth (client_id:client_secret) per Whoop spec."""
-        import base64
-
-        encoded = urllib.parse.urlencode(data).encode("utf-8")
-        req = urllib.request.Request(TOKEN_URL, data=encoded)
-        req.add_header("Content-Type", "application/x-www-form-urlencoded")
-
-        # Whoop requires Basic Auth for the token endpoint
-        basic = base64.b64encode(f"{self.client_id}:{self.client_secret}".encode("utf-8")).decode("utf-8")
-        req.add_header("Authorization", f"Basic {basic}")
-
+        Uses form-encoded POST with client credentials in body (matching official whoop-sdk)."""
         try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                return json.loads(resp.read().decode("utf-8"))
-        except urllib.error.HTTPError as e:
-            error_body = e.read().decode("utf-8", errors="replace")
-            raise RuntimeError(f"Token request failed: {e.code} {error_body}")
+            resp = requests.post(TOKEN_URL, data=data, timeout=30)
+            resp.raise_for_status()
+            return resp.json()
+        except requests.exceptions.HTTPError as e:
+            status = e.response.status_code
+            text = e.response.text[:500]
+            raise RuntimeError(f"Token request failed: {status} {text}")
 
     # ── Authentication state ──────────────────────────
 
