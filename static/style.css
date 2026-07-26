@@ -772,27 +772,173 @@ body {
 }
 
 /* ── Responsive ────────────────────────────────── */
+
+/* Tablet (640-1024px): reduce gaps */
+@media (max-width: 1024px) {
+    .app-main {
+        padding: 16px 12px;
+        gap: 16px;
+    }
+    .card {
+        padding: 18px;
+    }
+    .record-card__body {
+        gap: 8px;
+    }
+}
+
+/* Phone (<640px): full mobile layout */
 @media (max-width: 640px) {
     .app-header {
         flex-direction: column;
-        gap: 10px;
-        padding: 12px 16px;
+        gap: 8px;
+        padding: 10px 12px;
+    }
+    .app-header h1 {
+        font-size: 1.1rem;
+    }
+    .date-navigator {
+        gap: 6px;
+    }
+    .date-navigator button {
+        font-size: 0.85rem;
+        padding: 4px 10px;
     }
 
-    .form-row-2col {
-        grid-template-columns: 1fr;
-    }
-
-    .report-breakdown {
-        grid-template-columns: 1fr;
-    }
-
-    .report-summary {
-        grid-template-columns: repeat(2, 1fr);
+    .app-main {
+        padding: 12px 8px;
+        gap: 12px;
     }
 
     .card {
-        padding: 16px;
+        padding: 12px;
+        border-radius: 10px;
+    }
+    .card h2 {
+        font-size: 1rem;
+        margin-bottom: 12px;
+    }
+
+    /* Form */
+    .form-row-2col {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+    .form-label {
+        font-size: 0.85rem;
+    }
+    .form-input, .form-textarea, .form-select {
+        font-size: 0.85rem;
+        padding: 8px 10px;
+    }
+    .radio-label, .checkbox-label {
+        padding: 6px 12px;
+        font-size: 0.82rem;
+    }
+    .radio-custom {
+        width: 16px;
+        height: 16px;
+    }
+    .health-metrics-row {
+        flex-direction: column;
+        gap: 8px;
+    }
+    .input-with-unit {
+        max-width: 100%;
+    }
+    .input-with-unit .form-input {
+        max-width: 100%;
+    }
+
+    /* Record cards */
+    .record-card {
+        padding: 10px 12px;
+    }
+    .record-card__body {
+        gap: 6px;
+    }
+    .record-card__time {
+        font-size: 0.82rem;
+        width: 100%;  /* force time to its own line */
+    }
+    .record-card__duration {
+        font-size: 0.8rem;
+    }
+    .record-card__quality {
+        font-size: 0.75rem;
+    }
+    .record-card__device-score {
+        font-size: 0.72rem;
+        padding: 1px 6px;
+    }
+    .btn-record-edit, .btn-record-delete {
+        font-size: 0.8rem;
+        padding: 2px 6px;
+    }
+
+    /* Whoop detail */
+    .whoop-detail {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 4px;
+        padding: 6px 8px 8px;
+    }
+    .whoop-metric {
+        padding: 3px 5px;
+    }
+    .whoop-metric em {
+        font-size: 0.65rem;
+    }
+    .whoop-metric strong {
+        font-size: 0.78rem;
+    }
+    .btn-whoop-toggle {
+        font-size: 0.72rem;
+        padding: 3px 8px 4px;
+    }
+
+    /* Whoop section */
+    .whoop-section .whoop-controls {
+        gap: 6px;
+    }
+    .whoop-section #whoop-status-text {
+        font-size: 0.82rem;
+    }
+
+    /* Timeline */
+    .timeline-controls select {
+        font-size: 0.8rem;
+        padding: 3px 8px;
+    }
+    #timeline-canvas {
+        height: auto;
+    }
+
+    /* Meal cards */
+    .meal-card-grid {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+
+    /* Report */
+    .report-breakdown {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+    .report-summary {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+    }
+
+    /* Buttons */
+    .btn {
+        font-size: 0.82rem;
+        padding: 8px 14px;
+    }
+
+    /* Footer */
+    .app-footer {
+        font-size: 0.72rem;
+        padding: 12px;
     }
 }
 
