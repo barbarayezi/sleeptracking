@@ -147,8 +147,6 @@ class WhoopClient:
         _auth_state = None  # Consumed
 
         data = {
-            "client_id": self.client_id,
-            "client_secret": self.client_secret,
             "redirect_uri": self.redirect_uri,
             "grant_type": "authorization_code",
             "code": code,
@@ -169,8 +167,6 @@ class WhoopClient:
             raise PermissionError("No refresh token available — re-authenticate")
 
         data = {
-            "client_id": self.client_id,
-            "client_secret": self.client_secret,
             "redirect_uri": self.redirect_uri,
             "grant_type": "refresh_token",
             "refresh_token": self._tokens["refresh_token"],
@@ -184,10 +180,18 @@ class WhoopClient:
         return self._tokens
 
     def _token_request(self, data):
-        """Make a token exchange request to the Whoop OAuth endpoint."""
+        """Make a token exchange request to the Whoop OAuth endpoint.
+        Uses HTTP Basic Auth (client_id:client_secret) per Whoop spec."""
+        import base64
+
         encoded = urllib.parse.urlencode(data).encode("utf-8")
         req = urllib.request.Request(TOKEN_URL, data=encoded)
         req.add_header("Content-Type", "application/x-www-form-urlencoded")
+
+        # Whoop requires Basic Auth for the token endpoint
+        basic = base64.b64encode(f"{self.client_id}:{self.client_secret}".encode("utf-8")).decode("utf-8")
+        req.add_header("Authorization", f"Basic {basic}")
+
         try:
             with urllib.request.urlopen(req, timeout=30) as resp:
                 return json.loads(resp.read().decode("utf-8"))
