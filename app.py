@@ -412,63 +412,48 @@ def _open_browser_after_delay(port, delay=2.5):
     threading.Thread(target=_open, daemon=True).start()
 
 
-def run_app():
-    """Initialize DB and start Flask on a conflict-free port."""
+def _start_server(port):
+    """Start the Flask server using waitress (production) or Flask dev."""
+    is_cloud = bool(os.environ.get('PORT'))
+    if is_cloud:
+        # On Render/Railway etc — use waitress (production-grade WSGI)
+        host = '0.0.0.0'
+        public_url = os.environ.get('RENDER_EXTERNAL_URL', '')
+        print("=" * 50)
+        print("  Sleep Tracker — Cloud Deployment")
+        if public_url:
+            print(f"  Public URL: {public_url}")
+        print(f"  Binding: {host}:{port}")
+        print("=" * 50)
+        from waitress import serve
+        serve(app, host=host, port=port)
+    else:
+        try:
+            app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
+        except OSError as e:
+            print(f"[FATAL] Cannot bind to port {port}: {e}")
+            sys.exit(1)
+
+
+def _init_and_start(headless=False):
+    """Initialize DB and start server."""
     try:
         init_db()
     except Exception as e:
         print(f"[FATAL] Database initialization failed: {e}")
         sys.exit(1)
 
-    # Priority: 1) PORT env var  2) OS-assigned free port (zero-conflict)
-    port = _read_port_file() or _find_free_port()
+    # In cloud: use PORT env var (Render sets this)
+    # In local: auto-detect free port
+    port = int(os.environ.get('PORT', 0)) or _find_free_port()
     _write_port_file(port)
 
-    print("=" * 50)
-    print("  Sleep Tracker — Production Mode")
-    print(f"  Open http://localhost:{port} in your browser")
-    print(f"  Active port saved to .active_port")
-    print("=" * 50)
+    if not headless and not os.environ.get('PORT'):
+        _open_browser_after_delay(port)
 
-    # Auto-open browser after a short delay (Firefox / default browser)
-    _open_browser_after_delay(port)
-
-    try:
-        app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
-    except OSError as e:
-        print(f"[FATAL] Cannot bind to port {port}: {e}")
-        sys.exit(1)
-
-
-def run_app_headless():
-    """Same as run_app but without auto-opening the browser.
-    Used by the scheduled task / run.ps1 background launcher.
-    Set environment variable HEADLESS=1 to suppress the browser."""
-    try:
-        init_db()
-    except Exception as e:
-        print(f"[FATAL] Database initialization failed: {e}")
-        sys.exit(1)
-
-    port = _read_port_file() or _find_free_port()
-    _write_port_file(port)
-
-    print("=" * 50)
-    print("  Sleep Tracker — Headless Mode (scheduled task)")
-    print(f"  Open http://localhost:{port} in your browser")
-    print(f"  Active port saved to .active_port")
-    print("=" * 50)
-
-    try:
-        app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
-    except OSError as e:
-        print(f"[FATAL] Cannot bind to port {port}: {e}")
-        sys.exit(1)
+    _start_server(port)
 
 
 if __name__ == '__main__':
-    # HEADLESS=1 → silent (scheduled task / run.ps1), no browser popup
-    if os.environ.get('HEADLESS', ''):
-        run_app_headless()
-    else:
-        run_app()
+    headless = bool(os.environ.get('HEADLESS', ''))
+    _init_and_start(headless=headless)

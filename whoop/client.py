@@ -27,7 +27,7 @@ TOKEN_URL = "https://api.prod.whoop.com/oauth/oauth2/token"
 API_BASE = "https://api.prod.whoop.com/developer/v2"
 
 # Default scopes needed for sleep + recovery + cycle data
-SCOPES = ["read:sleep", "read:recovery", "read:cycles", "read:workout", "read:profile", "read:body_measurement"]
+SCOPES = ["offline", "read:sleep", "read:recovery", "read:cycles", "read:workout", "read:profile", "read:body_measurement"]
 
 # ── Token helpers ────────────────────────────────────
 
