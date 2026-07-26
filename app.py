@@ -292,6 +292,77 @@ def delete_meal(meal_id):
 
 
 # ──────────────────────────────────────────────
+#  Whoop Integration (OAuth + Sync)
+# ──────────────────────────────────────────────
+
+
+@app.route('/api/whoop/auth')
+def whoop_auth():
+    """Redirect to Whoop OAuth authorization page."""
+    from sleep_traking.whoop.client import WhoopClient
+    client = WhoopClient()
+    if not client.client_id:
+        return jsonify({'error': 'Whoop API not configured. Set WHOOP_CLIENT_ID and WHOOP_CLIENT_SECRET in .env'}), 400
+    auth_url = client.get_authorization_url()
+    return jsonify({'auth_url': auth_url})
+
+
+@app.route('/api/whoop/callback')
+def whoop_callback():
+    """OAuth callback — exchange code for tokens."""
+    code = request.args.get('code')
+    error = request.args.get('error')
+    if error:
+        return jsonify({'error': f'Whoop authorization denied: {error}'}), 400
+    if not code:
+        return jsonify({'error': 'No authorization code provided'}), 400
+
+    from sleep_traking.whoop.client import WhoopClient
+    client = WhoopClient()
+    try:
+        client.exchange_code(code)
+        return jsonify({'message': 'Whoop connected successfully!'})
+    except Exception as e:
+        return jsonify({'error': f'Failed to exchange code: {e}'}), 500
+
+
+@app.route('/api/whoop/status')
+def whoop_status():
+    """Check Whoop connection status."""
+    from sleep_traking.whoop.client import WhoopClient
+    client = WhoopClient()
+    authenticated = client.is_authenticated()
+    result = {'authenticated': authenticated}
+    if authenticated:
+        # Show masked client ID for reference
+        result['client_id'] = client.client_id[:8] + '...'
+    return jsonify(result)
+
+
+@app.route('/api/whoop/sync', methods=['POST'])
+def whoop_sync():
+    """Trigger a Whoop data sync."""
+    days_back = request.args.get('days', 30, type=int)
+    from sleep_traking.whoop.sync import sync_sleep_data
+    try:
+        stats = sync_sleep_data(days_back=days_back)
+        return jsonify(stats)
+    except PermissionError as e:
+        return jsonify({'error': str(e), 'need_auth': True}), 401
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/whoop/disconnect', methods=['POST'])
+def whoop_disconnect():
+    """Disconnect Whoop — remove stored tokens."""
+    from sleep_traking.whoop.client import WhoopClient
+    client = WhoopClient()
+    client.disconnect()
+    return jsonify({'message': 'Whoop disconnected.'})
+
+
+# ──────────────────────────────────────────────
 #  Startup — conflict-free port allocation
 # ──────────────────────────────────────────────
 

@@ -291,7 +291,7 @@ def _migrate(conn):
         else:
             # No table yet — fresh install. init_db() creates the full schema below,
             # so skip directly to the latest version to avoid ALTER TABLE on nothing.
-            _set_schema_version(conn, 6)
+            _set_schema_version(conn, 7)
 
     # Re-read version after potential v2 migration
     version = _get_schema_version(conn)
@@ -313,6 +313,11 @@ def _migrate(conn):
     if version < 6:
         _migrate_v6(conn)
 
+    # Re-read version after potential v6 migration
+    version = _get_schema_version(conn)
+    if version < 7:
+        _migrate_v7(conn)
+
 
 def _migrate_v6(conn):
     """Migrate from v5 to v6: add device_score column (smart bracelet score)."""
@@ -323,6 +328,22 @@ def _migrate_v6(conn):
         conn.execute("ALTER TABLE sleep_records ADD COLUMN device_score INTEGER DEFAULT NULL")
     _set_schema_version(conn, 6)
     print("  Migration v5 -> v6 completed.")
+
+
+def _migrate_v7(conn):
+    """Migrate from v6 to v7: add whoop_tokens table for Whoop OAuth."""
+    print("  Running migration v6 -> v7 ...")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS whoop_tokens (
+            id              INTEGER PRIMARY KEY,
+            access_token    TEXT NOT NULL,
+            refresh_token   TEXT DEFAULT '',
+            expires_at      INTEGER NOT NULL,
+            updated_at      TEXT DEFAULT (datetime('now', 'localtime'))
+        )
+    """)
+    _set_schema_version(conn, 7)
+    print("  Migration v6 -> v7 completed.")
 
 
 def init_db():
@@ -388,6 +409,17 @@ def init_db():
     conn.execute("""
         CREATE INDEX IF NOT EXISTS idx_meal_records_type
         ON meal_records(meal_type)
+    """)
+
+    # Whoop tokens table (v7)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS whoop_tokens (
+            id              INTEGER PRIMARY KEY,
+            access_token    TEXT NOT NULL,
+            refresh_token   TEXT DEFAULT '',
+            expires_at      INTEGER NOT NULL,
+            updated_at      TEXT DEFAULT (datetime('now', 'localtime'))
+        )
     """)
 
     # Now run pending migrations (ALTER TABLE for older schemas)

@@ -795,3 +795,22 @@ body {
         padding: 16px;
     }
 }
+
+/* ── Whoop Integration ──────────────────────────── */
+.whoop-section .whoop-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin-top: 8px;
+}
+
+.whoop-section #whoop-status-text {
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.whoop-section .form-message {
+    width: 100%;
+    font-size: 0.85rem;
+}
