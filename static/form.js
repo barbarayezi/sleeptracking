@@ -219,7 +219,7 @@ class FormManager {
         add('HRV', r.hrv, 'ms');
 
         return rows.join('');
-    },
+    }
 
     /* ── Edit / Cancel ─────────────────────── */
 
