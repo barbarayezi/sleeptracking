@@ -142,6 +142,24 @@ const App = {
             connectBtn.style.display = 'inline-block';
         }
 
+        // Check URL params (redirected back from Whoop OAuth)
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('whoop') === 'connected') {
+            resultEl.textContent = '✅ Whoop 连接成功！点击"同步数据"拉取手环数据。';
+            resultEl.className = 'form-message success';
+            // Refresh status
+            statusText.textContent = '✅ 已连接';
+            connectBtn.style.display = 'none';
+            syncBtn.style.display = 'inline-block';
+            disconnectBtn.style.display = 'inline-block';
+            // Clean URL
+            window.history.replaceState({}, '', window.location.pathname);
+        } else if (urlParams.get('whoop') === 'error') {
+            resultEl.textContent = '❌ 连接失败: ' + (urlParams.get('msg') || '未知错误');
+            resultEl.className = 'form-message error';
+            window.history.replaceState({}, '', window.location.pathname);
+        }
+
         // Connect button → redirect to Whoop auth
         connectBtn.addEventListener('click', async () => {
             try {

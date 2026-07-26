@@ -5,6 +5,7 @@ All REST API routes for CRUD operations, statistics, and reports.
 
 import os
 import sys
+import urllib.parse
 # Ensure the project root is in the Python path
 _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _project_root)
@@ -12,7 +13,7 @@ sys.path.insert(0, _project_root)
 from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, redirect
 from sleep_traking.database import init_db
 from sleep_traking.reports import generate_report, get_quick_stats
 import sleep_traking.models as models
@@ -322,9 +323,12 @@ def whoop_callback():
     client = WhoopClient()
     try:
         client.exchange_code(code, state=state)
-        return jsonify({'message': 'Whoop connected successfully!'})
+        # Redirect back to main app — JS will detect connected status
+        return redirect('/?whoop=connected')
     except Exception as e:
-        return jsonify({'error': f'Failed to exchange code: {e}'}), 500
+        # On error, still redirect to main app with error message
+        error_msg = urllib.parse.quote(str(e))
+        return redirect(f'/?whoop=error&msg={error_msg}')
 
 
 @app.route('/api/whoop/status')
