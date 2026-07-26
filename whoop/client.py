@@ -224,14 +224,22 @@ class WhoopClient:
     def get_sleep_data(self, start_date=None, end_date=None, limit=25, next_token=None):
         """Get sleep data, optionally filtered by date range.
 
+        Date args can be 'YYYY-MM-DD' or ISO 8601 with Z.
         Returns (records_list, next_token_or_None).
         """
         token = self.get_valid_access_token()
         params = {"limit": limit}
         if start_date:
-            params["start"] = start_date
+            # Convert YYYY-MM-DD to ISO 8601 with Z (required by Whoop API v2)
+            if len(start_date) == 10 and start_date[4] == '-':
+                params["start"] = start_date + "T00:00:00.000Z"
+            else:
+                params["start"] = start_date
         if end_date:
-            params["end"] = end_date
+            if len(end_date) == 10 and end_date[4] == '-':
+                params["end"] = end_date + "T23:59:59.999Z"
+            else:
+                params["end"] = end_date
         if next_token:
             params["nextToken"] = next_token
 
@@ -260,9 +268,15 @@ class WhoopClient:
         token = self.get_valid_access_token()
         params = {"limit": limit}
         if start_date:
-            params["start"] = start_date
+            if len(start_date) == 10 and start_date[4] == '-':
+                params["start"] = start_date + "T00:00:00.000Z"
+            else:
+                params["start"] = start_date
         if end_date:
-            params["end"] = end_date
+            if len(end_date) == 10 and end_date[4] == '-':
+                params["end"] = end_date + "T23:59:59.999Z"
+            else:
+                params["end"] = end_date
         if next_token:
             params["nextToken"] = next_token
 

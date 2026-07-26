@@ -118,7 +118,9 @@ def sync_sleep_data(days_back=30):
 
         # Get the wake_time date (this becomes our record_date)
         record_date = sleep_end[:10]
-        sleep_score = whoop_sleep.get("score")
+        # Whoop v2 score is nested: score.sleep_performance_percentage
+        score_obj = whoop_sleep.get("score") or {}
+        sleep_score = score_obj.get("sleep_performance_percentage")
         quality = _determine_quality(sleep_score)
         classification = _determine_classification(sleep_start)
         record_type = _detect_record_type(sleep_start, sleep_end)
