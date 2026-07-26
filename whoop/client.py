@@ -168,7 +168,6 @@ class WhoopClient:
         data = {
             "client_id": self.client_id,
             "client_secret": self.client_secret,
-            "redirect_uri": self.redirect_uri,
             "grant_type": "refresh_token",
             "refresh_token": self._tokens["refresh_token"],
         }
