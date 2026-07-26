@@ -291,7 +291,7 @@ def _migrate(conn):
         else:
             # No table yet — fresh install. init_db() creates the full schema below,
             # so skip directly to the latest version to avoid ALTER TABLE on nothing.
-            _set_schema_version(conn, 5)
+            _set_schema_version(conn, 6)
 
     # Re-read version after potential v2 migration
     version = _get_schema_version(conn)
