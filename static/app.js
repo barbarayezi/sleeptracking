@@ -179,12 +179,12 @@ const App = {
         });
 
         // Sync button → trigger sync
-        syncBtn.addEventListener('click', async () => {
+        this._whoopSyncWithUI = async (days) => {
             syncBtn.textContent = '🔄 同步中...';
             syncBtn.disabled = true;
             resultEl.textContent = '';
             try {
-                const resp = await fetch('/api/whoop/sync?days=30', { method: 'POST' });
+                const resp = await fetch(`/api/whoop/sync?days=${days}`, { method: 'POST' });
                 const data = await resp.json();
                 if (data.error) {
                     resultEl.textContent = '同步失败: ' + data.error;
@@ -198,7 +198,6 @@ const App = {
                 } else {
                     resultEl.textContent = `✅ 同步完成！新增 ${data.created} 条，更新 ${data.updated} 条`;
                     resultEl.className = 'form-message success';
-                    // Refresh the timeline to show new data
                     await this._refreshTimeline();
                     await this.form.loadDate(this.currentDate);
                 }
@@ -209,7 +208,37 @@ const App = {
                 syncBtn.textContent = '🔄 同步数据';
                 syncBtn.disabled = false;
             }
-        });
+        };
+        syncBtn.addEventListener('click', () => this._whoopSyncWithUI(30));
+
+        // Auto-sync: when page loads, silently sync recent data
+        if (statusText.textContent.includes('已连接')) {
+            setTimeout(async () => {
+                try {
+                    const resp = await fetch('/api/whoop/sync?days=2', { method: 'POST' });
+                    const data = await resp.json();
+                    if (!data.error) {
+                        await this._refreshTimeline();
+                        await this.form.loadDate(this.currentDate);
+                    }
+                } catch (_) {}
+            }, 2000);
+        }
+
+        // Periodic auto-sync every 30 minutes
+        setInterval(async () => {
+            if (statusText.textContent.includes('已连接')) {
+                try {
+                    const resp = await fetch('/api/whoop/sync?days=2', { method: 'POST' });
+                    if (!resp.ok) return;
+                    const data = await resp.json();
+                    if (!data.error) {
+                        await this._refreshTimeline();
+                        await this.form.loadDate(this.currentDate);
+                    }
+                } catch (_) {}
+            }
+        }, 30 * 60 * 1000);
 
         // Disconnect button
         disconnectBtn.addEventListener('click', async () => {
