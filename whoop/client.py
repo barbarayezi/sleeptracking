@@ -24,7 +24,7 @@ _auth_state = None
 
 AUTH_URL = "https://api.prod.whoop.com/oauth/oauth2/auth"
 TOKEN_URL = "https://api.prod.whoop.com/oauth/oauth2/token"
-API_BASE = "https://api.prod.whoop.com"
+API_BASE = "https://api.prod.whoop.com/developer/v2"
 
 # Default scopes needed for sleep + recovery + cycle data
 SCOPES = ["read:sleep", "read:recovery", "read:cycles", "read:workout", "read:profile", "read:body_measurement"]
@@ -219,7 +219,7 @@ class WhoopClient:
     def get_profile(self):
         """Get the user's Whoop profile."""
         token = self.get_valid_access_token()
-        return _api_request("GET", "/v1/user/profile/basic", token)
+        return _api_request("GET", "/user/profile/basic", token)
 
     def get_sleep_data(self, start_date=None, end_date=None, limit=25, next_token=None):
         """Get sleep data, optionally filtered by date range.
@@ -235,10 +235,10 @@ class WhoopClient:
         if next_token:
             params["nextToken"] = next_token
 
-        path = f"/v2/activity/sleep?{urllib.parse.urlencode(params)}"
+        path = f"/activity/sleep?{urllib.parse.urlencode(params)}"
         result = _api_request("GET", path, token)
         records = result.get("records", [])
-        next_tok = result.get("nextToken")
+        next_tok = result.get("next_token")
         return records, next_tok
 
     def get_all_sleep_data(self, start_date=None, end_date=None):
@@ -266,9 +266,9 @@ class WhoopClient:
         if next_token:
             params["nextToken"] = next_token
 
-        path = f"/v2/recovery?{urllib.parse.urlencode(params)}"
+        path = f"/recovery?{urllib.parse.urlencode(params)}"
         result = _api_request("GET", path, token)
-        return result.get("records", []), result.get("nextToken")
+        return result.get("records", []), result.get("next_token")
 
     def get_all_recovery_data(self, start_date=None, end_date=None):
         """Get ALL recovery data pages."""
