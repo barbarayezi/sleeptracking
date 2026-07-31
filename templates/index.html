@@ -2,7 +2,13 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="睡眠追踪">
+    <meta name="theme-color" content="#1e293b">
+    <link rel="manifest" href="/static/manifest.json">
+    <link rel="apple-touch-icon" href="/static/icon.svg">
     <title>睡眠追踪器 — Sleep Tracker</title>
     <link rel="stylesheet" href="/static/style.css">
 </head>
@@ -129,6 +135,15 @@
                     </div>
                 </fieldset>
 
+                <!-- Device Score (手环评分) — smart bracelet sleep quality score -->
+                <div class="form-row">
+                    <label class="form-label" for="device-score">手环评分 <span class="label-hint">（0-100）</span></label>
+                    <div class="input-with-unit">
+                        <input type="number" id="device-score" class="form-input" min="0" max="100" placeholder="—">
+                        <span class="input-unit">分</span>
+                    </div>
+                </div>
+
                 <!-- Sleep Problems (睡眠问题) — conditional -->
                 <fieldset class="form-fieldset" id="sleep-problems-group" style="display:none;">
                     <legend class="form-label">睡眠问题 <span class="label-hint">（可多选）</span></legend>
@@ -210,7 +225,151 @@
         </section>
 
         <!-- ═══════════════════════════════════════ -->
-        <!--  SECTION 3: REPORT PANEL                -->
+        <!--  SECTION 3: MEAL TRACKING               -->
+        <!-- ═══════════════════════════════════════ -->
+        <section class="card meal-section">
+            <h2>🍽️ 饮食记录</h2>
+
+            <!-- Meal list for current date -->
+            <div id="meals-list" class="records-list">
+                <p id="meals-empty" class="report-placeholder" style="padding:16px 0;">暂无饮食记录，在下方添加今天的餐食。</p>
+            </div>
+
+            <form id="meal-form" novalidate>
+
+                <!-- Meal Type -->
+                <fieldset class="form-fieldset">
+                    <legend class="form-label">餐食类型</legend>
+                    <div class="radio-group">
+                        <label class="radio-label">
+                            <input type="radio" name="meal_type" value="breakfast" checked>
+                            <span class="radio-custom"></span>
+                            🌅 早餐
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="meal_type" value="lunch">
+                            <span class="radio-custom"></span>
+                            ☀️ 午餐
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="meal_type" value="dinner">
+                            <span class="radio-custom"></span>
+                            🌇 晚餐
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="meal_type" value="snack">
+                            <span class="radio-custom"></span>
+                            🍪 加餐/零食
+                        </label>
+                    </div>
+                </fieldset>
+
+                <!-- Meal Time & Meal Name -->
+                <div class="form-row form-row-2col">
+                    <div class="form-group">
+                        <label class="form-label" for="meal-time">用餐时间</label>
+                        <input type="time" id="meal-time" class="form-input" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="meal-name">餐食名称</label>
+                        <input type="text" id="meal-name" class="form-input"
+                            placeholder="如：燕麦粥、三明治...">
+                    </div>
+                </div>
+
+                <!-- Meal Content -->
+                <div class="form-row">
+                    <label class="form-label" for="meal-content">详细内容</label>
+                    <textarea id="meal-content" class="form-textarea" rows="2"
+                        placeholder="记录吃了什么、食材、烹饪方式..."></textarea>
+                </div>
+
+                <!-- Meal Quantity -->
+                <fieldset class="form-fieldset">
+                    <legend class="form-label">食量</legend>
+                    <div class="radio-group">
+                        <label class="radio-label">
+                            <input type="radio" name="meal_quantity" value="light">
+                            <span class="radio-custom"></span>
+                            偏少
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="meal_quantity" value="normal" checked>
+                            <span class="radio-custom"></span>
+                            正常
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="meal_quantity" value="heavy">
+                            <span class="radio-custom"></span>
+                            偏多
+                        </label>
+                    </div>
+                </fieldset>
+
+                <!-- Health Rating -->
+                <fieldset class="form-fieldset">
+                    <legend class="form-label">健康评分</legend>
+                    <div class="radio-group">
+                        <label class="radio-label">
+                            <input type="radio" name="meal_health_rating" value="good">
+                            <span class="radio-custom"></span>
+                            健康
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="meal_health_rating" value="average" checked>
+                            <span class="radio-custom"></span>
+                            一般
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="meal_health_rating" value="poor">
+                            <span class="radio-custom"></span>
+                            不健康
+                        </label>
+                    </div>
+                </fieldset>
+
+                <!-- Allergy Reaction & Notes -->
+                <div class="form-row form-row-2col">
+                    <div class="form-group">
+                        <label class="form-label" for="meal-allergy">过敏反应</label>
+                        <input type="text" id="meal-allergy" class="form-input"
+                            placeholder="如：皮肤发痒、肠胃不适...">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="meal-notes">备注</label>
+                        <input type="text" id="meal-notes" class="form-input"
+                            placeholder="如：外出就餐、外卖...">
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="form-actions">
+                    <button type="submit" id="btn-meal-save" class="btn btn-primary">💾 保存饮食</button>
+                    <button type="button" id="btn-meal-cancel" class="btn btn-secondary hidden">取消编辑</button>
+                    <button type="button" id="btn-meal-delete" class="btn btn-danger hidden">🗑️ 删除</button>
+                    <span id="meal-form-message" class="form-message"></span>
+                </div>
+            </form>
+        </section>
+
+        <!-- ═══════════════════════════════════════ -->
+        <!--  SECTION 4: WHOOP INTEGRATION            -->
+        <!-- ═══════════════════════════════════════ -->
+        <section class="card whoop-section">
+            <h2>⌚ Whoop 手环</h2>
+            <div class="whoop-controls">
+                <div id="whoop-status">
+                    <span id="whoop-status-text">检查中...</span>
+                </div>
+                <button id="btn-whoop-connect" class="btn btn-primary" style="display:none;">连接 Whoop</button>
+                <button id="btn-whoop-sync" class="btn" style="display:none;">🔄 同步数据</button>
+                <button id="btn-whoop-disconnect" class="btn btn-danger" style="display:none;">断开连接</button>
+                <div id="whoop-result" class="form-message" style="margin-top:8px;"></div>
+            </div>
+        </section>
+
+        <!-- ═══════════════════════════════════════ -->
+        <!--  SECTION 5: REPORT PANEL                -->
         <!-- ═══════════════════════════════════════ -->
         <section class="card report-section">
             <h2>📈 睡眠分析报告</h2>
@@ -236,6 +395,7 @@
     </footer>
 
     <script src="/static/form.js"></script>
+    <script src="/static/meal.js"></script>
     <script src="/static/timeline.js"></script>
     <script src="/static/reports.js"></script>
     <script src="/static/app.js"></script>

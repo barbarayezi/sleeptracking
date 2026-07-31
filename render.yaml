@@ -1,0 +1,23 @@
+# Render.com deployment config
+# https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: sleep-tracker
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python app.py
+    envVars:
+      - key: PORT
+        value: "10000"
+      - key: HEADLESS
+        value: "1"
+      - key: TURSO_URL
+        sync: false      # set in Render dashboard
+      - key: TURSO_AUTH_TOKEN
+        sync: false      # set in Render dashboard
+      - key: WHOOP_CLIENT_ID
+        sync: false      # set in Render dashboard
+      - key: WHOOP_CLIENT_SECRET
+        sync: false      # set in Render dashboard
+      - key: WHOOP_REDIRECT_URI
+        value: "https://sleep-tracker.onrender.com/api/whoop/callback"

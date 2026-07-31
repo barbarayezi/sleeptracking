@@ -6,7 +6,7 @@ Works with both local SQLite and Turso (cloud SQLite).
 
 import json
 from datetime import datetime, date
-from sleeptracking.database import get_connection
+from database import get_connection
 
 
 def row_to_dict(row):
@@ -110,8 +110,12 @@ def create_record(data):
         """
         INSERT INTO sleep_records
             (record_date, record_type, sleep_time, wake_time, classification,
-             sleep_quality, sleep_problems, dream_journal, weight, water_cups, steps)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             sleep_quality, sleep_problems, dream_journal, weight, water_cups, steps, device_score,
+             respiratory_rate, sleep_efficiency, sleep_consistency,
+             deep_sleep_minutes, light_sleep_minutes, rem_sleep_minutes, awake_minutes,
+             disturbance_count, recovery_score, resting_heart_rate, hrv)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             data["record_date"],
@@ -125,6 +129,18 @@ def create_record(data):
             data.get("weight"),
             data.get("water_cups"),
             data.get("steps"),
+            data.get("device_score"),
+            data.get("respiratory_rate"),
+            data.get("sleep_efficiency"),
+            data.get("sleep_consistency"),
+            data.get("deep_sleep_minutes"),
+            data.get("light_sleep_minutes"),
+            data.get("rem_sleep_minutes"),
+            data.get("awake_minutes"),
+            data.get("disturbance_count"),
+            data.get("recovery_score"),
+            data.get("resting_heart_rate"),
+            data.get("hrv"),
         ),
     )
 
@@ -185,6 +201,18 @@ def update_record_by_id(record_id, data):
     if "steps" in data:
         fields.append("steps = ?")
         params.append(data["steps"])
+    if "device_score" in data:
+        fields.append("device_score = ?")
+        params.append(data["device_score"])
+
+    # Whoop health metrics
+    for col in ("respiratory_rate", "sleep_efficiency", "sleep_consistency",
+                "deep_sleep_minutes", "light_sleep_minutes", "rem_sleep_minutes",
+                "awake_minutes", "disturbance_count", "recovery_score",
+                "resting_heart_rate", "hrv"):
+        if col in data:
+            fields.append(f"{col} = ?")
+            params.append(data[col])
 
     fields.append("sleep_problems = ?")
     params.append(sleep_problems)

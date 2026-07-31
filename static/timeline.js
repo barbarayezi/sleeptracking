@@ -10,7 +10,9 @@ class Timeline {
         this.emptyEl = document.getElementById(emptyId);
         this.ctx = this.canvas.getContext('2d');
         this.records = [];
+        this.meals = [];
         this._grouped = {};
+        this._mealByDate = {};
         this._dates = [];
         this.daysToShow = 14;
 
@@ -21,12 +23,21 @@ class Timeline {
         this.ROW_HEIGHT = 36;
         this.BAR_HEIGHT = 20;
         this.BAR_Y_OFFSET = 8;
+        this.MEAL_DOT_RADIUS = 4.5;
 
         // Color mapping
         this.colors = {
             good: '#4ade80',
             average: '#fbbf24',
             poor: '#f87171'
+        };
+
+        // Meal type colors
+        this.mealColors = {
+            breakfast: '#fbbf24',  // warm yellow
+            lunch: '#4ade80',      // green
+            dinner: '#818cf8',     // indigo
+            snack: '#f472b6'       // pink
         };
 
         // Type-specific alpha
@@ -54,6 +65,13 @@ class Timeline {
         this.render();
     }
 
+    /** Update meal records and re-render. */
+    setMeals(meals) {
+        this.meals = meals || [];
+        this._groupMealsByDate();
+        this.render();
+    }
+
     /* ── Grouping ─────────────────────────── */
 
     _groupByDate() {
@@ -78,12 +96,36 @@ class Timeline {
         return match ? match[1] : null;
     }
 
+    /** Group meals by their meal_date for timeline display. */
+    _groupMealsByDate() {
+        this._mealByDate = {};
+        for (const m of this.meals) {
+            const d = m.meal_date;
+            if (!this._mealByDate[d]) {
+                this._mealByDate[d] = [];
+            }
+            this._mealByDate[d].push(m);
+        }
+    }
+
     /* ── Render ───────────────────────────── */
 
     render() {
         const dates = this._dates.slice(0, this.daysToShow);
 
-        if (dates.length === 0) {
+        // Also include dates that only have meals (no sleep records)
+        const mealDates = Object.keys(this._mealByDate);
+        for (const md of mealDates) {
+            if (!dates.includes(md)) {
+                dates.push(md);
+            }
+        }
+        dates.sort().reverse();
+
+        // Truncate to daysToShow after merging
+        const displayDates = dates.slice(0, this.daysToShow);
+
+        if (displayDates.length === 0) {
             this.emptyEl.classList.remove('hidden');
             this.canvas.classList.add('hidden');
             return;
@@ -94,7 +136,7 @@ class Timeline {
 
         // Set canvas size
         const containerWidth = this.canvas.parentElement.clientWidth;
-        const totalHeight = this.TOP_OFFSET + dates.length * this.ROW_HEIGHT + 10;
+        const totalHeight = this.TOP_OFFSET + displayDates.length * this.ROW_HEIGHT + 10;
 
         this.canvas.width = containerWidth * window.devicePixelRatio;
         this.canvas.height = totalHeight * window.devicePixelRatio;
@@ -131,10 +173,11 @@ class Timeline {
             ctx.fillText(hourLabels[i], x, this.TOP_OFFSET - 14);
         }
 
-        // Draw bars
-        dates.forEach((date, index) => {
+        // Draw bars and meal markers
+        displayDates.forEach((date, index) => {
             const y = this.TOP_OFFSET + index * this.ROW_HEIGHT;
-            const dayRecords = this._grouped[date];
+            const dayRecords = this._grouped[date] || [];
+            const dayMeals = this._mealByDate[date] || [];
 
             // Sort: night first, then segment, then nap
             const typeOrder = { night: 1, segment: 2, nap: 3 };
@@ -151,7 +194,15 @@ class Timeline {
             dayRecords.forEach((record) => {
                 this._drawBar(ctx, record, y, pxPerMinute);
             });
+
+            // Draw meal markers on the bottom of the row
+            if (dayMeals.length > 0) {
+                this._drawMealMarkers(ctx, dayMeals, y, pxPerMinute);
+            }
         });
+
+        // Draw meal legend (top-right corner)
+        this._drawMealLegend(ctx, containerWidth);
     }
 
     _drawBar(ctx, record, rowY, pxPerMinute) {
@@ -222,6 +273,79 @@ class Timeline {
         };
     }
 
+    /* ── Meal Markers ─────────────────────── */
+
+    _drawMealMarkers(ctx, meals, rowY, pxPerMinute) {
+        const dotY = rowY + this.ROW_HEIGHT - 4;  // Bottom of row
+        const mealIcons = {
+            breakfast: '\u{1F305}',
+            lunch: '\u{2600}\u{FE0F}',
+            dinner: '\u{1F307}',
+            snack: '\u{1F36A}'
+        };
+
+        meals.forEach((meal) => {
+            const time = this._parseMealTime(meal.meal_time);
+            // Convert to minutes from 18:00
+            let offset = (time.hour - 18) * 60 + time.minute;
+            if (offset < 0) offset += 1440;
+
+            const dotX = this.LEFT_MARGIN + offset * pxPerMinute;
+            const color = this.mealColors[meal.meal_type] || '#94a3b8';
+
+            // Draw colored dot
+            ctx.fillStyle = color;
+            ctx.globalAlpha = 0.9;
+            ctx.beginPath();
+            ctx.arc(dotX, dotY, this.MEAL_DOT_RADIUS, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1.0;
+
+            // Draw tiny icon next to dot (only if there's room)
+            const icon = mealIcons[meal.meal_type] || '';
+            if (icon && meals.length <= 4) {
+                ctx.font = '9px sans-serif';
+                ctx.textAlign = 'left';
+                ctx.fillText(icon, dotX + 6, dotY + 4);
+            }
+        });
+    }
+
+    _drawMealLegend(ctx, containerWidth) {
+        const legendX = containerWidth - this.RIGHT_MARGIN + 4;
+        const legendY = this.TOP_OFFSET - 4;
+        const items = [
+            { label: '早', color: this.mealColors.breakfast },
+            { label: '午', color: this.mealColors.lunch },
+            { label: '晚', color: this.mealColors.dinner },
+            { label: '加', color: this.mealColors.snack }
+        ];
+
+        ctx.font = '10px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
+        ctx.textAlign = 'left';
+
+        items.forEach((item, i) => {
+            const itemX = legendX + i * 38;
+            // Dot
+            ctx.fillStyle = item.color;
+            ctx.beginPath();
+            ctx.arc(itemX, legendY, 3.5, 0, Math.PI * 2);
+            ctx.fill();
+            // Label
+            ctx.fillStyle = '#94a3b8';
+            ctx.fillText(item.label, itemX + 6, legendY + 3);
+        });
+    }
+
+    _parseMealTime(timeStr) {
+        if (!timeStr) return { hour: 12, minute: 0 };
+        const parts = timeStr.split(':');
+        return {
+            hour: parseInt(parts[0]) || 12,
+            minute: parseInt(parts[1]) || 0
+        };
+    }
+
     /* ── Click Handling ───────────────────── */
 
     _initClickHandler() {
@@ -230,8 +354,13 @@ class Timeline {
             const x = e.clientX - rect.left;
             const y = e.clientY - rect.top;
 
-            for (const date of this._dates.slice(0, this.daysToShow)) {
-                const dayRecords = this._grouped[date];
+            // Build same display list as render()
+            const mealDates = Object.keys(this._mealByDate);
+            const allDates = [...new Set([...this._dates, ...mealDates])].sort().reverse();
+            const displayDates = allDates.slice(0, this.daysToShow);
+
+            for (const date of displayDates) {
+                const dayRecords = this._grouped[date] || [];
                 for (const record of dayRecords) {
                     if (!record._hitRegion) continue;
                     const r = record._hitRegion;
@@ -250,9 +379,13 @@ class Timeline {
             const x = e.clientX - rect.left;
             const y = e.clientY - rect.top;
 
+            const mealDates = Object.keys(this._mealByDate);
+            const allDates = [...new Set([...this._dates, ...mealDates])].sort().reverse();
+            const displayDates = allDates.slice(0, this.daysToShow);
+
             let hovering = false;
-            for (const date of this._dates.slice(0, this.daysToShow)) {
-                for (const record of this._grouped[date]) {
+            for (const date of displayDates) {
+                for (const record of (this._grouped[date] || [])) {
                     if (!record._hitRegion) continue;
                     const r = record._hitRegion;
                     if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) {

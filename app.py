@@ -4,18 +4,15 @@ All REST API routes for CRUD operations, statistics, and reports.
 """
 
 import os
-import sys
-# Ensure the project root is in the Python path
-_project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, _project_root)
-
+import urllib.parse
 from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
-from flask import Flask, request, jsonify, render_template
-from sleeptracking.database import init_db
-from sleeptracking.reports import generate_report, get_quick_stats
-import sleeptracking.models as models
+from flask import Flask, request, jsonify, render_template, redirect
+from database import init_db
+from reports import generate_report, get_quick_stats
+import models as models
+import meal_models as meal_models
 
 app = Flask(__name__)
 
@@ -86,6 +83,15 @@ def _validate_record_data(data):
                 errors.append('steps must be between 0 and 200000')
         except (ValueError, TypeError):
             errors.append('steps must be a valid integer')
+
+    # Validate device_score (optional, smart bracelet sleep score, 0-100)
+    if 'device_score' in data and data['device_score'] is not None and data['device_score'] != '':
+        try:
+            s = int(data['device_score'])
+            if s < 0 or s > 100:
+                errors.append('device_score must be between 0 and 100')
+        except (ValueError, TypeError):
+            errors.append('device_score must be a valid integer')
 
     # Validate sleep problems when quality is not good
     if data.get('sleep_quality') in ('average', 'poor'):
@@ -192,13 +198,257 @@ def get_stats():
 
 
 # ──────────────────────────────────────────────
-#  Startup
+#  Meal (Diet) CRUD: /api/meals
 # ──────────────────────────────────────────────
 
+
+def _validate_meal_data(data):
+    """Validate meal record data. Returns (errors, cleaned_data)."""
+    errors = []
+
+    # Validate required fields
+    required = ['meal_date', 'meal_type', 'meal_time']
+    for field in required:
+        if field not in data:
+            errors.append(f'Missing required field: {field}')
+
+    # Validate meal_type
+    if 'meal_type' in data and data['meal_type'] not in ('breakfast', 'lunch', 'dinner', 'snack'):
+        errors.append('meal_type must be "breakfast", "lunch", "dinner", or "snack"')
+
+    # Validate meal_quantity
+    if 'meal_quantity' in data and data['meal_quantity'] not in ('light', 'normal', 'heavy'):
+        errors.append('meal_quantity must be "light", "normal", or "heavy"')
+
+    # Validate health_rating
+    if 'health_rating' in data and data['health_rating'] not in ('good', 'average', 'poor'):
+        errors.append('health_rating must be "good", "average", or "poor"')
+
+    return errors
+
+
+@app.route('/api/meals', methods=['GET'])
+def list_meals():
+    """List all meal records, optionally filtered by date range or specific date."""
+    from_date = request.args.get('from')
+    to_date = request.args.get('to')
+    date = request.args.get('date')
+    meals = meal_models.get_all_meals(from_date=from_date, to_date=to_date, date=date)
+    return jsonify(meals)
+
+
+@app.route('/api/meals/<int:meal_id>', methods=['GET'])
+def get_meal(meal_id):
+    """Get a single meal record by ID."""
+    meal = meal_models.get_meal_by_id(meal_id)
+    if meal is None:
+        return jsonify({'error': 'Meal record not found'}), 404
+    return jsonify(meal)
+
+
+@app.route('/api/meals', methods=['POST'])
+def create_meal():
+    """Create a new meal record."""
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Request body must be JSON'}), 400
+
+    errors = _validate_meal_data(data)
+    if errors:
+        return jsonify({'error': errors[0]}), 400
+
+    meal = meal_models.create_meal(data)
+    return jsonify(meal), 201
+
+
+@app.route('/api/meals/<int:meal_id>', methods=['PUT'])
+def update_meal(meal_id):
+    """Update an existing meal record by ID."""
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Request body must be JSON'}), 400
+
+    errors = _validate_meal_data(data)
+    if errors:
+        return jsonify({'error': errors[0]}), 400
+
+    meal = meal_models.update_meal_by_id(meal_id, data)
+    if meal is None:
+        return jsonify({'error': 'Meal record not found'}), 404
+    return jsonify(meal)
+
+
+@app.route('/api/meals/<int:meal_id>', methods=['DELETE'])
+def delete_meal(meal_id):
+    """Delete a meal record by ID."""
+    deleted = meal_models.delete_meal_by_id(meal_id)
+    if not deleted:
+        return jsonify({'error': 'Meal record not found'}), 404
+    return '', 204
+
+
+# ──────────────────────────────────────────────
+#  Whoop Integration (OAuth + Sync)
+# ──────────────────────────────────────────────
+
+
+@app.route('/api/whoop/auth')
+def whoop_auth():
+    """Redirect to Whoop OAuth authorization page."""
+    from whoop.client import WhoopClient
+    client = WhoopClient()
+    if not client.client_id:
+        return jsonify({'error': 'Whoop API not configured. Set WHOOP_CLIENT_ID and WHOOP_CLIENT_SECRET in .env'}), 400
+    auth_url = client.get_authorization_url()
+    return jsonify({'auth_url': auth_url})
+
+
+@app.route('/api/whoop/callback')
+def whoop_callback():
+    """OAuth callback — exchange code for tokens."""
+    code = request.args.get('code')
+    state = request.args.get('state')
+    error = request.args.get('error')
+    if error:
+        return jsonify({'error': f'Whoop authorization denied: {error}'}), 400
+    if not code:
+        return jsonify({'error': 'No authorization code provided'}), 400
+
+    from whoop.client import WhoopClient
+    client = WhoopClient()
+    try:
+        client.exchange_code(code, state=state)
+        # Redirect back to main app — JS will detect connected status
+        return redirect('/?whoop=connected')
+    except Exception as e:
+        # On error, still redirect to main app with error message
+        error_msg = urllib.parse.quote(str(e))
+        return redirect(f'/?whoop=error&msg={error_msg}')
+
+
+@app.route('/api/whoop/status')
+def whoop_status():
+    """Check Whoop connection status."""
+    from whoop.client import WhoopClient
+    client = WhoopClient()
+    authenticated = client.is_authenticated()
+    result = {'authenticated': authenticated}
+    if authenticated:
+        # Show masked client ID for reference
+        result['client_id'] = client.client_id[:8] + '...'
+    return jsonify(result)
+
+
+@app.route('/api/whoop/sync', methods=['POST'])
+def whoop_sync():
+    """Trigger a Whoop data sync."""
+    days_back = request.args.get('days', 30, type=int)
+    from whoop.sync import sync_sleep_data
+    try:
+        stats = sync_sleep_data(days_back=days_back)
+        return jsonify(stats)
+    except PermissionError as e:
+        return jsonify({'error': str(e), 'need_auth': True}), 401
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/whoop/disconnect', methods=['POST'])
+def whoop_disconnect():
+    """Disconnect Whoop — remove stored tokens."""
+    from whoop.client import WhoopClient
+    client = WhoopClient()
+    client.disconnect()
+    return jsonify({'message': 'Whoop disconnected.'})
+
+
+# ──────────────────────────────────────────────
+#  Startup — conflict-free port allocation
+# ──────────────────────────────────────────────
+
+
+def _find_free_port():
+    """Let the OS assign a truly free port (guaranteed no conflict).
+
+    Binds a temp socket to port 0, the OS picks an unused port from the
+    ephemeral range (49152-65535 on Windows). The socket is closed and
+    Flask takes the port immediately after — the window is <1ms.
+    """
+    import socket
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(('0.0.0.0', 0))
+        return s.getsockname()[1]
+
+
+def _write_port_file(port):
+    """Write the active port to .active_port so tools/scripts can read it."""
+    import pathlib
+    port_file = pathlib.Path(__file__).parent / ".active_port"
+    port_file.write_text(str(port), encoding="utf-8")
+
+
+def _read_port_file():
+    """Read a previously saved port (only used when ENV var is set)."""
+    import pathlib, os
+    port = os.environ.get('PORT', '')
+    if port:
+        return int(port)
+    return 0  # auto-detect
+
+
+def _open_browser_after_delay(port, delay=2.5):
+    """Automatically open the browser after Flask starts (non-blocking)."""
+    import threading, time, webbrowser
+    def _open():
+        time.sleep(delay)
+        url = f'http://localhost:{port}'
+        print(f"  Auto-opening browser: {url}")
+        webbrowser.open(url)
+    threading.Thread(target=_open, daemon=True).start()
+
+
+def _start_server(port):
+    """Start the Flask server using waitress (production) or Flask dev."""
+    is_cloud = bool(os.environ.get('PORT'))
+    if is_cloud:
+        # On Render/Railway etc — use waitress (production-grade WSGI)
+        host = '0.0.0.0'
+        public_url = os.environ.get('RENDER_EXTERNAL_URL', '')
+        print("=" * 50)
+        print("  Sleep Tracker — Cloud Deployment")
+        if public_url:
+            print(f"  Public URL: {public_url}")
+        print(f"  Binding: {host}:{port}")
+        print("=" * 50)
+        from waitress import serve
+        serve(app, host=host, port=port)
+    else:
+        try:
+            app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
+        except OSError as e:
+            print(f"[FATAL] Cannot bind to port {port}: {e}")
+            sys.exit(1)
+
+
+def _init_and_start(headless=False):
+    """Initialize DB and start server."""
+    try:
+        init_db()
+    except Exception as e:
+        print(f"[FATAL] Database initialization failed: {e}")
+        sys.exit(1)
+
+    # In cloud: use PORT env var (Render sets this)
+    # In local: auto-detect free port
+    port = int(os.environ.get('PORT', 0)) or _find_free_port()
+    _write_port_file(port)
+
+    if not headless and not os.environ.get('PORT'):
+        _open_browser_after_delay(port)
+
+    _start_server(port)
+
+
 if __name__ == '__main__':
-    init_db()
-    print("=" * 50)
-    print("  Sleep Tracker")
-    print("  Open http://localhost:5001 in your browser")
-    print("=" * 50)
-    app.run(debug=True, host='0.0.0.0', port=5001)
+    headless = bool(os.environ.get('HEADLESS', ''))
+    _init_and_start(headless=headless)

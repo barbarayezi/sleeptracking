@@ -214,7 +214,11 @@ def _migrate_v2(conn):
 def _migrate_v3(conn):
     """Migrate from v2 to v3: add weight column."""
     print("  Running migration v2 -> v3 ...")
-    conn.execute("ALTER TABLE sleep_records ADD COLUMN weight REAL DEFAULT NULL")
+    # Check column exists first (handles recovery from partial migration)
+    col_cursor = conn.execute("PRAGMA table_info('sleep_records')")
+    columns = [row[1] for row in col_cursor.fetchall()]
+    if 'weight' not in columns:
+        conn.execute("ALTER TABLE sleep_records ADD COLUMN weight REAL DEFAULT NULL")
     _set_schema_version(conn, 3)
     print("  Migration v2 -> v3 completed.")
 
@@ -222,10 +226,48 @@ def _migrate_v3(conn):
 def _migrate_v4(conn):
     """Migrate from v3 to v4: add water_cups and steps columns."""
     print("  Running migration v3 -> v4 ...")
-    conn.execute("ALTER TABLE sleep_records ADD COLUMN water_cups INTEGER DEFAULT NULL")
-    conn.execute("ALTER TABLE sleep_records ADD COLUMN steps INTEGER DEFAULT NULL")
+    col_cursor = conn.execute("PRAGMA table_info('sleep_records')")
+    columns = [row[1] for row in col_cursor.fetchall()]
+    if 'water_cups' not in columns:
+        conn.execute("ALTER TABLE sleep_records ADD COLUMN water_cups INTEGER DEFAULT NULL")
+    if 'steps' not in columns:
+        conn.execute("ALTER TABLE sleep_records ADD COLUMN steps INTEGER DEFAULT NULL")
     _set_schema_version(conn, 4)
     print("  Migration v3 -> v4 completed.")
+
+
+def _migrate_v5(conn):
+    """Migrate from v4 to v5: add meal_records table for diet tracking."""
+    print("  Running migration v4 -> v5 ...")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS meal_records (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            meal_date       DATE NOT NULL,
+            meal_type       TEXT NOT NULL
+                            CHECK(meal_type IN ('breakfast', 'lunch', 'dinner', 'snack')),
+            meal_time       TEXT NOT NULL,
+            meal_name       TEXT DEFAULT '',
+            meal_content    TEXT DEFAULT '',
+            meal_quantity   TEXT DEFAULT 'normal'
+                            CHECK(meal_quantity IN ('light', 'normal', 'heavy')),
+            health_rating   TEXT DEFAULT 'average'
+                            CHECK(health_rating IN ('good', 'average', 'poor')),
+            notes           TEXT DEFAULT '',
+            allergy_reaction TEXT DEFAULT '',
+            created_at      TEXT DEFAULT (datetime('now', 'localtime')),
+            updated_at      TEXT DEFAULT (datetime('now', 'localtime'))
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_meal_records_date
+        ON meal_records(meal_date)
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_meal_records_type
+        ON meal_records(meal_type)
+    """)
+    _set_schema_version(conn, 5)
+    print("  Migration v4 -> v5 completed.")
 
 
 def _migrate(conn):
@@ -247,8 +289,9 @@ def _migrate(conn):
                 # Already v2, just update version
                 _set_schema_version(conn, 2)
         else:
-            # No table yet — fresh install
-            _set_schema_version(conn, 2)
+            # No table yet — fresh install. init_db() creates the full schema below,
+            # so skip directly to the latest version to avoid ALTER TABLE on nothing.
+            _set_schema_version(conn, 8)
 
     # Re-read version after potential v2 migration
     version = _get_schema_version(conn)
@@ -260,15 +303,86 @@ def _migrate(conn):
     if version < 4:
         _migrate_v4(conn)
 
+    # Re-read version after potential v4 migration
+    version = _get_schema_version(conn)
+    if version < 5:
+        _migrate_v5(conn)
+
+    # Re-read version after potential v5 migration
+    version = _get_schema_version(conn)
+    if version < 6:
+        _migrate_v6(conn)
+
+    # Re-read version after potential v6 migration
+    version = _get_schema_version(conn)
+    if version < 7:
+        _migrate_v7(conn)
+
+    # Re-read version after potential v7 migration
+    version = _get_schema_version(conn)
+    if version < 8:
+        _migrate_v8(conn)
+
+
+def _migrate_v6(conn):
+    """Migrate from v5 to v6: add device_score column (smart bracelet score)."""
+    print("  Running migration v5 -> v6 ...")
+    col_cursor = conn.execute("PRAGMA table_info('sleep_records')")
+    columns = [row[1] for row in col_cursor.fetchall()]
+    if 'device_score' not in columns:
+        conn.execute("ALTER TABLE sleep_records ADD COLUMN device_score INTEGER DEFAULT NULL")
+    _set_schema_version(conn, 6)
+    print("  Migration v5 -> v6 completed.")
+
+
+def _migrate_v7(conn):
+    """Migrate from v6 to v7: add whoop_tokens table for Whoop OAuth."""
+    print("  Running migration v6 -> v7 ...")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS whoop_tokens (
+            id              INTEGER PRIMARY KEY,
+            access_token    TEXT NOT NULL,
+            refresh_token   TEXT DEFAULT '',
+            expires_at      INTEGER NOT NULL,
+            updated_at      TEXT DEFAULT (datetime('now', 'localtime'))
+        )
+    """)
+    _set_schema_version(conn, 7)
+    print("  Migration v6 -> v7 completed.")
+
+
+def _migrate_v8(conn):
+    """Migrate from v7 to v8: add Whoop health metrics columns."""
+    print("  Running migration v7 -> v8 ...")
+    col_cursor = conn.execute("PRAGMA table_info('sleep_records')")
+    existing = {row[1] for row in col_cursor.fetchall()}
+
+    additions = {
+        "respiratory_rate": "ALTER TABLE sleep_records ADD COLUMN respiratory_rate REAL DEFAULT NULL",
+        "sleep_efficiency": "ALTER TABLE sleep_records ADD COLUMN sleep_efficiency REAL DEFAULT NULL",
+        "sleep_consistency": "ALTER TABLE sleep_records ADD COLUMN sleep_consistency REAL DEFAULT NULL",
+        "deep_sleep_minutes": "ALTER TABLE sleep_records ADD COLUMN deep_sleep_minutes INTEGER DEFAULT NULL",
+        "light_sleep_minutes": "ALTER TABLE sleep_records ADD COLUMN light_sleep_minutes INTEGER DEFAULT NULL",
+        "rem_sleep_minutes": "ALTER TABLE sleep_records ADD COLUMN rem_sleep_minutes INTEGER DEFAULT NULL",
+        "awake_minutes": "ALTER TABLE sleep_records ADD COLUMN awake_minutes INTEGER DEFAULT NULL",
+        "disturbance_count": "ALTER TABLE sleep_records ADD COLUMN disturbance_count INTEGER DEFAULT NULL",
+        "recovery_score": "ALTER TABLE sleep_records ADD COLUMN recovery_score INTEGER DEFAULT NULL",
+        "resting_heart_rate": "ALTER TABLE sleep_records ADD COLUMN resting_heart_rate INTEGER DEFAULT NULL",
+        "hrv": "ALTER TABLE sleep_records ADD COLUMN hrv REAL DEFAULT NULL",
+    }
+    for col, sql in additions.items():
+        if col not in existing:
+            conn.execute(sql)
+    _set_schema_version(conn, 8)
+    print("  Migration v7 -> v8 completed.")
+
 
 def init_db():
     """Create the database schema or migrate from an older version."""
     conn = get_connection()
 
-    # Check if schema_version table exists and run migrations
-    _migrate(conn)
-
-    # For fresh installs (no table yet), create the v2 schema
+    # Create tables FIRST (IF NOT EXISTS makes this safe for re-runs).
+    # Migrations below will ALTER these tables if upgrading from an older schema.
     conn.execute("""
         CREATE TABLE IF NOT EXISTS sleep_records (
             id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -284,7 +398,19 @@ def init_db():
             weight          REAL DEFAULT NULL,
             water_cups      INTEGER DEFAULT NULL,
             steps           INTEGER DEFAULT NULL,
-            created_at      TEXT DEFAULT (datetime('now', 'localtime')),
+            device_score        INTEGER DEFAULT NULL,
+            respiratory_rate    REAL DEFAULT NULL,
+            sleep_efficiency    REAL DEFAULT NULL,
+            sleep_consistency   REAL DEFAULT NULL,
+            deep_sleep_minutes  INTEGER DEFAULT NULL,
+            light_sleep_minutes INTEGER DEFAULT NULL,
+            rem_sleep_minutes   INTEGER DEFAULT NULL,
+            awake_minutes       INTEGER DEFAULT NULL,
+            disturbance_count   INTEGER DEFAULT NULL,
+            recovery_score      INTEGER DEFAULT NULL,
+            resting_heart_rate  INTEGER DEFAULT NULL,
+            hrv                 REAL DEFAULT NULL,
+            created_at          TEXT DEFAULT (datetime('now', 'localtime')),
             updated_at      TEXT DEFAULT (datetime('now', 'localtime'))
         )
     """)
@@ -297,6 +423,49 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_sleep_records_type
         ON sleep_records(record_type)
     """)
+
+    # Meal records table (v5)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS meal_records (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            meal_date       DATE NOT NULL,
+            meal_type       TEXT NOT NULL
+                            CHECK(meal_type IN ('breakfast', 'lunch', 'dinner', 'snack')),
+            meal_time       TEXT NOT NULL,
+            meal_name       TEXT DEFAULT '',
+            meal_content    TEXT DEFAULT '',
+            meal_quantity   TEXT DEFAULT 'normal'
+                            CHECK(meal_quantity IN ('light', 'normal', 'heavy')),
+            health_rating   TEXT DEFAULT 'average'
+                            CHECK(health_rating IN ('good', 'average', 'poor')),
+            notes           TEXT DEFAULT '',
+            allergy_reaction TEXT DEFAULT '',
+            created_at      TEXT DEFAULT (datetime('now', 'localtime')),
+            updated_at      TEXT DEFAULT (datetime('now', 'localtime'))
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_meal_records_date
+        ON meal_records(meal_date)
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_meal_records_type
+        ON meal_records(meal_type)
+    """)
+
+    # Whoop tokens table (v7)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS whoop_tokens (
+            id              INTEGER PRIMARY KEY,
+            access_token    TEXT NOT NULL,
+            refresh_token   TEXT DEFAULT '',
+            expires_at      INTEGER NOT NULL,
+            updated_at      TEXT DEFAULT (datetime('now', 'localtime'))
+        )
+    """)
+
+    # Now run pending migrations (ALTER TABLE for older schemas)
+    _migrate(conn)
 
     conn.commit()
     conn.close()

@@ -9,7 +9,7 @@ import sys
 import io
 from datetime import datetime, date, timedelta
 from collections import Counter
-from sleeptracking.database import get_connection, DB_PATH
+from database import get_connection, DB_PATH
 
 
 def generate_report(period='weekly', from_date=None):

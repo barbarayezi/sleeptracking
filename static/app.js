@@ -5,6 +5,7 @@
 
 const App = {
     form: null,
+    meal: null,
     timeline: null,
     report: null,
     currentDate: null,
@@ -13,6 +14,7 @@ const App = {
     async init() {
         // Create module instances
         this.form = new FormManager();
+        this.meal = new MealManager();
         this.timeline = new Timeline('timeline-canvas', 'timeline-empty');
         this.report = new ReportManager();
 
@@ -28,7 +30,11 @@ const App = {
         this.currentDate = this._todayStr();
         this._updateDateLabel();
         await this.form.loadDate(this.currentDate);
+        await this.meal.loadDate(this.currentDate);
         await this._refreshTimeline();
+
+        // Initialize Whoop integration
+        this._initWhoop();
     },
 
     /* ── Callbacks (called by child modules) ── */
@@ -45,6 +51,7 @@ const App = {
         this.currentDate = dateStr;
         this._updateDateLabel();
         this.form.loadDate(dateStr);
+        this.meal.loadDate(dateStr);
     },
 
     /* ── Date Navigation ──────────────────── */
@@ -54,18 +61,21 @@ const App = {
             this.currentDate = this._addDays(this.currentDate, -1);
             this._updateDateLabel();
             this.form.loadDate(this.currentDate);
+            this.meal.loadDate(this.currentDate);
         });
 
         document.getElementById('btn-next-day').addEventListener('click', () => {
             this.currentDate = this._addDays(this.currentDate, 1);
             this._updateDateLabel();
             this.form.loadDate(this.currentDate);
+            this.meal.loadDate(this.currentDate);
         });
 
         document.getElementById('btn-today').addEventListener('click', () => {
             this.currentDate = this._todayStr();
             this._updateDateLabel();
             this.form.loadDate(this.currentDate);
+            this.meal.loadDate(this.currentDate);
         });
     },
 
@@ -90,14 +100,162 @@ const App = {
 
     async _refreshTimeline() {
         try {
-            const resp = await fetch('/api/records');
-            if (resp.ok) {
-                const records = await resp.json();
+            const [recordsResp, mealsResp] = await Promise.all([
+                fetch('/api/records'),
+                fetch('/api/meals')
+            ]);
+            if (recordsResp.ok) {
+                const records = await recordsResp.json();
                 this.timeline.setRecords(records);
+            }
+            if (mealsResp.ok) {
+                const meals = await mealsResp.json();
+                this.timeline.setMeals(meals);
             }
         } catch (err) {
             console.error('Failed to refresh timeline:', err);
         }
+    },
+
+    /* ── Whoop Integration ─────────────────── */
+
+    async _initWhoop() {
+        const statusText = document.getElementById('whoop-status-text');
+        const connectBtn = document.getElementById('btn-whoop-connect');
+        const syncBtn = document.getElementById('btn-whoop-sync');
+        const disconnectBtn = document.getElementById('btn-whoop-disconnect');
+        const resultEl = document.getElementById('whoop-result');
+
+        try {
+            const resp = await fetch('/api/whoop/status');
+            const data = await resp.json();
+            if (data.authenticated) {
+                statusText.textContent = '✅ 已连接（' + (data.client_id || '') + '）';
+                syncBtn.style.display = 'inline-block';
+                disconnectBtn.style.display = 'inline-block';
+            } else {
+                statusText.textContent = '❌ 未连接';
+                connectBtn.style.display = 'inline-block';
+            }
+        } catch (err) {
+            statusText.textContent = '❌ 无法检查状态';
+            connectBtn.style.display = 'inline-block';
+        }
+
+        // Check URL params (redirected back from Whoop OAuth)
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('whoop') === 'connected') {
+            resultEl.textContent = '✅ Whoop 连接成功！点击"同步数据"拉取手环数据。';
+            resultEl.className = 'form-message success';
+            // Refresh status
+            statusText.textContent = '✅ 已连接';
+            connectBtn.style.display = 'none';
+            syncBtn.style.display = 'inline-block';
+            disconnectBtn.style.display = 'inline-block';
+            // Clean URL
+            window.history.replaceState({}, '', window.location.pathname);
+        } else if (urlParams.get('whoop') === 'error') {
+            resultEl.textContent = '❌ 连接失败: ' + (urlParams.get('msg') || '未知错误');
+            resultEl.className = 'form-message error';
+            window.history.replaceState({}, '', window.location.pathname);
+        }
+
+        // Connect button → redirect to Whoop auth
+        connectBtn.addEventListener('click', async () => {
+            try {
+                const resp = await fetch('/api/whoop/auth');
+                const data = await resp.json();
+                if (data.auth_url) {
+                    // Redirect to Whoop OAuth page
+                    window.location.href = data.auth_url;
+                } else {
+                    resultEl.textContent = '错误: ' + (data.error || '未知错误');
+                    resultEl.className = 'form-message error';
+                }
+            } catch (err) {
+                resultEl.textContent = '连接失败: ' + err.message;
+                resultEl.className = 'form-message error';
+            }
+        });
+
+        // Sync button → trigger sync
+        this._whoopSyncWithUI = async (days) => {
+            syncBtn.textContent = '🔄 同步中...';
+            syncBtn.disabled = true;
+            resultEl.textContent = '';
+            try {
+                const resp = await fetch(`/api/whoop/sync?days=${days}`, { method: 'POST' });
+                const data = await resp.json();
+                if (data.error) {
+                    resultEl.textContent = '同步失败: ' + data.error;
+                    resultEl.className = 'form-message error';
+                    if (data.need_auth) {
+                        statusText.textContent = '❌ 未连接';
+                        connectBtn.style.display = 'inline-block';
+                        syncBtn.style.display = 'none';
+                        disconnectBtn.style.display = 'none';
+                    }
+                } else {
+                    resultEl.textContent = `✅ 同步完成！新增 ${data.created} 条，更新 ${data.updated} 条`;
+                    resultEl.className = 'form-message success';
+                    await this._refreshTimeline();
+                    await this.form.loadDate(this.currentDate);
+                }
+            } catch (err) {
+                resultEl.textContent = '同步失败: ' + err.message;
+                resultEl.className = 'form-message error';
+            } finally {
+                syncBtn.textContent = '🔄 同步数据';
+                syncBtn.disabled = false;
+            }
+        };
+        syncBtn.addEventListener('click', () => this._whoopSyncWithUI(30));
+
+        // Auto-sync: when page loads, silently sync recent data
+        if (statusText.textContent.includes('已连接')) {
+            setTimeout(async () => {
+                try {
+                    const resp = await fetch('/api/whoop/sync?days=2', { method: 'POST' });
+                    const data = await resp.json();
+                    if (!data.error) {
+                        await this._refreshTimeline();
+                        await this.form.loadDate(this.currentDate);
+                    }
+                } catch (_) {}
+            }, 2000);
+        }
+
+        // Periodic auto-sync every 30 minutes
+        setInterval(async () => {
+            if (statusText.textContent.includes('已连接')) {
+                try {
+                    const resp = await fetch('/api/whoop/sync?days=2', { method: 'POST' });
+                    if (!resp.ok) return;
+                    const data = await resp.json();
+                    if (!data.error) {
+                        await this._refreshTimeline();
+                        await this.form.loadDate(this.currentDate);
+                    }
+                } catch (_) {}
+            }
+        }, 30 * 60 * 1000);
+
+        // Disconnect button
+        disconnectBtn.addEventListener('click', async () => {
+            if (!confirm('确定断开 Whoop 连接？')) return;
+            try {
+                await fetch('/api/whoop/disconnect', { method: 'POST' });
+                statusText.textContent = '❌ 未连接';
+                connectBtn.style.display = 'inline-block';
+                syncBtn.style.display = 'none';
+                disconnectBtn.style.display = 'none';
+                resultEl.textContent = '已断开 Whoop 连接';
+                resultEl.className = 'form-message';
+            } catch (err) {
+                resultEl.textContent = '断开失败: ' + err.message;
+                resultEl.className = 'form-message error';
+            }
+        });
     },
 
     /* ── Date Utilities ───────────────────── */

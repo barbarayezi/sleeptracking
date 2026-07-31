@@ -5,3 +5,7 @@ __pycache__/
 *.pyc
 .env
 venv/
+.logs/
+.active_port
+.last_started
+.playwright-mcp/
