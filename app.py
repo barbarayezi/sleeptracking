@@ -13,9 +13,9 @@ from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
 from flask import Flask, request, jsonify, render_template
-from sleep_traking.database import init_db
-from sleep_traking.reports import generate_report, get_quick_stats
-import sleep_traking.models as models
+from sleeptracking.database import init_db
+from sleeptracking.reports import generate_report, get_quick_stats
+import sleeptracking.models as models
 
 app = Flask(__name__)
 

@@ -110,7 +110,7 @@ class CursorStub:
 def get_connection():
     """Return a new database connection (Turso or local SQLite)."""
     if USE_TURSO:
-        import libsql
+        import libsql_experimental as libsql
 
         raw_conn = libsql.connect(
             database=TURSO_URL,
