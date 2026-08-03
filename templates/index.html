@@ -15,378 +15,527 @@
 <body>
 
     <!-- ═══════════════════════════════════════════ -->
-    <!--  HEADER                                    -->
+    <!--  TOPBAR (sticky header + category nav)      -->
     <!-- ═══════════════════════════════════════════ -->
-    <header class="app-header">
-        <h1>🌙 睡眠追踪器</h1>
-        <div class="date-navigator">
-            <button id="btn-prev-day" title="前一天">&larr;</button>
-            <span id="current-date-label">今天</span>
-            <button id="btn-next-day" title="后一天">&rarr;</button>
-            <button id="btn-today" class="btn-today">今天</button>
-        </div>
-    </header>
+    <div class="app-topbar">
+        <header class="app-header">
+            <h1>🌙 睡眠追踪器</h1>
+            <div class="header-right">
+                <div class="date-navigator">
+                    <button id="btn-prev-day" title="前一天">&larr;</button>
+                    <span id="current-date-label">今天</span>
+                    <button id="btn-next-day" title="后一天">&rarr;</button>
+                    <button id="btn-today" class="btn-today">今天</button>
+                </div>
+                <button id="btn-install" class="btn-install-pwa hidden" title="安装到桌面">
+                    <span class="install-icon">📲</span> 安装应用
+                </button>
+            </div>
+        </header>
+
+        <nav class="category-nav">
+            <a href="#group-display" class="cat-nav-item active">📊 图表展示</a>
+            <a href="#group-actions" class="cat-nav-item">🔗 数据同步</a>
+            <a href="#group-forms" class="cat-nav-item">✍️ 手动记录</a>
+        </nav>
+    </div>
 
     <main class="app-main">
 
         <!-- ═══════════════════════════════════════ -->
-        <!--  SECTION 1: SLEEP TIMELINE              -->
+        <!--  CATEGORY 1: 图表与展示                   -->
         <!-- ═══════════════════════════════════════ -->
-        <section class="card timeline-section">
-            <h2>📊 睡眠时间线</h2>
-            <div class="timeline-controls">
-                <label>显示天数：
-                    <select id="timeline-days">
-                        <option value="7">7天</option>
-                        <option value="14" selected>14天</option>
-                        <option value="30">30天</option>
-                    </select>
-                </label>
-            </div>
-            <div class="timeline-container">
-                <canvas id="timeline-canvas"></canvas>
-                <div id="timeline-empty" class="timeline-empty hidden">
-                    暂无睡眠记录，请在下方添加第一条记录。
+        <div class="category-group" id="group-display">
+            <div class="category-banner"><span>📊</span> 图表与展示</div>
+
+            <!-- SECTION: SLEEP TIMELINE -->
+            <section class="card timeline-section">
+                <h2>📊 睡眠时间线</h2>
+                <div class="timeline-controls">
+                    <label>显示天数：
+                        <select id="timeline-days">
+                            <option value="7">7天</option>
+                            <option value="14" selected>14天</option>
+                            <option value="30">30天</option>
+                        </select>
+                    </label>
                 </div>
-            </div>
-        </section>
+                <div class="timeline-container">
+                    <canvas id="timeline-canvas"></canvas>
+                    <div id="timeline-empty" class="timeline-empty hidden">
+                        暂无睡眠记录，请在下方添加第一条记录。
+                    </div>
+                </div>
+            </section>
+
+            <!-- SECTION: CYCLE CALENDAR BOARD -->
+            <section class="card calendar-section">
+                <h2>🗓️ 周期日历</h2>
+                <div class="calendar-controls">
+                    <div class="calendar-nav">
+                        <button id="cal-prev" class="cal-nav-btn" title="上一月/年">‹</button>
+                        <span id="calendar-title" class="calendar-title">—</span>
+                        <button id="cal-next" class="cal-nav-btn" title="下一月/年">›</button>
+                        <button id="cal-today" class="btn-today">今天</button>
+                    </div>
+                    <div class="calendar-toggle">
+                        <button id="cal-view-month" class="toggle-btn active">月</button>
+                        <button id="cal-view-year" class="toggle-btn">年</button>
+                    </div>
+                </div>
+                <div id="calendar-board">
+                    <div id="calendar-grid" class="calendar-grid"></div>
+                    <div id="calendar-legend" class="calendar-legend"></div>
+                </div>
+            </section>
+
+            <!-- SECTION: HEALTH OVERVIEW DASHBOARD -->
+            <section class="card health-overview-section">
+                <h2>❤️ 健康总览</h2>
+                <p class="section-hint">Whoop 恢复分 / Strain / HRV / 静息心率 / 血氧 / 皮温，与苹果健康步数、睡眠质量并列对比；粉色竖带为经期。</p>
+                <div class="report-controls">
+                    <div id="health-range" class="calendar-toggle">
+                        <button class="toggle-btn" data-days="7">7天</button>
+                        <button class="toggle-btn" data-days="14">14天</button>
+                        <button class="toggle-btn active" data-days="30">30天</button>
+                        <button class="toggle-btn" data-days="90">90天</button>
+                    </div>
+                    <button id="btn-health-refresh" class="btn">🔄 刷新</button>
+                </div>
+                <div id="health-overview" class="health-overview">
+                    <p class="report-placeholder">加载中…</p>
+                </div>
+            </section>
+
+            <!-- SECTION: REPORT PANEL -->
+            <section class="card report-section">
+                <h2>📈 睡眠分析报告</h2>
+                <div class="report-controls">
+                    <label>
+                        报告周期：
+                        <select id="report-period">
+                            <option value="weekly">周报告</option>
+                            <option value="monthly">月报告</option>
+                        </select>
+                    </label>
+                    <button id="btn-generate-report" class="btn btn-primary">生成报告</button>
+                </div>
+                <div id="report-output" class="report-output">
+                    <p class="report-placeholder">点击"生成报告"查看睡眠分析。</p>
+                </div>
+            </section>
+        </div>
 
         <!-- ═══════════════════════════════════════ -->
-        <!--  SECTION 2: RECORD FORM                 -->
+        <!--  CATEGORY 2: 数据与同步                   -->
         <!-- ═══════════════════════════════════════ -->
-        <section class="card form-section">
-            <h2>📝 记录睡眠</h2>
+        <div class="category-group" id="group-actions">
+            <div class="category-banner"><span>🔗</span> 数据与同步</div>
 
-            <!-- Record list for current date -->
-            <div id="records-list" class="records-list hidden"></div>
-
-            <form id="sleep-form" novalidate>
-
-                <!-- Record Type -->
-                <fieldset class="form-fieldset">
-                    <legend class="form-label">记录类型</legend>
-                    <div class="radio-group">
-                        <label class="radio-label">
-                            <input type="radio" name="record_type" value="night" checked>
-                            <span class="radio-custom"></span>
-                            🌙 夜间睡眠
-                        </label>
-                        <label class="radio-label">
-                            <input type="radio" name="record_type" value="nap">
-                            <span class="radio-custom"></span>
-                            ☀️ 午睡
-                        </label>
-                        <label class="radio-label">
-                            <input type="radio" name="record_type" value="segment">
-                            <span class="radio-custom"></span>
-                            🔄 分段睡眠
-                        </label>
+            <!-- SECTION: WHOOP INTEGRATION -->
+            <section class="card whoop-section">
+                <h2>⌚ Whoop 手环</h2>
+                <div class="whoop-controls">
+                    <div id="whoop-status">
+                        <span id="whoop-status-text">检查中...</span>
                     </div>
-                </fieldset>
-
-                <!-- Sleep Time & Wake Time -->
-                <div class="form-row form-row-2col">
-                    <div class="form-group">
-                        <label class="form-label" for="sleep-time">入睡时间</label>
-                        <input type="datetime-local" id="sleep-time" class="form-input" required>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label" for="wake-time">醒来时间</label>
-                        <input type="datetime-local" id="wake-time" class="form-input" required>
-                    </div>
+                    <button id="btn-whoop-connect" class="btn btn-primary" style="display:none;">连接 Whoop</button>
+                    <button id="btn-whoop-sync" class="btn" style="display:none;">🔄 同步数据</button>
+                    <button id="btn-whoop-disconnect" class="btn btn-danger" style="display:none;">断开连接</button>
+                    <div id="whoop-result" class="form-message" style="margin-top:8px;"></div>
                 </div>
+            </section>
+        </div>
 
-                <!-- Classification (定性) -->
-                <fieldset class="form-fieldset">
-                    <legend class="form-label">定性</legend>
-                    <div class="radio-group">
-                        <label class="radio-label">
-                            <input type="radio" name="classification" value="early" required>
-                            <span class="radio-custom"></span>
-                            早睡
-                        </label>
-                        <label class="radio-label">
-                            <input type="radio" name="classification" value="late">
-                            <span class="radio-custom"></span>
-                            晚睡
-                        </label>
-                    </div>
-                </fieldset>
+        <!-- ═══════════════════════════════════════ -->
+        <!--  CATEGORY 3: 手动记录                     -->
+        <!-- ═══════════════════════════════════════ -->
+        <div class="category-group" id="group-forms">
+            <div class="category-banner"><span>✍️</span> 手动记录</div>
 
-                <!-- Sleep Quality (睡眠质量) -->
-                <fieldset class="form-fieldset">
-                    <legend class="form-label">睡眠质量</legend>
-                    <div class="radio-group">
-                        <label class="radio-label">
-                            <input type="radio" name="sleep_quality" value="good" required>
-                            <span class="radio-custom"></span>
-                            良好
-                        </label>
-                        <label class="radio-label">
-                            <input type="radio" name="sleep_quality" value="average">
-                            <span class="radio-custom"></span>
-                            一般
-                        </label>
-                        <label class="radio-label">
-                            <input type="radio" name="sleep_quality" value="poor">
-                            <span class="radio-custom"></span>
-                            较差
-                        </label>
-                    </div>
-                </fieldset>
+            <!-- SECTION: RECORD FORM -->
+            <section class="card form-section">
+                <h2>📝 记录睡眠</h2>
 
-                <!-- Device Score (手环评分) — smart bracelet sleep quality score -->
-                <div class="form-row">
-                    <label class="form-label" for="device-score">手环评分 <span class="label-hint">（0-100）</span></label>
-                    <div class="input-with-unit">
-                        <input type="number" id="device-score" class="form-input" min="0" max="100" placeholder="—">
-                        <span class="input-unit">分</span>
-                    </div>
-                </div>
+                <!-- Record list for current date -->
+                <div id="records-list" class="records-list hidden"></div>
 
-                <!-- Sleep Problems (睡眠问题) — conditional -->
-                <fieldset class="form-fieldset" id="sleep-problems-group" style="display:none;">
-                    <legend class="form-label">睡眠问题 <span class="label-hint">（可多选）</span></legend>
-                    <div class="checkbox-group">
-                        <label class="checkbox-label">
-                            <input type="checkbox" name="sleep_problems" value="insomnia">
-                            <span class="checkbox-custom"></span>
-                            失眠
-                        </label>
-                        <label class="checkbox-label">
-                            <input type="checkbox" name="sleep_problems" value="dreams">
-                            <span class="checkbox-custom"></span>
-                            多梦
-                        </label>
-                        <label class="checkbox-label">
-                            <input type="checkbox" name="sleep_problems" value="sweats">
-                            <span class="checkbox-custom"></span>
-                            多汗
-                        </label>
-                        <label class="checkbox-label">
-                            <input type="checkbox" name="sleep_problems" value="waking">
-                            <span class="checkbox-custom"></span>
-                            频醒
-                        </label>
-                        <label class="checkbox-label">
-                            <input type="checkbox" name="sleep_problems" value="early_waking">
-                            <span class="checkbox-custom"></span>
-                            早醒
-                        </label>
-                    </div>
-                </fieldset>
+                <form id="sleep-form" novalidate>
 
-                <!-- Daily Journal (日有所感) -->
-                <div class="form-row">
-                    <label class="form-label" for="dream-journal">日有所感</label>
-                    <textarea id="dream-journal" class="form-textarea" rows="3"
-                        placeholder="记录梦境、身体状况、心情...任何你想记录的"></textarea>
-                </div>
-
-                <!-- Health metrics (体重/喝水/步数) — only for night sleep, optional -->
-                <div class="form-row" id="health-metrics-group">
-                    <label class="form-label">昨日健康数据 <span class="label-hint">（选填）</span></label>
-                    <div class="health-metrics-row">
-                        <div class="health-metric-item">
-                            <label class="health-metric-label" for="weight">体重</label>
-                            <div class="input-with-unit">
-                                <input type="number" id="weight" class="form-input" step="0.1" min="20" max="500"
-                                    placeholder="-">
-                                <span class="input-unit">kg</span>
-                            </div>
+                    <!-- Record Type -->
+                    <fieldset class="form-fieldset">
+                        <legend class="form-label">记录类型</legend>
+                        <div class="radio-group">
+                            <label class="radio-label">
+                                <input type="radio" name="record_type" value="night" checked>
+                                <span class="radio-custom"></span>
+                                🌙 夜间睡眠
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="record_type" value="nap">
+                                <span class="radio-custom"></span>
+                                ☀️ 午睡
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="record_type" value="segment">
+                                <span class="radio-custom"></span>
+                                🔄 分段睡眠
+                            </label>
                         </div>
-                        <div class="health-metric-item">
-                            <label class="health-metric-label" for="water-cups">喝水</label>
-                            <div class="input-with-unit">
-                                <input type="number" id="water-cups" class="form-input" step="0.5" min="0" max="100"
-                                    placeholder="-">
-                                <span class="input-unit">杯</span>
-                            </div>
+                    </fieldset>
+
+                    <!-- Sleep Time & Wake Time -->
+                    <div class="form-row form-row-2col">
+                        <div class="form-group">
+                            <label class="form-label" for="sleep-time">入睡时间</label>
+                            <input type="datetime-local" id="sleep-time" class="form-input" required>
                         </div>
-                        <div class="health-metric-item">
-                            <label class="health-metric-label" for="steps">步数</label>
-                            <div class="input-with-unit">
-                                <input type="number" id="steps" class="form-input" step="100" min="0" max="200000"
-                                    placeholder="-">
-                                <span class="input-unit">步</span>
-                            </div>
+                        <div class="form-group">
+                            <label class="form-label" for="wake-time">醒来时间</label>
+                            <input type="datetime-local" id="wake-time" class="form-input" required>
                         </div>
                     </div>
+
+                    <!-- Classification (定性) -->
+                    <fieldset class="form-fieldset">
+                        <legend class="form-label">定性</legend>
+                        <div class="radio-group">
+                            <label class="radio-label">
+                                <input type="radio" name="classification" value="early" required>
+                                <span class="radio-custom"></span>
+                                早睡
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="classification" value="late">
+                                <span class="radio-custom"></span>
+                                晚睡
+                            </label>
+                        </div>
+                    </fieldset>
+
+                    <!-- Sleep Quality (睡眠质量) -->
+                    <fieldset class="form-fieldset">
+                        <legend class="form-label">睡眠质量</legend>
+                        <div class="radio-group">
+                            <label class="radio-label">
+                                <input type="radio" name="sleep_quality" value="good" required>
+                                <span class="radio-custom"></span>
+                                良好
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="sleep_quality" value="average">
+                                <span class="radio-custom"></span>
+                                一般
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="sleep_quality" value="poor">
+                                <span class="radio-custom"></span>
+                                较差
+                            </label>
+                        </div>
+                    </fieldset>
+
+                    <!-- Device Score (手环评分) — smart bracelet sleep quality score -->
+                    <div class="form-row">
+                        <label class="form-label" for="device-score">手环评分 <span class="label-hint">（0-100）</span></label>
+                        <div class="input-with-unit">
+                            <input type="number" id="device-score" class="form-input" min="0" max="100" placeholder="—">
+                            <span class="input-unit">分</span>
+                        </div>
+                    </div>
+
+                    <!-- Sleep Problems (睡眠问题) — conditional -->
+                    <fieldset class="form-fieldset" id="sleep-problems-group" style="display:none;">
+                        <legend class="form-label">睡眠问题 <span class="label-hint">（可多选）</span></legend>
+                        <div class="checkbox-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="sleep_problems" value="insomnia">
+                                <span class="checkbox-custom"></span>
+                                失眠
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="sleep_problems" value="dreams">
+                                <span class="checkbox-custom"></span>
+                                多梦
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="sleep_problems" value="sweats">
+                                <span class="checkbox-custom"></span>
+                                多汗
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="sleep_problems" value="waking">
+                                <span class="checkbox-custom"></span>
+                                频醒
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="sleep_problems" value="early_waking">
+                                <span class="checkbox-custom"></span>
+                                早醒
+                            </label>
+                        </div>
+                    </fieldset>
+
+                    <!-- Daily Journal (日有所感) -->
+                    <div class="form-row">
+                        <label class="form-label" for="dream-journal">日有所感</label>
+                        <textarea id="dream-journal" class="form-textarea" rows="3"
+                            placeholder="记录梦境、身体状况、心情...任何你想记录的"></textarea>
+                    </div>
+
+                    <!-- Health metrics (体重/喝水/步数) — only for night sleep, optional -->
+                    <div class="form-row" id="health-metrics-group">
+                        <label class="form-label">昨日健康数据 <span class="label-hint">（选填）</span></label>
+                        <div class="health-metrics-row">
+                            <div class="health-metric-item">
+                                <label class="health-metric-label" for="weight">体重</label>
+                                <div class="input-with-unit">
+                                    <input type="number" id="weight" class="form-input" step="0.1" min="20" max="500"
+                                        placeholder="-">
+                                    <span class="input-unit">kg</span>
+                                </div>
+                            </div>
+                            <div class="health-metric-item">
+                                <label class="health-metric-label" for="water-cups">喝水</label>
+                                <div class="input-with-unit">
+                                    <input type="number" id="water-cups" class="form-input" step="0.5" min="0" max="100"
+                                        placeholder="-">
+                                    <span class="input-unit">杯</span>
+                                </div>
+                            </div>
+                            <div class="health-metric-item">
+                                <label class="health-metric-label" for="steps">步数</label>
+                                <div class="input-with-unit">
+                                    <input type="number" id="steps" class="form-input" step="100" min="0" max="200000"
+                                        placeholder="-">
+                                    <span class="input-unit">步</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="form-actions">
+                        <button type="submit" id="btn-save" class="btn btn-primary">💾 保存记录</button>
+                        <button type="button" id="btn-cancel-edit" class="btn btn-secondary hidden">取消编辑</button>
+                        <button type="button" id="btn-delete" class="btn btn-danger hidden">🗑️ 删除记录</button>
+                        <span id="form-message" class="form-message"></span>
+                    </div>
+                </form>
+            </section>
+
+            <!-- SECTION: MEAL TRACKING -->
+            <section class="card meal-section">
+                <h2>🍽️ 饮食记录</h2>
+
+                <!-- Meal list for current date -->
+                <div id="meals-list" class="records-list">
+                    <p id="meals-empty" class="report-placeholder" style="padding:16px 0;">暂无饮食记录，在下方添加今天的餐食。</p>
                 </div>
 
-                <!-- Actions -->
-                <div class="form-actions">
-                    <button type="submit" id="btn-save" class="btn btn-primary">💾 保存记录</button>
-                    <button type="button" id="btn-cancel-edit" class="btn btn-secondary hidden">取消编辑</button>
-                    <button type="button" id="btn-delete" class="btn btn-danger hidden">🗑️ 删除记录</button>
-                    <span id="form-message" class="form-message"></span>
+                <form id="meal-form" novalidate>
+
+                    <!-- Meal Type -->
+                    <fieldset class="form-fieldset">
+                        <legend class="form-label">餐食类型</legend>
+                        <div class="radio-group">
+                            <label class="radio-label">
+                                <input type="radio" name="meal_type" value="breakfast" checked>
+                                <span class="radio-custom"></span>
+                                🌅 早餐
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="meal_type" value="lunch">
+                                <span class="radio-custom"></span>
+                                ☀️ 午餐
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="meal_type" value="dinner">
+                                <span class="radio-custom"></span>
+                                🌇 晚餐
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="meal_type" value="snack">
+                                <span class="radio-custom"></span>
+                                🍪 加餐/零食
+                            </label>
+                        </div>
+                    </fieldset>
+
+                    <!-- Meal Time & Meal Name -->
+                    <div class="form-row form-row-2col">
+                        <div class="form-group">
+                            <label class="form-label" for="meal-time">用餐时间</label>
+                            <input type="time" id="meal-time" class="form-input" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="meal-name">餐食名称</label>
+                            <input type="text" id="meal-name" class="form-input"
+                                placeholder="如：燕麦粥、三明治...">
+                        </div>
+                    </div>
+
+                    <!-- Meal Content -->
+                    <div class="form-row">
+                        <label class="form-label" for="meal-content">详细内容</label>
+                        <textarea id="meal-content" class="form-textarea" rows="2"
+                            placeholder="记录吃了什么、食材、烹饪方式..."></textarea>
+                    </div>
+
+                    <!-- Meal Quantity -->
+                    <fieldset class="form-fieldset">
+                        <legend class="form-label">食量</legend>
+                        <div class="radio-group">
+                            <label class="radio-label">
+                                <input type="radio" name="meal_quantity" value="light">
+                                <span class="radio-custom"></span>
+                                偏少
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="meal_quantity" value="normal" checked>
+                                <span class="radio-custom"></span>
+                                正常
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="meal_quantity" value="heavy">
+                                <span class="radio-custom"></span>
+                                偏多
+                            </label>
+                        </div>
+                    </fieldset>
+
+                    <!-- Health Rating -->
+                    <fieldset class="form-fieldset">
+                        <legend class="form-label">健康评分</legend>
+                        <div class="radio-group">
+                            <label class="radio-label">
+                                <input type="radio" name="meal_health_rating" value="good">
+                                <span class="radio-custom"></span>
+                                健康
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="meal_health_rating" value="average" checked>
+                                <span class="radio-custom"></span>
+                                一般
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="meal_health_rating" value="poor">
+                                <span class="radio-custom"></span>
+                                不健康
+                            </label>
+                        </div>
+                    </fieldset>
+
+                    <!-- Allergy Reaction & Notes -->
+                    <div class="form-row form-row-2col">
+                        <div class="form-group">
+                            <label class="form-label" for="meal-allergy">过敏反应</label>
+                            <input type="text" id="meal-allergy" class="form-input"
+                                placeholder="如：皮肤发痒、肠胃不适...">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="meal-notes">备注</label>
+                            <input type="text" id="meal-notes" class="form-input"
+                                placeholder="如：外出就餐、外卖...">
+                        </div>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="form-actions">
+                        <button type="submit" id="btn-meal-save" class="btn btn-primary">💾 保存饮食</button>
+                        <button type="button" id="btn-meal-cancel" class="btn btn-secondary hidden">取消编辑</button>
+                        <button type="button" id="btn-meal-delete" class="btn btn-danger hidden">🗑️ 删除</button>
+                        <span id="meal-form-message" class="form-message"></span>
+                    </div>
+                </form>
+            </section>
+
+            <!-- SECTION: PERIOD TRACKING -->
+            <section class="card period-section">
+                <h2>🌸 经期记录</h2>
+                <div id="period-cycle-badge" class="cycle-badge"></div>
+
+                <!-- Period list for current date -->
+                <div id="periods-list" class="records-list">
+                    <p id="periods-empty" class="report-placeholder" style="padding:16px 0;">暂无经期记录，在下方添加。</p>
                 </div>
-            </form>
-        </section>
 
-        <!-- ═══════════════════════════════════════ -->
-        <!--  SECTION 3: MEAL TRACKING               -->
-        <!-- ═══════════════════════════════════════ -->
-        <section class="card meal-section">
-            <h2>🍽️ 饮食记录</h2>
+                <form id="period-form" novalidate>
 
-            <!-- Meal list for current date -->
-            <div id="meals-list" class="records-list">
-                <p id="meals-empty" class="report-placeholder" style="padding:16px 0;">暂无饮食记录，在下方添加今天的餐食。</p>
-            </div>
+                    <!-- Period start marker -->
+                    <fieldset class="form-fieldset">
+                        <legend class="form-label">是否经期第一天</legend>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="period-start" name="is_period_start">
+                            <span class="checkbox-custom"></span>
+                            标记这一天为经期开始日（用于自动推算周期）
+                        </label>
+                    </fieldset>
 
-            <form id="meal-form" novalidate>
+                    <!-- Flow -->
+                    <fieldset class="form-fieldset">
+                        <legend class="form-label">流量</legend>
+                        <div class="radio-group">
+                            <label class="radio-label">
+                                <input type="radio" name="flow" value="none" checked>
+                                <span class="checkbox-custom"></span>无
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="flow" value="light">
+                                <span class="checkbox-custom"></span>少
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="flow" value="normal">
+                                <span class="checkbox-custom"></span>中
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="flow" value="heavy">
+                                <span class="checkbox-custom"></span>多
+                            </label>
+                        </div>
+                    </fieldset>
 
-                <!-- Meal Type -->
-                <fieldset class="form-fieldset">
-                    <legend class="form-label">餐食类型</legend>
-                    <div class="radio-group">
-                        <label class="radio-label">
-                            <input type="radio" name="meal_type" value="breakfast" checked>
-                            <span class="radio-custom"></span>
-                            🌅 早餐
-                        </label>
-                        <label class="radio-label">
-                            <input type="radio" name="meal_type" value="lunch">
-                            <span class="radio-custom"></span>
-                            ☀️ 午餐
-                        </label>
-                        <label class="radio-label">
-                            <input type="radio" name="meal_type" value="dinner">
-                            <span class="radio-custom"></span>
-                            🌇 晚餐
-                        </label>
-                        <label class="radio-label">
-                            <input type="radio" name="meal_type" value="snack">
-                            <span class="radio-custom"></span>
-                            🍪 加餐/零食
-                        </label>
+                    <!-- Symptoms -->
+                    <fieldset class="form-fieldset">
+                        <legend class="form-label">症状 <span class="label-hint">（可多选）</span></legend>
+                        <div class="checkbox-group">
+                            <label class="checkbox-label"><input type="checkbox" name="period_symptoms" value="cramps"><span class="checkbox-custom"></span>痛经</label>
+                            <label class="checkbox-label"><input type="checkbox" name="period_symptoms" value="headache"><span class="checkbox-custom"></span>头痛</label>
+                            <label class="checkbox-label"><input type="checkbox" name="period_symptoms" value="bloating"><span class="checkbox-custom"></span>腹胀</label>
+                            <label class="checkbox-label"><input type="checkbox" name="period_symptoms" value="breast_tender"><span class="checkbox-custom"></span>胸胀</label>
+                            <label class="checkbox-label"><input type="checkbox" name="period_symptoms" value="mood_swings"><span class="checkbox-custom"></span>情绪波动</label>
+                            <label class="checkbox-label"><input type="checkbox" name="period_symptoms" value="fatigue"><span class="checkbox-custom"></span>疲劳</label>
+                            <label class="checkbox-label"><input type="checkbox" name="period_symptoms" value="acne"><span class="checkbox-custom"></span>长痘</label>
+                        </div>
+                    </fieldset>
+
+                    <!-- Mood -->
+                    <fieldset class="form-fieldset">
+                        <legend class="form-label">心情</legend>
+                        <div class="radio-group">
+                            <label class="radio-label"><input type="radio" name="period_mood" value="good"><span class="checkbox-custom"></span>好</label>
+                            <label class="radio-label"><input type="radio" name="period_mood" value="average" checked><span class="checkbox-custom"></span>一般</label>
+                            <label class="radio-label"><input type="radio" name="period_mood" value="low"><span class="checkbox-custom"></span>低落</label>
+                            <label class="radio-label"><input type="radio" name="period_mood" value="irritable"><span class="checkbox-custom"></span>烦躁</label>
+                        </div>
+                    </fieldset>
+
+                    <!-- Notes -->
+                    <div class="form-row">
+                        <label class="form-label" for="period-notes">备注</label>
+                        <input type="text" id="period-notes" class="form-input" placeholder="如：服用止痛药、体感...">
                     </div>
-                </fieldset>
 
-                <!-- Meal Time & Meal Name -->
-                <div class="form-row form-row-2col">
-                    <div class="form-group">
-                        <label class="form-label" for="meal-time">用餐时间</label>
-                        <input type="time" id="meal-time" class="form-input" required>
+                    <!-- Actions -->
+                    <div class="form-actions">
+                        <button type="submit" id="btn-period-save" class="btn btn-primary">💾 保存经期</button>
+                        <button type="button" id="btn-period-cancel" class="btn btn-secondary hidden">取消编辑</button>
+                        <button type="button" id="btn-period-delete" class="btn btn-danger hidden">🗑️ 删除</button>
+                        <span id="period-form-message" class="form-message"></span>
                     </div>
-                    <div class="form-group">
-                        <label class="form-label" for="meal-name">餐食名称</label>
-                        <input type="text" id="meal-name" class="form-input"
-                            placeholder="如：燕麦粥、三明治...">
-                    </div>
-                </div>
-
-                <!-- Meal Content -->
-                <div class="form-row">
-                    <label class="form-label" for="meal-content">详细内容</label>
-                    <textarea id="meal-content" class="form-textarea" rows="2"
-                        placeholder="记录吃了什么、食材、烹饪方式..."></textarea>
-                </div>
-
-                <!-- Meal Quantity -->
-                <fieldset class="form-fieldset">
-                    <legend class="form-label">食量</legend>
-                    <div class="radio-group">
-                        <label class="radio-label">
-                            <input type="radio" name="meal_quantity" value="light">
-                            <span class="radio-custom"></span>
-                            偏少
-                        </label>
-                        <label class="radio-label">
-                            <input type="radio" name="meal_quantity" value="normal" checked>
-                            <span class="radio-custom"></span>
-                            正常
-                        </label>
-                        <label class="radio-label">
-                            <input type="radio" name="meal_quantity" value="heavy">
-                            <span class="radio-custom"></span>
-                            偏多
-                        </label>
-                    </div>
-                </fieldset>
-
-                <!-- Health Rating -->
-                <fieldset class="form-fieldset">
-                    <legend class="form-label">健康评分</legend>
-                    <div class="radio-group">
-                        <label class="radio-label">
-                            <input type="radio" name="meal_health_rating" value="good">
-                            <span class="radio-custom"></span>
-                            健康
-                        </label>
-                        <label class="radio-label">
-                            <input type="radio" name="meal_health_rating" value="average" checked>
-                            <span class="radio-custom"></span>
-                            一般
-                        </label>
-                        <label class="radio-label">
-                            <input type="radio" name="meal_health_rating" value="poor">
-                            <span class="radio-custom"></span>
-                            不健康
-                        </label>
-                    </div>
-                </fieldset>
-
-                <!-- Allergy Reaction & Notes -->
-                <div class="form-row form-row-2col">
-                    <div class="form-group">
-                        <label class="form-label" for="meal-allergy">过敏反应</label>
-                        <input type="text" id="meal-allergy" class="form-input"
-                            placeholder="如：皮肤发痒、肠胃不适...">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label" for="meal-notes">备注</label>
-                        <input type="text" id="meal-notes" class="form-input"
-                            placeholder="如：外出就餐、外卖...">
-                    </div>
-                </div>
-
-                <!-- Actions -->
-                <div class="form-actions">
-                    <button type="submit" id="btn-meal-save" class="btn btn-primary">💾 保存饮食</button>
-                    <button type="button" id="btn-meal-cancel" class="btn btn-secondary hidden">取消编辑</button>
-                    <button type="button" id="btn-meal-delete" class="btn btn-danger hidden">🗑️ 删除</button>
-                    <span id="meal-form-message" class="form-message"></span>
-                </div>
-            </form>
-        </section>
-
-        <!-- ═══════════════════════════════════════ -->
-        <!--  SECTION 4: WHOOP INTEGRATION            -->
-        <!-- ═══════════════════════════════════════ -->
-        <section class="card whoop-section">
-            <h2>⌚ Whoop 手环</h2>
-            <div class="whoop-controls">
-                <div id="whoop-status">
-                    <span id="whoop-status-text">检查中...</span>
-                </div>
-                <button id="btn-whoop-connect" class="btn btn-primary" style="display:none;">连接 Whoop</button>
-                <button id="btn-whoop-sync" class="btn" style="display:none;">🔄 同步数据</button>
-                <button id="btn-whoop-disconnect" class="btn btn-danger" style="display:none;">断开连接</button>
-                <div id="whoop-result" class="form-message" style="margin-top:8px;"></div>
-            </div>
-        </section>
-
-        <!-- ═══════════════════════════════════════ -->
-        <!--  SECTION 5: REPORT PANEL                -->
-        <!-- ═══════════════════════════════════════ -->
-        <section class="card report-section">
-            <h2>📈 睡眠分析报告</h2>
-            <div class="report-controls">
-                <label>
-                    报告周期：
-                    <select id="report-period">
-                        <option value="weekly">周报告</option>
-                        <option value="monthly">月报告</option>
-                    </select>
-                </label>
-                <button id="btn-generate-report" class="btn btn-primary">生成报告</button>
-            </div>
-            <div id="report-output" class="report-output">
-                <p class="report-placeholder">点击"生成报告"查看睡眠分析。</p>
-            </div>
-        </section>
+                </form>
+            </section>
+        </div>
 
     </main>
 
@@ -394,10 +543,13 @@
         <p>Sleep Tracker &copy; 2026 — 本地数据，安全私密</p>
     </footer>
 
-    <script src="/static/form.js"></script>
-    <script src="/static/meal.js"></script>
-    <script src="/static/timeline.js"></script>
-    <script src="/static/reports.js"></script>
-    <script src="/static/app.js"></script>
+    <script src="/static/form.js?v=3"></script>
+    <script src="/static/meal.js?v=3"></script>
+    <script src="/static/period.js?v=3"></script>
+    <script src="/static/calendar.js?v=3"></script>
+    <script src="/static/timeline.js?v=3"></script>
+    <script src="/static/reports.js?v=3"></script>
+    <script src="/static/healthOverview.js?v=3"></script>
+    <script src="/static/app.js?v=3"></script>
 </body>
 </html>

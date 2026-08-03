@@ -118,6 +118,11 @@ class ReportManager {
         };
         html += `<div class="report-trend ${report.trend}">${trendLabels[report.trend] || report.trend}</div>`;
 
+        // Period vs non-period correlation
+        if (report.period_correlation && report.period_correlation.has_data) {
+            html += this._renderPeriodCorrelation(report.period_correlation);
+        }
+
         // Patterns
         if (report.patterns && report.patterns.length > 0) {
             html += '<div class="report-patterns">';
@@ -153,6 +158,73 @@ class ReportManager {
         }
 
         this.outputEl.innerHTML = html;
+    }
+
+    _renderPeriodCorrelation(corr) {
+        const p = corr.period;
+        const n = corr.non_period;
+        const problemNames = {
+            insomnia: '失眠', dreams: '多梦', sweats: '多汗',
+            waking: '频醒', early_waking: '早醒'
+        };
+
+        const col = (title, cls, g) => {
+            const cards = [];
+            cards.push(this._statCard(g.avg_hours + 'h', '平均睡眠时长'));
+            cards.push(this._statCard(g.good_rate + '%', '睡眠良好率'));
+            if (g.avg_device_score != null) {
+                cards.push(this._statCard(g.avg_device_score, '平均手环评分'));
+            }
+            if (g.avg_recovery_score != null) {
+                cards.push(this._statCard(g.avg_recovery_score, '平均恢复分'));
+            }
+            return `<div class="pc-col ${cls}">
+                <div class="pc-col-title">${title}（${g.days}天）</div>
+                <div class="pc-cards">${cards.join('')}</div>
+            </div>`;
+        };
+
+        let html = '<div class="period-correlation">';
+        html += '<h4>🌸 经期 vs 非经期 · 睡眠对比</h4>';
+        html += '<div class="pc-grid">';
+        html += col('🌸 经期', 'pc-col--period', p);
+        html += col('🌙 其他时间', 'pc-col--non', n);
+        html += '</div>';
+
+        // Insight text
+        const dH = (p.avg_hours - n.avg_hours);
+        const dG = (p.good_rate - n.good_rate);
+        const parts = [];
+        if (Math.abs(dH) >= 0.15) {
+            parts.push(`经期平均睡眠比非经期${dH > 0 ? '多' : '少'}${Math.abs(dH).toFixed(1)}小时`);
+        } else {
+            parts.push('经期与非经期的平均睡眠时长接近');
+        }
+        if (Math.abs(dG) >= 3) {
+            parts.push(`睡眠良好率${dG > 0 ? '高' : '低'}${Math.abs(dG).toFixed(0)}个百分点`);
+        }
+        if (parts.length) {
+            html += `<div class="pc-insight">💡 ${parts.join('，')}。</div>`;
+        }
+
+        // Problem comparison (top problem per group)
+        const topProblem = (g) => {
+            const entries = Object.entries(g.problems || {});
+            if (!entries.length) return null;
+            entries.sort((a, b) => b[1] - a[1]);
+            return { name: problemNames[entries[0][0]] || entries[0][0], count: entries[0][1] };
+        };
+        const tp = topProblem(p);
+        const tn = topProblem(n);
+        if (tp || tn) {
+            html += '<div class="pc-problems">';
+            html += `<span class="pc-problem pc-problem--period">🌸 经期最常见困扰：${tp ? tp.name + '（' + tp.count + '次）' : '无明显困扰'}</span>`;
+            html += `<span class="pc-problem pc-problem--non">🌙 其他时间：${tn ? tn.name + '（' + tn.count + '次）' : '无明显困扰'}</span>`;
+            html += '</div>';
+        }
+
+        html += '</div>';
+        return html;
     }
 
     _statCard(value, label) {

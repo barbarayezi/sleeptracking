@@ -9,3 +9,9 @@ venv/
 .active_port
 .last_started
 .playwright-mcp/
+
+# Tool / IDE generated state (machine-specific, not source code)
+.qoder/
+.workbuddy/
+*.log
+sleeptracker_launchd.log

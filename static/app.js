@@ -6,17 +6,28 @@
 const App = {
     form: null,
     meal: null,
+    period: null,
     timeline: null,
+    calendar: null,
     report: null,
+    health: null,
     currentDate: null,
+    deferredInstallPrompt: null,
 
     /** Initialize the application. */
     async init() {
         // Create module instances
         this.form = new FormManager();
         this.meal = new MealManager();
+        this.period = new PeriodManager();
         this.timeline = new Timeline('timeline-canvas', 'timeline-empty');
+        this.calendar = new Calendar();
         this.report = new ReportManager();
+        this.health = new HealthOverview();
+        const healthRefresh = document.getElementById('btn-health-refresh');
+        if (healthRefresh) {
+            healthRefresh.addEventListener('click', () => this.health.load());
+        }
 
         // Wire date navigation
         this._initDateNavigation();
@@ -31,20 +42,34 @@ const App = {
         this._updateDateLabel();
         await this.form.loadDate(this.currentDate);
         await this.meal.loadDate(this.currentDate);
+        await this.period.loadDate(this.currentDate);
         await this._refreshTimeline();
+        await this.health.load();
 
         // Initialize Whoop integration
         this._initWhoop();
+
+        // Register Service Worker & PWA install
+        this._registerServiceWorker();
+        this._initInstallPrompt();
+        this._initCategoryNav();
     },
 
     /* ── Callbacks (called by child modules) ── */
 
     onRecordSaved(record) {
         this._refreshTimeline();
+        this.calendar.refresh();
     },
 
     onRecordDeleted(dateStr) {
         this._refreshTimeline();
+        this.calendar.refresh();
+    },
+
+    onPeriodSaved() {
+        this._refreshTimeline();
+        this.calendar.refresh();
     },
 
     onTimelineClick(dateStr) {
@@ -52,6 +77,8 @@ const App = {
         this._updateDateLabel();
         this.form.loadDate(dateStr);
         this.meal.loadDate(dateStr);
+        this.period.loadDate(dateStr);
+        this.calendar.showDate(dateStr);
     },
 
     /* ── Date Navigation ──────────────────── */
@@ -62,6 +89,8 @@ const App = {
             this._updateDateLabel();
             this.form.loadDate(this.currentDate);
             this.meal.loadDate(this.currentDate);
+            this.period.loadDate(this.currentDate);
+            this.calendar.showDate(this.currentDate);
         });
 
         document.getElementById('btn-next-day').addEventListener('click', () => {
@@ -69,6 +98,8 @@ const App = {
             this._updateDateLabel();
             this.form.loadDate(this.currentDate);
             this.meal.loadDate(this.currentDate);
+            this.period.loadDate(this.currentDate);
+            this.calendar.showDate(this.currentDate);
         });
 
         document.getElementById('btn-today').addEventListener('click', () => {
@@ -76,6 +107,8 @@ const App = {
             this._updateDateLabel();
             this.form.loadDate(this.currentDate);
             this.meal.loadDate(this.currentDate);
+            this.period.loadDate(this.currentDate);
+            this.calendar.showDate(this.currentDate);
         });
     },
 
@@ -100,9 +133,13 @@ const App = {
 
     async _refreshTimeline() {
         try {
-            const [recordsResp, mealsResp] = await Promise.all([
+            const [recordsResp, mealsResp, periodsResp, summaryResp, dailyResp, stepsResp] = await Promise.all([
                 fetch('/api/records'),
-                fetch('/api/meals')
+                fetch('/api/meals'),
+                fetch('/api/periods'),
+                fetch('/api/periods/summary'),
+                fetch('/api/whoop/daily'),
+                fetch('/api/healthkit/metrics?type=steps')
             ]);
             if (recordsResp.ok) {
                 const records = await recordsResp.json();
@@ -112,9 +149,47 @@ const App = {
                 const meals = await mealsResp.json();
                 this.timeline.setMeals(meals);
             }
+            if (periodsResp.ok) {
+                const periods = await periodsResp.json();
+                this.timeline.setPeriods(periods);
+            }
+            if (summaryResp.ok) {
+                const summary = await summaryResp.json();
+                this.timeline.setCycleInfo(summary);
+                this._updateCycleBadge(summary);
+            }
+            if (dailyResp.ok) {
+                const daily = await dailyResp.json();
+                this.timeline.setDailyMetrics(daily);
+            }
+            if (stepsResp.ok) {
+                const steps = await stepsResp.json();
+                this.timeline.setSteps(steps);
+            }
+            // Keep the health overview dashboard in sync (non-blocking)
+            if (this.health) this.health.refresh();
         } catch (err) {
             console.error('Failed to refresh timeline:', err);
         }
+    },
+
+    _updateCycleBadge(summary) {
+        const el = document.getElementById('period-cycle-badge');
+        if (!el) return;
+        if (!summary || !summary.has_data) {
+            el.innerHTML = '<span class="cycle-badge__empty">记录两次经期开始日即可自动推算周期 🌸</span>';
+            return;
+        }
+        const phaseNames = { menstrual: '经期', follicular: '卵泡期', ovulation: '排卵期', luteal: '黄体期' };
+        const phase = phaseNames[summary.current_phase] || summary.current_phase || '—';
+        let txt = `当前阶段：${phase}`;
+        if (summary.days_until_next != null) {
+            if (summary.days_until_next > 0) txt += ` · 距下次经期约 ${summary.days_until_next} 天`;
+            else if (summary.days_until_next === 0) txt += ` · 预计今天来潮`;
+            else txt += ` · 已过预测日 ${-summary.days_until_next} 天`;
+        }
+        if (summary.avg_cycle_length) txt += ` · 平均周期 ${summary.avg_cycle_length} 天`;
+        el.innerHTML = `<span class="cycle-badge__info">🌿 ${txt}</span>`;
     },
 
     /* ── Whoop Integration ─────────────────── */
@@ -225,7 +300,7 @@ const App = {
             }, 2000);
         }
 
-        // Periodic auto-sync every 30 minutes
+        // Periodic auto-sync every 5 minutes (near-real-time while page is open)
         setInterval(async () => {
             if (statusText.textContent.includes('已连接')) {
                 try {
@@ -238,7 +313,7 @@ const App = {
                     }
                 } catch (_) {}
             }
-        }, 30 * 60 * 1000);
+        }, 5 * 60 * 1000);
 
         // Disconnect button
         disconnectBtn.addEventListener('click', async () => {
@@ -256,6 +331,82 @@ const App = {
                 resultEl.className = 'form-message error';
             }
         });
+    },
+
+    /* ── PWA: Service Worker & Install ────────── */
+
+    _registerServiceWorker() {
+        if (!('serviceWorker' in navigator)) return;
+        navigator.serviceWorker.register('/sw.js')
+            .then((reg) => {
+                console.log('SW registered, scope:', reg.scope);
+                // 主动检查更新；发现新 SW 时尝试让它立即生效
+                const tryUpdate = () => reg.update().catch(() => {});
+                if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+                setInterval(tryUpdate, 60 * 1000); // 每分钟检查一次
+                tryUpdate();
+            })
+            .catch((err) => console.warn('SW registration failed:', err));
+
+        // 当控制页面的 SW 发生变化（新版本生效）时，自动刷新一次以显示最新 UI
+        let reloaded = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (reloaded) return;
+            reloaded = true;
+            window.location.reload();
+        });
+    },
+
+    _initInstallPrompt() {
+        const installBtn = document.getElementById('btn-install');
+
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            this.deferredInstallPrompt = e;
+            installBtn.classList.remove('hidden');
+        });
+
+        installBtn.addEventListener('click', async () => {
+            if (!this.deferredInstallPrompt) return;
+            this.deferredInstallPrompt.prompt();
+            const { outcome } = await this.deferredInstallPrompt.userChoice;
+            if (outcome === 'accepted') {
+                installBtn.classList.add('hidden');
+            }
+            this.deferredInstallPrompt = null;
+        });
+
+        // Hide button if app is already installed
+        window.addEventListener('appinstalled', () => {
+            installBtn.classList.add('hidden');
+            this.deferredInstallPrompt = null;
+        });
+    },
+
+    /* ── Category Nav (scroll-spy) ──────────── */
+    _initCategoryNav() {
+        const navItems = Array.from(document.querySelectorAll('.cat-nav-item'));
+        if (!navItems.length || !('IntersectionObserver' in window)) return;
+        const groups = navItems
+            .map((a) => document.querySelector(a.getAttribute('href')))
+            .filter(Boolean);
+        if (!groups.length) return;
+
+        const setActive = (id) => {
+            navItems.forEach((a) =>
+                a.classList.toggle('active', a.getAttribute('href') === '#' + id)
+            );
+        };
+
+        const observer = new IntersectionObserver(
+            (entries) => {
+                entries.forEach((e) => {
+                    if (e.isIntersecting) setActive(e.target.id);
+                });
+            },
+            { rootMargin: '-140px 0px -60% 0px', threshold: 0 }
+        );
+        groups.forEach((g) => observer.observe(g));
     },
 
     /* ── Date Utilities ───────────────────── */

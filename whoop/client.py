@@ -297,3 +297,73 @@ class WhoopClient:
             if not next_token:
                 break
         return all_records
+
+    def get_cycle_data(self, start_date=None, end_date=None, limit=25, next_token=None):
+        """Get physiological cycle data (daily strain, kilojoule, avg/max HR)."""
+        token = self.get_valid_access_token()
+        params = {"limit": limit}
+        if start_date:
+            if len(start_date) == 10 and start_date[4] == '-':
+                params["start"] = start_date + "T00:00:00.000Z"
+            else:
+                params["start"] = start_date
+        if end_date:
+            if len(end_date) == 10 and end_date[4] == '-':
+                params["end"] = end_date + "T23:59:59.999Z"
+            else:
+                params["end"] = end_date
+        if next_token:
+            params["nextToken"] = next_token
+
+        path = f"/cycle?{urllib.parse.urlencode(params)}"
+        result = _api_request("GET", path, token)
+        return result.get("records", []), result.get("next_token")
+
+    def get_all_cycle_data(self, start_date=None, end_date=None):
+        """Get ALL cycle data pages."""
+        all_records = []
+        next_token = None
+        while True:
+            records, next_token = self.get_cycle_data(
+                start_date=start_date, end_date=end_date,
+                next_token=next_token,
+            )
+            all_records.extend(records)
+            if not next_token:
+                break
+        return all_records
+
+    def get_workout_data(self, start_date=None, end_date=None, limit=25, next_token=None):
+        """Get workout data (sport, strain, HR, kilojoule, distance)."""
+        token = self.get_valid_access_token()
+        params = {"limit": limit}
+        if start_date:
+            if len(start_date) == 10 and start_date[4] == '-':
+                params["start"] = start_date + "T00:00:00.000Z"
+            else:
+                params["start"] = start_date
+        if end_date:
+            if len(end_date) == 10 and end_date[4] == '-':
+                params["end"] = end_date + "T23:59:59.999Z"
+            else:
+                params["end"] = end_date
+        if next_token:
+            params["nextToken"] = next_token
+
+        path = f"/activity/workout?{urllib.parse.urlencode(params)}"
+        result = _api_request("GET", path, token)
+        return result.get("records", []), result.get("next_token")
+
+    def get_all_workout_data(self, start_date=None, end_date=None):
+        """Get ALL workout data pages."""
+        all_records = []
+        next_token = None
+        while True:
+            records, next_token = self.get_workout_data(
+                start_date=start_date, end_date=end_date,
+                next_token=next_token,
+            )
+            all_records.extend(records)
+            if not next_token:
+                break
+        return all_records

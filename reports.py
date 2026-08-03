@@ -71,7 +71,8 @@ def generate_report(period='weekly', from_date=None):
             'problem_frequency': {},
             'daily_hours': [],
             'trend': 'insufficient_data',
-            'patterns': []
+            'patterns': [],
+            'period_correlation': None
         }
 
     # Group records by date
@@ -169,6 +170,9 @@ def generate_report(period='weekly', from_date=None):
     # Pattern identification
     patterns = _identify_patterns(rows, daily_hours)
 
+    # Period vs non-period correlation (only if period data exists)
+    period_correlation = _compute_period_correlation(from_dt, to_dt, by_date)
+
     return {
         'period': period,
         'date_range': {'from': from_dt.isoformat(), 'to': to_dt.isoformat()},
@@ -196,7 +200,8 @@ def generate_report(period='weekly', from_date=None):
         'problem_frequency': dict(problem_counter),
         'daily_hours': daily_hours,
         'trend': trend,
-        'patterns': patterns
+        'patterns': patterns,
+        'period_correlation': period_correlation
     }
 
 
@@ -309,6 +314,128 @@ def _determine_trend(daily_hours):
         return 'declining'
     else:
         return 'stable'
+
+
+def _add_days(date_str, days):
+    """Add (or subtract) days from an ISO date string; return ISO date string."""
+    d = datetime.strptime(date_str, '%Y-%m-%d').date() + timedelta(days=days)
+    return d.isoformat()
+
+
+def _build_period_day_set(periods, summary):
+    """
+    Build the set of dates that fall on a menstrual period, by combining
+    explicit flow-day records with spans inferred between period-start markers.
+    Mirrors the logic used by the calendar/timeline front-end.
+    """
+    pd = set()
+    for p in (periods or []):
+        flow = p.get('flow')
+        if flow and flow != 'none':
+            pd.add(p['record_date'])
+        elif p.get('is_period_start') and p['record_date'] not in pd:
+            pd.add(p['record_date'])
+
+    starts = sorted(p['record_date'] for p in (periods or []) if p.get('is_period_start'))
+    period_len = ((summary or {}).get('period_length')) or 5
+    for i, s in enumerate(starts):
+        if i + 1 < len(starts):
+            nxt = starts[i + 1]
+            end = _add_days(s, period_len - 1)
+            if end > nxt:
+                end = _add_days(nxt, -1)        # don't overlap the next period
+        else:
+            end = _add_days(s, period_len - 1)
+        d = s
+        while d <= end:
+            pd.add(d)
+            d = _add_days(d, 1)
+    return pd
+
+
+def _compute_period_correlation(from_dt, to_dt, by_date):
+    """
+    Compare sleep metrics on period days vs non-period days within [from_dt, to_dt].
+
+    Args:
+        from_dt, to_dt: datetime.date bounds (inclusive)
+        by_date: dict date_str -> list of sleep-record dicts (same shape as in generate_report)
+
+    Returns:
+        dict with 'period' and 'non_period' comparison groups, or None if no
+        period data is available to compare against.
+    """
+    try:
+        import period_models
+        periods = period_models.get_all_periods(
+            from_date=from_dt.isoformat(), to_date=to_dt.isoformat())
+        summary = period_models.get_cycle_summary()
+    except Exception:
+        return None
+
+    period_days = _build_period_day_set(periods, summary)
+    if not period_days:
+        return None
+
+    groups = {
+        'period': {'days': 0, 'hours': 0.0, 'count': 0,
+                   'quality': {'good': 0, 'average': 0, 'poor': 0},
+                   'problems': Counter(), 'device_scores': [], 'recovery_scores': []},
+        'non_period': {'days': 0, 'hours': 0.0, 'count': 0,
+                       'quality': {'good': 0, 'average': 0, 'poor': 0},
+                       'problems': Counter(), 'device_scores': [], 'recovery_scores': []}
+    }
+
+    for date_str, day_records in by_date.items():
+        key = 'period' if date_str in period_days else 'non_period'
+        g = groups[key]
+        g['days'] += 1
+        for r in day_records:
+            sleep_dt = _parse_datetime(r['sleep_time'])
+            wake_dt = _parse_datetime(r['wake_time'])
+            if wake_dt <= sleep_dt:
+                wake_dt += timedelta(days=1)
+            g['hours'] += (wake_dt - sleep_dt).total_seconds() / 3600.0
+            g['count'] += 1
+            q = r.get('sleep_quality')
+            if q in g['quality']:
+                g['quality'][q] += 1
+            for p in (r.get('sleep_problems') or []):
+                g['problems'][p] += 1
+            if r.get('device_score') is not None:
+                try:
+                    g['device_scores'].append(float(r['device_score']))
+                except (TypeError, ValueError):
+                    pass
+            if r.get('recovery_score') is not None:
+                try:
+                    g['recovery_scores'].append(float(r['recovery_score']))
+                except (TypeError, ValueError):
+                    pass
+
+    def finalize(g):
+        n = g['days'] if g['days'] else 1
+        q = g['quality']
+        total_q = q['good'] + q['average'] + q['poor']
+        return {
+            'days': g['days'],
+            'avg_hours': round(g['hours'] / g['days'], 2) if g['days'] else 0,
+            'records': g['count'],
+            'quality': q,
+            'good_rate': round(q['good'] / total_q * 100, 1) if total_q else 0,
+            'problems': dict(g['problems']),
+            'avg_device_score': round(sum(g['device_scores']) / len(g['device_scores']), 1)
+                if g['device_scores'] else None,
+            'avg_recovery_score': round(sum(g['recovery_scores']) / len(g['recovery_scores']), 1)
+                if g['recovery_scores'] else None
+        }
+
+    return {
+        'has_data': True,
+        'period_days': sorted(period_days),
+        'period': finalize(groups['period']),
+        'non_period': finalize(groups['non_period'])
+    }
 
 
 def _identify_patterns(records, daily_hours):

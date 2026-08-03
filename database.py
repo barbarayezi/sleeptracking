@@ -36,7 +36,12 @@ class _TursoConnectionWrapper:
         self.row_factory = None
 
     def execute(self, sql, params=None):
-        cur = self._conn.execute(sql, params or ())
+        # libsql_experimental only accepts tuples for parameters, not lists.
+        if params is None:
+            params = ()
+        elif isinstance(params, (list, dict)):
+            params = tuple(params)
+        cur = self._conn.execute(sql, params)
         return _TursoCursorWrapper(cur, self.row_factory)
 
     def commit(self):
@@ -323,6 +328,16 @@ def _migrate(conn):
     if version < 8:
         _migrate_v8(conn)
 
+    # Re-read version after potential v8 migration
+    version = _get_schema_version(conn)
+    if version < 9:
+        _migrate_v9(conn)
+
+    # Re-read version after potential v9 migration
+    version = _get_schema_version(conn)
+    if version < 10:
+        _migrate_v10(conn)
+
 
 def _migrate_v6(conn):
     """Migrate from v5 to v6: add device_score column (smart bracelet score)."""
@@ -377,6 +392,103 @@ def _migrate_v8(conn):
     print("  Migration v7 -> v8 completed.")
 
 
+def _migrate_v9(conn):
+    """Migrate from v8 to v9: add period_records table for menstrual/cycle tracking."""
+    print("  Running migration v8 -> v9 ...")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS period_records (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            record_date     DATE NOT NULL,
+            is_period_start INTEGER DEFAULT 0,
+            flow            TEXT DEFAULT 'none'
+                            CHECK(flow IN ('none', 'light', 'normal', 'heavy')),
+            symptoms        TEXT DEFAULT '',
+            mood            TEXT DEFAULT '',
+            phase           TEXT DEFAULT '',
+            notes           TEXT DEFAULT '',
+            created_at      TEXT DEFAULT (datetime('now', 'localtime')),
+            updated_at      TEXT DEFAULT (datetime('now', 'localtime'))
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_period_records_date
+        ON period_records(record_date)
+    """)
+    _set_schema_version(conn, 9)
+    print("  Migration v8 -> v9 completed.")
+
+
+def _migrate_v10(conn):
+    """Migrate from v9 to v10: add SpO2/skin temp to sleep_records + daily/workout/health tables."""
+    print("  Running migration v9 -> v10 ..")
+
+    # 1) SpO2 + skin temp columns on sleep_records (recovery endpoint already returns them; was dropped)
+    col_cursor = conn.execute("PRAGMA table_info('sleep_records')")
+    existing = {row[1] for row in col_cursor.fetchall()}
+    if 'spo2_percentage' not in existing:
+        conn.execute("ALTER TABLE sleep_records ADD COLUMN spo2_percentage REAL DEFAULT NULL")
+    if 'skin_temp_celsius' not in existing:
+        conn.execute("ALTER TABLE sleep_records ADD COLUMN skin_temp_celsius REAL DEFAULT NULL")
+
+    # 2) New tables (CREATE IF NOT EXISTS is safe on re-run)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS whoop_daily_metrics (
+            record_date         DATE PRIMARY KEY,
+            recovery_score      INTEGER DEFAULT NULL,
+            resting_heart_rate  INTEGER DEFAULT NULL,
+            hrv                 REAL DEFAULT NULL,
+            spo2_percentage     REAL DEFAULT NULL,
+            skin_temp_celsius   REAL DEFAULT NULL,
+            strain              REAL DEFAULT NULL,
+            kilojoule           REAL DEFAULT NULL,
+            avg_heart_rate      INTEGER DEFAULT NULL,
+            max_heart_rate      INTEGER DEFAULT NULL,
+            updated_at          TEXT DEFAULT (datetime('now', 'localtime'))
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS whoop_workouts (
+            id                  TEXT PRIMARY KEY,
+            record_date         DATE NOT NULL,
+            sport_name          TEXT DEFAULT '',
+            strain              REAL DEFAULT NULL,
+            avg_heart_rate      INTEGER DEFAULT NULL,
+            max_heart_rate      INTEGER DEFAULT NULL,
+            kilojoule           REAL DEFAULT NULL,
+            distance_meter      REAL DEFAULT NULL,
+            altitude_gain_meter REAL DEFAULT NULL,
+            start_time          TEXT DEFAULT '',
+            end_time            TEXT DEFAULT '',
+            updated_at          TEXT DEFAULT (datetime('now', 'localtime'))
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS health_metrics (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            metric_date     DATE NOT NULL,
+            metric_type     TEXT NOT NULL,
+            value           REAL NOT NULL,
+            source          TEXT DEFAULT 'apple_health',
+            updated_at      TEXT DEFAULT (datetime('now', 'localtime'))
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_whoop_daily_date
+        ON whoop_daily_metrics(record_date)
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_whoop_workouts_date
+        ON whoop_workouts(record_date)
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_health_metrics_date_type
+        ON health_metrics(metric_date, metric_type)
+    """)
+
+    _set_schema_version(conn, 10)
+    print("  Migration v9 -> v10 completed.")
+
+
 def init_db():
     """Create the database schema or migrate from an older version."""
     conn = get_connection()
@@ -410,6 +522,8 @@ def init_db():
             recovery_score      INTEGER DEFAULT NULL,
             resting_heart_rate  INTEGER DEFAULT NULL,
             hrv                 REAL DEFAULT NULL,
+            spo2_percentage     REAL DEFAULT NULL,
+            skin_temp_celsius   REAL DEFAULT NULL,
             created_at          TEXT DEFAULT (datetime('now', 'localtime')),
             updated_at      TEXT DEFAULT (datetime('now', 'localtime'))
         )
@@ -462,6 +576,86 @@ def init_db():
             expires_at      INTEGER NOT NULL,
             updated_at      TEXT DEFAULT (datetime('now', 'localtime'))
         )
+    """)
+
+    # Period records table (v9) — menstrual / cycle tracking
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS period_records (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            record_date     DATE NOT NULL,
+            is_period_start INTEGER DEFAULT 0,
+            flow            TEXT DEFAULT 'none'
+                            CHECK(flow IN ('none', 'light', 'normal', 'heavy')),
+            symptoms        TEXT DEFAULT '',
+            mood            TEXT DEFAULT '',
+            phase           TEXT DEFAULT '',
+            notes           TEXT DEFAULT '',
+            created_at      TEXT DEFAULT (datetime('now', 'localtime')),
+            updated_at      TEXT DEFAULT (datetime('now', 'localtime'))
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_period_records_date
+        ON period_records(record_date)
+    """)
+
+    # Whoop daily metrics table (v10) — recovery (full) + daily strain/HR aggregates, keyed by date
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS whoop_daily_metrics (
+            record_date         DATE PRIMARY KEY,
+            recovery_score      INTEGER DEFAULT NULL,
+            resting_heart_rate  INTEGER DEFAULT NULL,
+            hrv                 REAL DEFAULT NULL,
+            spo2_percentage     REAL DEFAULT NULL,
+            skin_temp_celsius   REAL DEFAULT NULL,
+            strain              REAL DEFAULT NULL,
+            kilojoule           REAL DEFAULT NULL,
+            avg_heart_rate      INTEGER DEFAULT NULL,
+            max_heart_rate      INTEGER DEFAULT NULL,
+            updated_at          TEXT DEFAULT (datetime('now', 'localtime'))
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_whoop_daily_date
+        ON whoop_daily_metrics(record_date)
+    """)
+
+    # Whoop workouts table (v10) — individual workout sessions
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS whoop_workouts (
+            id                  TEXT PRIMARY KEY,
+            record_date         DATE NOT NULL,
+            sport_name          TEXT DEFAULT '',
+            strain              REAL DEFAULT NULL,
+            avg_heart_rate      INTEGER DEFAULT NULL,
+            max_heart_rate      INTEGER DEFAULT NULL,
+            kilojoule           REAL DEFAULT NULL,
+            distance_meter      REAL DEFAULT NULL,
+            altitude_gain_meter REAL DEFAULT NULL,
+            start_time          TEXT DEFAULT '',
+            end_time            TEXT DEFAULT '',
+            updated_at          TEXT DEFAULT (datetime('now', 'localtime'))
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_whoop_workouts_date
+        ON whoop_workouts(record_date)
+    """)
+
+    # Health metrics table (v10) — Apple Health / external sources (steps, active energy, distance, etc.)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS health_metrics (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            metric_date     DATE NOT NULL,
+            metric_type     TEXT NOT NULL,
+            value           REAL NOT NULL,
+            source          TEXT DEFAULT 'apple_health',
+            updated_at      TEXT DEFAULT (datetime('now', 'localtime'))
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_health_metrics_date_type
+        ON health_metrics(metric_date, metric_type)
     """)
 
     # Now run pending migrations (ALTER TABLE for older schemas)

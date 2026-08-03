@@ -31,6 +31,10 @@
     --transition: 0.2s ease;
 }
 
+html {
+    scroll-behavior: smooth;
+}
+
 body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
         "Microsoft YaHei", "Helvetica Neue", sans-serif;
@@ -40,17 +44,22 @@ body {
     min-height: 100vh;
 }
 
+/* ── Topbar (sticky header + category nav) ────── */
+.app-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border);
+}
+
 /* ── Header ────────────────────────────────────── */
 .app-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 16px 32px;
-    background: var(--bg-card);
-    border-bottom: 1px solid var(--border);
-    position: sticky;
-    top: 0;
-    z-index: 10;
+    background: transparent;
 }
 
 .app-header h1 {
@@ -85,6 +94,12 @@ body {
     border-color: var(--accent);
 }
 
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
 #current-date-label {
     font-size: 1rem;
     font-weight: 600;
@@ -97,6 +112,65 @@ body {
     width: auto !important;
     padding: 0 14px !important;
     font-size: 0.875rem !important;
+}
+
+/* ── Category Navigation (sticky jump bar) ────── */
+.category-nav {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    flex-wrap: wrap;
+    padding: 0 16px 12px;
+}
+
+.cat-nav-item {
+    padding: 6px 16px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-decoration: none;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    transition: all var(--transition);
+    cursor: pointer;
+}
+
+.cat-nav-item:hover {
+    border-color: var(--accent);
+    color: var(--text);
+}
+
+.cat-nav-item.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+}
+
+/* ── Category Groups & Banners ────────────────── */
+.category-group {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    scroll-margin-top: 130px;
+}
+
+.category-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--text);
+    padding: 10px 16px;
+    background: linear-gradient(90deg, rgba(129, 140, 248, 0.14), rgba(129, 140, 248, 0.02));
+    border-left: 3px solid var(--accent);
+    border-radius: var(--radius-sm);
+    letter-spacing: 0.5px;
+}
+
+.category-banner span {
+    font-size: 1.05rem;
 }
 
 /* ── Main Layout ──────────────────────────────── */
@@ -771,6 +845,39 @@ body {
     font-size: 0.8rem;
 }
 
+/* ── PWA Install Button ──────────────────── */
+.btn-install-pwa {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 16px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--transition);
+    font-family: inherit;
+    white-space: nowrap;
+    animation: install-pulse 2s ease-in-out 3;
+}
+
+.btn-install-pwa:hover {
+    background: var(--accent-hover);
+    transform: translateY(-1px);
+}
+
+.install-icon {
+    font-size: 1rem;
+}
+
+@keyframes install-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(129, 140, 248, 0.4); }
+    50% { box-shadow: 0 0 0 8px rgba(129, 140, 248, 0); }
+}
+
 /* ── Responsive ────────────────────────────────── */
 
 /* Tablet (640-1024px): reduce gaps */
@@ -794,8 +901,28 @@ body {
         gap: 8px;
         padding: 10px 12px;
     }
+    .header-right {
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 8px;
+    }
+    .category-nav {
+        padding: 0 10px 10px;
+        gap: 6px;
+    }
+    .cat-nav-item {
+        padding: 5px 12px;
+        font-size: 0.8rem;
+    }
+    .category-group {
+        scroll-margin-top: 175px;
+    }
     .app-header h1 {
         font-size: 1.1rem;
+    }
+    .btn-install-pwa {
+        font-size: 0.78rem;
+        padding: 5px 12px;
     }
     .date-navigator {
         gap: 6px;
@@ -1007,4 +1134,584 @@ body {
     font-weight: 600;
     color: var(--text);
     font-variant-numeric: tabular-nums;
+}
+
+/* ── Cycle Calendar Board ─────────────────────── */
+.calendar-section .calendar-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.calendar-nav {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.cal-nav-btn {
+    width: 34px;
+    height: 34px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg);
+    color: var(--text);
+    cursor: pointer;
+    font-size: 1.1rem;
+    line-height: 1;
+    transition: all var(--transition);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.cal-nav-btn:hover {
+    background: var(--bg-card-hover);
+    border-color: var(--accent);
+}
+
+.calendar-title {
+    font-size: 1rem;
+    font-weight: 600;
+    min-width: 120px;
+    text-align: center;
+    color: var(--accent);
+}
+
+.calendar-toggle {
+    display: flex;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    overflow: hidden;
+}
+
+.toggle-btn {
+    padding: 6px 18px;
+    background: var(--bg);
+    color: var(--text-muted);
+    border: none;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 600;
+    transition: all var(--transition);
+}
+
+.toggle-btn.active {
+    background: var(--accent);
+    color: #fff;
+}
+
+/* Month grid */
+.calendar-weekdays {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+    margin-bottom: 4px;
+}
+
+.calendar-weekday {
+    text-align: center;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    font-weight: 600;
+    padding: 4px 0;
+}
+
+.calendar-weekday--weekend {
+    color: var(--red);
+}
+
+.calendar-cells {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+}
+
+.calendar-cell {
+    position: relative;
+    min-height: 64px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 6px 6px 4px;
+    cursor: pointer;
+    transition: all var(--transition);
+    overflow: hidden;
+}
+
+.calendar-cell:hover {
+    border-color: var(--accent);
+    transform: translateY(-1px);
+}
+
+.calendar-cell--empty {
+    background: transparent;
+    border-color: transparent;
+    cursor: default;
+}
+
+.calendar-cell--empty:hover {
+    transform: none;
+    border-color: transparent;
+}
+
+.calendar-date {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.calendar-cell--period {
+    background: rgba(244, 114, 182, 0.16);
+    border-color: rgba(244, 114, 182, 0.4);
+}
+
+.calendar-cell--period-start {
+    background: rgba(244, 114, 182, 0.28);
+    border-color: var(--red);
+}
+
+.calendar-cell--today .calendar-date {
+    color: var(--accent);
+}
+
+.calendar-cell--today {
+    border-color: var(--accent);
+}
+
+.calendar-cell--selected {
+    box-shadow: 0 0 0 2px var(--accent) inset;
+}
+
+.calendar-cell--ovulation {
+    border-color: var(--accent);
+}
+
+.calendar-cell--next-period:not(.calendar-cell--period) {
+    border-style: dashed;
+    border-color: var(--red);
+}
+
+.calendar-markers {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 6px;
+    flex-wrap: wrap;
+}
+
+.sleep-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.sleep-dot--good { background: var(--green); }
+.sleep-dot--average { background: var(--yellow); }
+.sleep-dot--poor { background: var(--red); }
+
+.meal-dot {
+    font-size: 0.8rem;
+    line-height: 1;
+}
+
+.ovulation-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--accent);
+    display: inline-block;
+    box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.25);
+}
+
+.next-period-badge,
+.period-start-badge {
+    position: absolute;
+    top: 4px;
+    right: 5px;
+    font-size: 0.7rem;
+    line-height: 1;
+}
+
+.next-period-badge {
+    color: var(--red);
+    font-weight: 700;
+    border: 1px solid var(--red);
+    border-radius: 4px;
+    padding: 0 3px;
+}
+
+.period-start-badge {
+    font-size: 0.8rem;
+}
+
+/* Year grid */
+.calendar-year {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+}
+
+.mini-month {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 8px;
+}
+
+.mini-month-title {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-align: center;
+    margin-bottom: 6px;
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    transition: all var(--transition);
+}
+
+.mini-month-title:hover {
+    color: var(--accent);
+    background: var(--bg-card-hover);
+}
+
+.mini-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+}
+
+.mini-cell {
+    aspect-ratio: 1 / 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.62rem;
+    color: var(--text-dim);
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all var(--transition);
+}
+
+.mini-cell:hover {
+    background: var(--bg-card-hover);
+    color: var(--text);
+}
+
+.mini-cell--empty {
+    cursor: default;
+}
+
+.mini-period {
+    background: rgba(244, 114, 182, 0.4);
+    color: #fff;
+    font-weight: 600;
+}
+
+.mini-period-start {
+    background: var(--red);
+    color: #fff;
+}
+
+.mini-ovulation {
+    box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.mini-next {
+    box-shadow: inset 0 0 0 2px var(--red);
+}
+
+/* Legend */
+.calendar-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.legend-swatch {
+    width: 14px;
+    height: 14px;
+    border-radius: 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.6rem;
+    line-height: 1;
+}
+
+.legend-swatch--period {
+    background: rgba(244, 114, 182, 0.4);
+}
+
+.legend-swatch--start {
+    background: var(--red);
+    color: #fff;
+}
+
+.legend-swatch--ovulation {
+    background: var(--accent);
+}
+
+.legend-swatch--next {
+    border: 1px solid var(--red);
+    color: var(--red);
+    font-weight: 700;
+}
+
+.legend-swatch--meal {
+    font-size: 0.7rem;
+}
+
+.legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.legend-dot--good { background: var(--green); }
+.legend-dot--average { background: var(--yellow); }
+.legend-dot--poor { background: var(--red); }
+
+/* ── Period Correlation (Report) ─────────────── */
+.period-correlation {
+    margin: 16px 0 8px;
+    padding: 16px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+}
+
+.period-correlation > h4 {
+    font-size: 0.9rem;
+    color: var(--text);
+    margin-bottom: 12px;
+}
+
+.pc-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.pc-col {
+    border-radius: var(--radius-sm);
+    padding: 10px;
+    border: 1px solid var(--border);
+}
+
+.pc-col--period {
+    background: rgba(244, 114, 182, 0.1);
+    border-color: rgba(244, 114, 182, 0.35);
+}
+
+.pc-col--non {
+    background: rgba(129, 140, 248, 0.08);
+    border-color: rgba(129, 140, 248, 0.3);
+}
+
+.pc-col-title {
+    font-size: 0.82rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+    text-align: center;
+}
+
+.pc-col--period .pc-col-title {
+    color: #f9a8d4;
+}
+
+.pc-col--non .pc-col-title {
+    color: #a5b4fc;
+}
+
+.pc-cards {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.pc-cards .stat-card {
+    padding: 10px 8px;
+}
+
+.pc-cards .stat-value {
+    font-size: 1.1rem;
+}
+
+.pc-insight {
+    margin-top: 12px;
+    padding: 10px 12px;
+    background: var(--bg-card);
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+    color: var(--text);
+    border-left: 3px solid var(--accent);
+}
+
+.pc-problems {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.pc-problem {
+    font-size: 0.78rem;
+    padding: 4px 10px;
+    border-radius: 12px;
+}
+
+.pc-problem--period {
+    background: rgba(244, 114, 182, 0.15);
+    color: #f9a8d4;
+}
+
+.pc-problem--non {
+    background: rgba(129, 140, 248, 0.12);
+    color: #a5b4fc;
+}
+
+@media (max-width: 640px) {
+    .pc-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Calendar responsive */
+@media (max-width: 640px) {
+    .calendar-cells {
+        gap: 2px;
+    }
+    .calendar-cell {
+        min-height: 52px;
+        padding: 4px 3px 2px;
+    }
+    .calendar-date {
+        font-size: 0.75rem;
+    }
+    .calendar-markers {
+        gap: 3px;
+        margin-top: 3px;
+    }
+    .sleep-dot, .ovulation-dot {
+        width: 8px;
+        height: 8px;
+    }
+    .calendar-year {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+    }
+    .calendar-controls {
+        gap: 8px;
+    }
+    .calendar-title {
+        min-width: 90px;
+        font-size: 0.9rem;
+    }
+}
+
+/* ── Health Overview Dashboard ──────────────── */
+
+.section-hint {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+    line-height: 1.5;
+}
+
+.ho-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 12px;
+}
+
+.ho-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+}
+
+.ho-card__head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 4px;
+}
+
+.ho-card__label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.ho-card__val {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+}
+
+.ho-spark {
+    display: block;
+    width: 100%;
+}
+
+.ho-card__meta {
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    margin-top: 4px;
+    font-variant-numeric: tabular-nums;
+}
+
+.ho-insights {
+    margin-top: 16px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 12px 14px;
+}
+
+.ho-insights h3 {
+    font-size: 0.9rem;
+    color: var(--text);
+    margin-bottom: 8px;
+}
+
+.ho-insights ul {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.ho-insights li {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+    padding-left: 14px;
+    position: relative;
+}
+
+.ho-insights li::before {
+    content: "•";
+    position: absolute;
+    left: 0;
+    color: var(--accent);
 }

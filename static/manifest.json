@@ -3,9 +3,13 @@
   "short_name": "SleepTracker",
   "description": "睡眠追踪 + Whoop 手环数据分析",
   "start_url": "/",
+  "id": "/",
+  "scope": "/",
   "display": "standalone",
+  "orientation": "any",
   "background_color": "#0f172a",
   "theme_color": "#1e293b",
+  "categories": ["health", "lifestyle"],
   "icons": [
     {
       "src": "/static/icon.svg",

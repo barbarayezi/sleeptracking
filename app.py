@@ -4,6 +4,7 @@ All REST API routes for CRUD operations, statistics, and reports.
 """
 
 import os
+import threading
 import urllib.parse
 from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
@@ -13,13 +14,24 @@ from database import init_db
 from reports import generate_report, get_quick_stats
 import models as models
 import meal_models as meal_models
+import period_models as period_models
 
 app = Flask(__name__)
+# 本地个人应用：禁用静态文件客户端缓存，改完前端刷新即可见，无需手动清缓存
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
+# 本地个人应用：模板随文件改动自动重载，改 index.html 也无需重启服务
+app.config['TEMPLATES_AUTO_RELOAD'] = True
 
 
 # ──────────────────────────────────────────────
 #  Page route
 # ──────────────────────────────────────────────
+
+@app.route('/sw.js')
+def service_worker():
+    """Serve service worker from root scope (required for PWA)."""
+    return app.send_static_file('sw.js')
+
 
 @app.route('/')
 def index():
@@ -288,6 +300,89 @@ def delete_meal(meal_id):
 
 
 # ──────────────────────────────────────────────
+#  Period / Menstrual Cycle Tracking
+# ──────────────────────────────────────────────
+
+
+@app.route('/api/periods', methods=['GET'])
+def list_periods():
+    """List period records, optionally filtered by date range or specific date."""
+    from_date = request.args.get('from')
+    to_date = request.args.get('to')
+    date = request.args.get('date')
+    periods = period_models.get_all_periods(from_date=from_date, to_date=to_date, date=date)
+    return jsonify(periods)
+
+
+@app.route('/api/periods/summary', methods=['GET'])
+def period_cycle_summary():
+    """Return cycle statistics + predictions (next period, ovulation, current phase)."""
+    summary = period_models.get_cycle_summary()
+    return jsonify(summary)
+
+
+@app.route('/api/periods/<int:period_id>', methods=['GET'])
+def get_period(period_id):
+    """Get a single period record by ID."""
+    period = period_models.get_period_by_id(period_id)
+    if period is None:
+        return jsonify({'error': 'Period record not found'}), 404
+    return jsonify(period)
+
+
+@app.route('/api/periods', methods=['POST'])
+def create_period():
+    """Create a new period record."""
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Request body must be JSON'}), 400
+
+    errors = _validate_period_data(data)
+    if errors:
+        return jsonify({'error': errors[0]}), 400
+
+    period = period_models.create_period(data)
+    return jsonify(period), 201
+
+
+@app.route('/api/periods/<int:period_id>', methods=['PUT'])
+def update_period(period_id):
+    """Update an existing period record by ID."""
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Request body must be JSON'}), 400
+
+    errors = _validate_period_data(data, partial=True)
+    if errors:
+        return jsonify({'error': errors[0]}), 400
+
+    period = period_models.update_period_by_id(period_id, data)
+    if period is None:
+        return jsonify({'error': 'Period record not found'}), 404
+    return jsonify(period)
+
+
+@app.route('/api/periods/<int:period_id>', methods=['DELETE'])
+def delete_period(period_id):
+    """Delete a period record by ID."""
+    deleted = period_models.delete_period_by_id(period_id)
+    if not deleted:
+        return jsonify({'error': 'Period record not found'}), 404
+    return '', 204
+
+
+def _validate_period_data(data, partial=False):
+    """Validate period record input. Returns a list of error strings (empty = ok)."""
+    errors = []
+    if not partial or 'record_date' in data:
+        if not data.get('record_date'):
+            errors.append('请选择日期。')
+    if 'flow' in data and data['flow'] not in ('none', 'light', 'normal', 'heavy'):
+        errors.append('流量取值无效。')
+    return errors
+
+
+# ──────────────────────────────────────────────
 #  Whoop Integration (OAuth + Sync)
 # ──────────────────────────────────────────────
 
@@ -341,16 +436,129 @@ def whoop_status():
 
 @app.route('/api/whoop/sync', methods=['POST'])
 def whoop_sync():
-    """Trigger a Whoop data sync."""
+    """Trigger a full Whoop data sync (sleep + daily metrics + workouts)."""
     days_back = request.args.get('days', 30, type=int)
-    from whoop.sync import sync_sleep_data
+    from whoop.sync import sync_all_whoop
     try:
-        stats = sync_sleep_data(days_back=days_back)
+        stats = sync_all_whoop(days_back=days_back)
         return jsonify(stats)
     except PermissionError as e:
         return jsonify({'error': str(e), 'need_auth': True}), 401
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/whoop/daily')
+def whoop_daily():
+    """Return Whoop daily metrics (recovery + strain/HR) for a date range."""
+    from_date = request.args.get('from')
+    to_date = request.args.get('to')
+    from health_models import get_whoop_daily
+    return jsonify(get_whoop_daily(from_date, to_date))
+
+
+@app.route('/api/whoop/workouts')
+def whoop_workouts():
+    """Return Whoop workout sessions for a date range."""
+    from_date = request.args.get('from')
+    to_date = request.args.get('to')
+    from health_models import get_workouts
+    return jsonify(get_workouts(from_date, to_date))
+
+
+@app.route('/api/healthkit/ingest', methods=['POST'])
+def healthkit_ingest():
+    """Receive Apple Health / external metric pushes (e.g. Health Auto Export).
+
+    Accepts several shapes for flexibility:
+      Single:  {"date": "2026-08-02", "metric_type": "steps", "value": 12345}
+      Batch:   [{"date":"...","metric_type":"steps","value":...}, ...]
+      HAExport-style: {"date":"...", "metric_type":"StepCount", "value": 12345}
+      Apple-format: {"startDate":"2026-08-02", "type":"StepCount", "value":12345, "unit":"count"}
+    Rejects nothing destructive; only inserts/updates health_metrics rows.
+    """
+    from health_models import bulk_upsert_health_metrics, upsert_health_metric
+    try:
+        payload = request.get_json(force=True, silent=True)
+    except Exception:
+        payload = None
+    if payload is None:
+        return jsonify({'error': 'Invalid JSON body'}), 400
+
+    source = request.args.get('source') or request.headers.get('X-Source') or 'apple_health'
+    rows = []
+
+    def _norm(rec):
+        import re
+        from datetime import datetime
+        d = rec.get('date') or rec.get('metric_date') or rec.get('startDate') or rec.get('dateValue')
+        mt = rec.get('metric_type') or rec.get('type') or rec.get('metricType')
+        val = rec.get('value')
+        if d and mt is not None and val is not None:
+            d_str = str(d).strip()
+            # Robust date parsing: ISO 8601, slash/local formats, etc.
+            try:
+                parsed = datetime.fromisoformat(d_str.replace('Z', '+00:00'))
+                d_str = parsed.strftime('%Y-%m-%d')
+            except ValueError:
+                m = re.search(r'(\d{4})[-/](\d{1,2})[-/](\d{1,2})', d_str)
+                if m:
+                    d_str = f"{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
+                else:
+                    d_str = d_str[:10]
+            return (d_str, str(mt), float(val))
+        return None
+
+    if isinstance(payload, list):
+        for rec in payload:
+            n = _norm(rec)
+            if n:
+                rows.append(n)
+    elif isinstance(payload, dict):
+        n = _norm(payload)
+        if n:
+            rows.append(n)
+        # Health Auto Export "nested" style: {"date":"...", "StepCount":12345, "ActiveEnergy":300}
+        # Only treat top-level numeric keys as metrics when there is NO explicit
+        # metric_type/type (otherwise keys like "value" would be mis-read as a metric).
+        has_explicit_type = ('metric_type' in payload) or ('type' in payload)
+        if not has_explicit_type:
+            date_key = payload.get('date') or payload.get('startDate') or payload.get('metric_date')
+            if date_key:
+                for k, v in payload.items():
+                    if k in ('date', 'metric_date', 'startDate', 'endDate', 'unit', 'source', 'type', 'metric_type'):
+                        continue
+                    if isinstance(v, (int, float)):
+                        rows.append((str(date_key)[:10], str(k), float(v)))
+
+    if not rows:
+        return jsonify({'error': 'No valid metric rows found', 'received': payload}), 400
+
+    count = bulk_upsert_health_metrics(rows, source=source)
+    return jsonify({'ok': True, 'inserted': count})
+
+
+@app.route('/api/healthkit/metrics')
+def healthkit_metrics():
+    """Query stored health metrics by type (default: steps)."""
+    metric_type = request.args.get('type', 'steps')
+    from_date = request.args.get('from')
+    to_date = request.args.get('to')
+    from health_models import get_health_metrics
+    return jsonify(get_health_metrics(metric_type, from_date, to_date))
+
+
+@app.route('/api/health-overview')
+def health_overview():
+    """Combined cross-source daily health series for the dashboard."""
+    from_date = request.args.get('from')
+    to_date = request.args.get('to')
+    if not from_date or not to_date:
+        from datetime import datetime, timedelta
+        to_date = datetime.now().strftime('%Y-%m-%d')
+        from_date = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+    from health_models import get_health_overview
+    return jsonify(get_health_overview(from_date, to_date))
 
 
 @app.route('/api/whoop/disconnect', methods=['POST'])
@@ -430,6 +638,41 @@ def _start_server(port):
             sys.exit(1)
 
 
+def _background_sync_loop(interval_minutes=30):
+    """Background Whoop sync — keeps data fresh even when the page is closed.
+
+    Runs in a daemon thread. Pulls the last 2 days of Whoop sleep/recovery data
+    on a fixed interval. Failures are logged but never crash the loop, and the
+    loop self-terminates if the token becomes invalid (re-auth resumes it).
+    """
+    import time
+    # Lazy imports keep app startup fast and avoid boot-time import errors.
+    from whoop.sync import sync_all_whoop
+    from whoop.client import WhoopClient
+
+    # Only run if Whoop credentials are configured.
+    if not WhoopClient().client_id:
+        print("[auto-sync] Whoop not configured — background sync disabled.")
+        return
+
+    print(f"[auto-sync] Background sync enabled (every {interval_minutes} min).")
+    while True:
+        try:
+            stats = sync_all_whoop(days_back=2)
+            s = stats.get('sleep', {})
+            d = stats.get('daily', {})
+            w = stats.get('workouts', {})
+            print(f"[auto-sync] OK  sleep={s.get('synced')} daily={d.get('synced')} "
+                  f"workouts={w.get('synced')}")
+        except PermissionError:
+            print("[auto-sync] Not authenticated — stopping (reconnect in the "
+                  "app to resume automatic sync).")
+            return
+        except Exception as e:
+            print(f"[auto-sync] sync error: {e}")
+        time.sleep(interval_minutes * 60)
+
+
 def _init_and_start(headless=False):
     """Initialize DB and start server."""
     try:
@@ -437,6 +680,11 @@ def _init_and_start(headless=False):
     except Exception as e:
         print(f"[FATAL] Database initialization failed: {e}")
         sys.exit(1)
+
+    # Start background Whoop sync (30-min interval, runs while the server is up).
+    # The frontend also polls every 5 min while open, and a daily automation
+    # acts as a safety net when the server is fully stopped.
+    threading.Thread(target=_background_sync_loop, args=(30,), daemon=True).start()
 
     # In cloud: use PORT env var (Render sets this)
     # In local: auto-detect free port

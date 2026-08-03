@@ -157,6 +157,8 @@ def sync_sleep_data(days_back=30):
                 "recovery_score": score.get("recovery_score"),
                 "resting_heart_rate": score.get("resting_heart_rate"),
                 "hrv": score.get("hrv"),
+                "spo2_percentage": score.get("spo2_percentage"),
+                "skin_temp_celsius": score.get("skin_temp_celsius"),
             }
     except Exception:
         pass  # Recovery data is optional
@@ -194,6 +196,8 @@ def sync_sleep_data(days_back=30):
             "recovery_score": recovery.get("recovery_score"),
             "resting_heart_rate": recovery.get("resting_heart_rate"),
             "hrv": recovery.get("hrv"),
+            "spo2_percentage": recovery.get("spo2_percentage"),
+            "skin_temp_celsius": recovery.get("skin_temp_celsius"),
         }
 
         # Check if record exists
@@ -223,7 +227,8 @@ def sync_sleep_data(days_back=30):
             for col in ("respiratory_rate", "sleep_efficiency", "sleep_consistency",
                         "deep_sleep_minutes", "light_sleep_minutes", "rem_sleep_minutes",
                         "awake_minutes", "disturbance_count", "recovery_score",
-                        "resting_heart_rate", "hrv"):
+                        "resting_heart_rate", "hrv", "spo2_percentage",
+                        "skin_temp_celsius"):
                 val = whoop_data.get(col)
                 if val is not None:
                     updates.append(f"{col} = ?")
@@ -247,10 +252,11 @@ def sync_sleep_data(days_back=30):
                     respiratory_rate, sleep_efficiency, sleep_consistency,
                     deep_sleep_minutes, light_sleep_minutes, rem_sleep_minutes,
                     awake_minutes, disturbance_count,
-                    recovery_score, resting_heart_rate, hrv)
+                    recovery_score, resting_heart_rate, hrv,
+                    spo2_percentage, skin_temp_celsius)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?,
                            ?, ?, ?, ?, ?, ?, ?, ?,
-                           ?, ?, ?)""",
+                           ?, ?, ?, ?, ?)""",
                 (
                     record_date, record_type, sleep_start, sleep_end,
                     classification, quality or "average",
@@ -266,6 +272,8 @@ def sync_sleep_data(days_back=30):
                     whoop_data["recovery_score"],
                     whoop_data["resting_heart_rate"],
                     whoop_data["hrv"],
+                    whoop_data["spo2_percentage"],
+                    whoop_data["skin_temp_celsius"],
                 ),
             )
             stats["created"] += 1
@@ -284,3 +292,188 @@ def sync_profile():
         return client.get_profile()
     except Exception:
         return None
+
+
+# Common Whoop sport IDs → human-readable names (best-effort; unknown → "训练")
+COMMON_SPORTS = {
+    0: "其他",
+    1: "跑步",
+    2: "步行",
+    3: "骑行",
+    4: "游泳",
+    5: "划船",
+    6: "篮球",
+    7: "足球",
+    9: "网球",
+    10: "交叉训练",
+    11: "登山",
+    13: "力量训练",
+    14: "动感单车",
+    15: "椭圆机",
+    16: "普拉提",
+    17: "瑜伽",
+    18: "高尔夫",
+    19: "拳击",
+    20: "HIIT",
+    21: "舞蹈",
+    22: "爬山",
+    24: "滑雪",
+    25: "单板滑雪",
+    26: "冲浪",
+    28: "跳绳",
+    29: "拉伸",
+    32: "攀岩",
+    33: "慢跑",
+    43: "功能性训练",
+    44: "冥想",
+}
+
+
+def _sport_name(sport_id):
+    if sport_id is None:
+        return "训练"
+    return COMMON_SPORTS.get(int(sport_id), f"训练({sport_id})")
+
+
+def _date_from_ts(ts_str):
+    """Extract local YYYY-MM-DD from a Whoop ISO timestamp."""
+    s = _parse_whoop_time(ts_str)
+    return s[:10] if s else None
+
+
+def sync_daily_metrics(days_back=30):
+    """Sync Whoop recovery (full) + daily strain/HR into whoop_daily_metrics (keyed by date)."""
+    client = WhoopClient()
+    if not client.is_authenticated():
+        return {"error": "Not authenticated with Whoop", "synced": 0}
+
+    today = datetime.now()
+    from_date = (today - timedelta(days=days_back)).strftime("%Y-%m-%d")
+    to_date = today.strftime("%Y-%m-%d")
+
+    # 1) Cycles → daily strain / kilojoule / HR (keyed by cycle date)
+    daily = {}
+    try:
+        cycles = client.get_all_cycle_data(start_date=from_date, end_date=to_date)
+        for c in cycles:
+            d = _date_from_ts(c.get("end"))
+            if not d:
+                continue
+            score = c.get("score") or {}
+            row = daily.setdefault(d, {})
+            row["strain"] = score.get("strain")
+            row["kilojoule"] = score.get("kilojoule")
+            row["avg_heart_rate"] = score.get("average_heart_rate")
+            row["max_heart_rate"] = score.get("max_heart_rate")
+            # remember cycle_id → date for recovery mapping
+            daily.setdefault("_cycle_date", {})[c.get("id")] = d
+    except Exception as e:
+        print(f"[sync_daily_metrics] cycle fetch failed: {e}")
+
+    cycle_date = daily.pop("_cycle_date", {})
+
+    # 2) Recovery → recovery_score / RHR / HRV / SpO2 / skin temp
+    try:
+        recovery = client.get_all_recovery_data(start_date=from_date, end_date=to_date)
+        for r in recovery:
+            cid = r.get("cycle_id")
+            d = cycle_date.get(cid)
+            if not d:
+                # Fallback: use recovery created_at date
+                d = _date_from_ts(r.get("created_at"))
+            if not d:
+                continue
+            score = r.get("score") or {}
+            row = daily.setdefault(d, {})
+            row["recovery_score"] = score.get("recovery_score")
+            row["resting_heart_rate"] = score.get("resting_heart_rate")
+            row["hrv"] = score.get("hrv_rmssd_milli")
+            row["spo2_percentage"] = score.get("spo2_percentage")
+            row["skin_temp_celsius"] = score.get("skin_temp_celsius")
+    except Exception as e:
+        print(f"[sync_daily_metrics] recovery fetch failed: {e}")
+
+    conn = get_connection()
+    synced = 0
+    for d, row in daily.items():
+        conn.execute(
+            """INSERT OR REPLACE INTO whoop_daily_metrics
+               (record_date, recovery_score, resting_heart_rate, hrv,
+                spo2_percentage, skin_temp_celsius, strain, kilojoule,
+                avg_heart_rate, max_heart_rate, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now','localtime'))""",
+            (
+                d,
+                row.get("recovery_score"),
+                row.get("resting_heart_rate"),
+                row.get("hrv"),
+                row.get("spo2_percentage"),
+                row.get("skin_temp_celsius"),
+                row.get("strain"),
+                row.get("kilojoule"),
+                row.get("avg_heart_rate"),
+                row.get("max_heart_rate"),
+            ),
+        )
+        synced += 1
+    conn.commit()
+    conn.close()
+    return {"synced": synced}
+
+
+def sync_workouts(days_back=30):
+    """Sync Whoop workout sessions into whoop_workouts."""
+    client = WhoopClient()
+    if not client.is_authenticated():
+        return {"error": "Not authenticated with Whoop", "synced": 0}
+
+    today = datetime.now()
+    from_date = (today - timedelta(days=days_back)).strftime("%Y-%m-%d")
+    to_date = today.strftime("%Y-%m-%d")
+
+    try:
+        workouts = client.get_all_workout_data(start_date=from_date, end_date=to_date)
+    except Exception as e:
+        return {"error": f"Workout fetch failed: {e}", "synced": 0}
+
+    conn = get_connection()
+    synced = 0
+    for w in workouts:
+        wid = str(w.get("id"))
+        start = _parse_whoop_time(w.get("start"))
+        record_date = (start[:10] if start else None) or _date_from_ts(w.get("end"))
+        if not record_date:
+            continue
+        score = w.get("score") or {}
+        conn.execute(
+            """INSERT OR REPLACE INTO whoop_workouts
+               (id, record_date, sport_name, strain, avg_heart_rate,
+                max_heart_rate, kilojoule, distance_meter, altitude_gain_meter,
+                start_time, end_time, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now','localtime'))""",
+            (
+                wid,
+                record_date,
+                _sport_name(w.get("sport_id")),
+                score.get("strain"),
+                score.get("average_heart_rate"),
+                score.get("max_heart_rate"),
+                score.get("kilojoule"),
+                score.get("distance_meter"),
+                score.get("altitude_gain_meter"),
+                start or "",
+                _parse_whoop_time(w.get("end")) or "",
+            ),
+        )
+        synced += 1
+    conn.commit()
+    conn.close()
+    return {"synced": synced}
+
+
+def sync_all_whoop(days_back=30):
+    """Run all Whoop syncs and return combined stats."""
+    stats = {"sleep": sync_sleep_data(days_back),
+             "daily": sync_daily_metrics(days_back),
+             "workouts": sync_workouts(days_back)}
+    return stats

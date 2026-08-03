@@ -11,14 +11,21 @@ class Timeline {
         this.ctx = this.canvas.getContext('2d');
         this.records = [];
         this.meals = [];
+        this.periods = [];
+        this.daily = [];
+        this.steps = [];
+        this._periodByDate = {};
+        this._cycleInfo = null;
         this._grouped = {};
         this._mealByDate = {};
+        this._dailyByDate = {};
+        this._stepsByDate = {};
         this._dates = [];
         this.daysToShow = 14;
 
         // Layout constants
         this.LEFT_MARGIN = 90;
-        this.RIGHT_MARGIN = 60;
+        this.RIGHT_MARGIN = 104;
         this.TOP_OFFSET = 30;
         this.ROW_HEIGHT = 36;
         this.BAR_HEIGHT = 20;
@@ -72,6 +79,50 @@ class Timeline {
         this.render();
     }
 
+    /** Update period records and re-render (overlay on timeline). */
+    setPeriods(periods) {
+        this.periods = periods || [];
+        this._groupPeriodsByDate();
+        this.render();
+    }
+
+    /** Update cycle summary (ovulation prediction marker etc.). */
+    setCycleInfo(summary) {
+        this._cycleInfo = summary || null;
+        this.render();
+    }
+
+    /** Update Whoop daily metrics (recovery/strain/HR) and re-render. */
+    setDailyMetrics(daily) {
+        this.daily = daily || [];
+        this._dailyByDate = {};
+        for (const d of this.daily) {
+            const key = d.record_date || d.date;
+            if (key) this._dailyByDate[key] = d;
+        }
+        this.render();
+    }
+
+    /** Update Apple Health step series and re-render. */
+    setSteps(steps) {
+        this.steps = steps || [];
+        this._stepsByDate = {};
+        for (const s of this.steps) {
+            const key = s.date || s.metric_date;
+            if (key) this._stepsByDate[key] = s.value;
+        }
+        this.render();
+    }
+
+    _groupPeriodsByDate() {
+        this._periodByDate = {};
+        for (const p of this.periods) {
+            const d = p.record_date;
+            if (!this._periodByDate[d]) this._periodByDate[d] = [];
+            this._periodByDate[d].push(p);
+        }
+    }
+
     /* ── Grouping ─────────────────────────── */
 
     _groupByDate() {
@@ -94,6 +145,15 @@ class Timeline {
         if (!dtStr) return null;
         const match = dtStr.match(/^(\d{4}-\d{2}-\d{2})/);
         return match ? match[1] : null;
+    }
+
+    /** Return the weekday label (周一..周日) for a YYYY-MM-DD string. */
+    _weekdayLabel(dateStr) {
+        if (!dateStr) return '';
+        const d = new Date(dateStr + 'T12:00:00');
+        if (isNaN(d.getTime())) return '';
+        const names = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+        return names[d.getDay()];
     }
 
     /** Group meals by their meal_date for timeline display. */
@@ -119,6 +179,13 @@ class Timeline {
             if (!dates.includes(md)) {
                 dates.push(md);
             }
+        }
+        // Include dates that only have Whoop daily metrics or Apple Health steps
+        for (const d of Object.keys(this._dailyByDate)) {
+            if (!dates.includes(d)) dates.push(d);
+        }
+        for (const d of Object.keys(this._stepsByDate)) {
+            if (!dates.includes(d)) dates.push(d);
         }
         dates.sort().reverse();
 
@@ -183,12 +250,27 @@ class Timeline {
             const typeOrder = { night: 1, segment: 2, nap: 3 };
             dayRecords.sort((a, b) => (typeOrder[a.record_type] || 9) - (typeOrder[b.record_type] || 9));
 
-            // Date label
-            ctx.fillStyle = '#94a3b8';
+            // Date label (MM-DD + 周几，周末用暖色高亮)
             ctx.textAlign = 'right';
+            const weekday = this._weekdayLabel(date);
+            const isWeekend = (weekday === '周六' || weekday === '周日');
+            // 第一行：周几
+            ctx.fillStyle = isWeekend ? '#fbbf24' : '#94a3b8';
+            ctx.font = '11px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
+            ctx.fillText(weekday, this.LEFT_MARGIN - 8, y + this.BAR_Y_OFFSET + 6);
+            // 第二行：MM-DD
+            ctx.fillStyle = isWeekend ? '#fcd34d' : '#cbd5e1';
             ctx.font = '12px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
-            const dateDisplay = date.slice(5); // MM-DD
-            ctx.fillText(dateDisplay, this.LEFT_MARGIN - 8, y + this.BAR_Y_OFFSET + 14);
+            ctx.fillText(date.slice(5), this.LEFT_MARGIN - 8, y + this.BAR_Y_OFFSET + 21);
+
+            // Period + ovulation markers (left icon column)
+            const dayPeriods = this._periodByDate[date] || [];
+            if (dayPeriods.length > 0) {
+                this._drawPeriodMarker(ctx, dayPeriods, y);
+            }
+            if (this._cycleInfo && this._cycleInfo.ovulation_prediction === date) {
+                this._drawOvulationMarker(ctx, y);
+            }
 
             // Draw each record bar
             dayRecords.forEach((record) => {
@@ -199,6 +281,9 @@ class Timeline {
             if (dayMeals.length > 0) {
                 this._drawMealMarkers(ctx, dayMeals, y, pxPerMinute);
             }
+
+            // Daily metrics cluster (recovery dot + strain bar + steps) on the right
+            this._drawMetricCluster(ctx, date, y, containerWidth);
         });
 
         // Draw meal legend (top-right corner)
@@ -335,6 +420,99 @@ class Timeline {
             ctx.fillStyle = '#94a3b8';
             ctx.fillText(item.label, itemX + 6, legendY + 3);
         });
+    }
+
+    _drawPeriodMarker(ctx, periods, rowY) {
+        const hasStart = periods.some(p => p.is_period_start);
+        const flowRank = { none: 0, light: 1, normal: 2, heavy: 3 };
+        let maxFlow = 'none';
+        for (const p of periods) {
+            if ((flowRank[p.flow] || 0) > (flowRank[maxFlow] || 0)) maxFlow = p.flow;
+        }
+        const color = { none: '#94a3b8', light: '#f9a8d4', normal: '#f472b6', heavy: '#ec4899' }[maxFlow] || '#f472b6';
+        const x = 16, yDot = rowY + 9;
+        ctx.fillStyle = color;
+        ctx.globalAlpha = 0.95;
+        ctx.beginPath();
+        ctx.arc(x, yDot, 4.5, 0, Math.PI * 2);
+        ctx.fill();
+        if (hasStart) {
+            ctx.strokeStyle = '#f8fafc';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.arc(x, yDot, 6.5, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+        ctx.globalAlpha = 1.0;
+    }
+
+    _drawOvulationMarker(ctx, rowY) {
+        const x = 16, yDot = rowY + 22;
+        ctx.fillStyle = '#818cf8';
+        ctx.globalAlpha = 0.95;
+        ctx.beginPath();
+        ctx.arc(x, yDot, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1.0;
+    }
+
+    /* ── Daily metrics cluster (right margin) ── */
+
+    _recoveryColor(score) {
+        if (score == null) return null;
+        if (score >= 67) return '#4ade80';   // green
+        if (score >= 34) return '#fbbf24';   // yellow
+        return '#f87171';                     // red
+    }
+
+    _drawMetricCluster(ctx, date, rowY, containerWidth) {
+        const baseX = containerWidth - this.RIGHT_MARGIN + 10;
+        const daily = this._dailyByDate[date];
+        const steps = this._stepsByDate[date];
+        if (!daily && steps == null) return;
+
+        ctx.textAlign = 'left';
+        ctx.font = '10px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
+
+        // Recovery dot (color by zone)
+        if (daily && daily.recovery_score != null) {
+            const rc = this._recoveryColor(daily.recovery_score);
+            ctx.fillStyle = rc;
+            ctx.globalAlpha = 0.95;
+            ctx.beginPath();
+            ctx.arc(baseX + 2, rowY + 11, 5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1.0;
+            ctx.fillStyle = '#cbd5e1';
+            ctx.fillText(String(daily.recovery_score), baseX + 11, rowY + 14);
+        }
+
+        // Strain mini bar (0-21 scale)
+        if (daily && daily.strain != null) {
+            const maxW = 40;
+            const w = Math.max(2, Math.min(maxW, (daily.strain / 21) * maxW));
+            const barY = rowY + 20;
+            ctx.fillStyle = 'rgba(129,140,248,0.25)';
+            this._roundRect(ctx, baseX, barY, maxW, 6, 3);
+            ctx.fill();
+            ctx.fillStyle = '#818cf8';
+            this._roundRect(ctx, baseX, barY, w, 6, 3);
+            ctx.fill();
+            ctx.fillStyle = '#94a3b8';
+            ctx.fillText('S' + daily.strain.toFixed(1), baseX + maxW + 4, barY + 6);
+        }
+
+        // Steps glyph + number
+        if (steps != null) {
+            ctx.fillStyle = '#38bdf8';
+            ctx.fillText('\u{1F45F}' + this._fmtSteps(steps), baseX + 58, rowY + 14);
+        }
+    }
+
+    _fmtSteps(n) {
+        n = Number(n) || 0;
+        if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
+        return String(n);
     }
 
     _parseMealTime(timeStr) {
