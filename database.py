@@ -7,6 +7,7 @@ Set TURSO_URL and TURSO_AUTH_TOKEN to use Turso; otherwise falls back to local S
 import os
 import sqlite3
 import time
+import threading
 
 # Load .env file for local development
 from dotenv import load_dotenv
@@ -95,8 +96,12 @@ class _TursoConnectionWrapper:
         self._conn.commit()
 
     def close(self):
-        self._conn.commit()
-        self._conn.close()
+        # 连接复用（线程本地缓存）：不真正关闭底层连接，仅提交未决事务。
+        # 底层连接由所属线程持有，空闲断开时由 get_connection() 自动重建。
+        try:
+            self._conn.commit()
+        except Exception:
+            pass
 
 
 class _TursoCursorWrapper:
@@ -159,12 +164,17 @@ class CursorStub:
         self.description = tuple((col,) for col in columns)
 
 
-def get_connection():
-    """Return a new database connection (Turso or local SQLite).
+# 线程本地连接缓存:每个线程复用同一个连接,避免 Turso 网络库每请求都新建连接。
+_local = threading.local()
+
+
+def _create_connection():
+    """Create a fresh DB connection (Turso or local SQLite).
 
     Turso/Hrana connections occasionally fail with transient EOF/connection
-    errors (especially over long-distance links). Retry a few times before
-    giving up so a single network hiccup does not wedge the whole app.
+    errors. Wrap connect in _with_retry so a single network hiccup does not
+    wedge the app; the returned connection is reused per-thread by
+    get_connection() below.
     """
     if USE_TURSO:
         # The libsql Python package was renamed from `libsql_experimental` to
@@ -182,14 +192,47 @@ def get_connection():
             raw_conn.execute("PRAGMA foreign_keys=ON")
             return _TursoConnectionWrapper(raw_conn)
 
-        # _TursoRow already provides dict-like interface, no need for sqlite3.Row
+        # Turso/Hrana 连接抖动自动重试 + 线程本地复用
         return _with_retry(_connect, retries=3, delay=1.0)
     else:
         conn = sqlite3.connect(DB_PATH)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=5000")
         conn.execute("PRAGMA foreign_keys=ON")
+        # 连接复用:覆盖 close(),使各调用点的 conn.close() 不再真正关闭连接。
+        conn.close = lambda: None
         return conn
+
+
+def _ping(conn):
+    """Lightweight liveness check; raises if the connection is dead."""
+    conn.execute("SELECT 1")
+
+
+def get_connection():
+    """Return a thread-local, reused database connection.
+
+    Connections are cached per-thread and transparently recreated if they
+    have gone stale (e.g. an idle Turso connection dropped by the server).
+    Callers may keep calling conn.close() — it no longer tears down the
+    underlying connection, so it is safely reusable for the next request.
+    """
+    conn = getattr(_local, "conn", None)
+    if conn is None:
+        conn = _create_connection()
+        _local.conn = conn
+    else:
+        try:
+            _ping(conn)
+        except Exception:
+            try:
+                conn.close()
+            except Exception:
+                pass
+            conn = _create_connection()
+            _local.conn = conn
+    return conn
 
 
 def _get_schema_version(conn):

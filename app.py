@@ -29,6 +29,9 @@ app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 # 本地个人应用：模板随文件改动自动重载，改 index.html 也无需重启服务
 app.config['TEMPLATES_AUTO_RELOAD'] = True
 
+# 一次性安全告警标记（未配置 HEALTHKIT_API_KEY 时）
+_ingest_key_warned = False
+
 
 # ──────────────────────────────────────────────
 #  Page route
@@ -648,6 +651,19 @@ def healthkit_ingest():
       Apple-format: {"startDate":"2026-08-02", "type":"StepCount", "value":12345, "unit":"count"}
     Rejects nothing destructive; only inserts/updates health_metrics rows.
     """
+    # ── 共享密钥校验：防止局域网 / Tailscale 网内任意设备写入健康数据 ──
+    api_key = os.environ.get('HEALTHKIT_API_KEY')
+    if api_key:
+        provided = request.args.get('key') or request.headers.get('X-Api-Key')
+        if provided != api_key:
+            return jsonify({'error': 'Unauthorized: missing or invalid API key'}), 401
+    else:
+        global _ingest_key_warned
+        if not _ingest_key_warned:
+            print("[SECURITY] HEALTHKIT_API_KEY 未配置，/api/healthkit/ingest 接受无密钥写入。"
+                  "局域网 / Tailscale 内任意设备可写入健康数据，建议配置共享密钥。")
+            _ingest_key_warned = True
+
     from health_models import bulk_upsert_health_metrics, upsert_health_metric
     try:
         payload = request.get_json(force=True, silent=True)
