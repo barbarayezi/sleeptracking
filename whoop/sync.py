@@ -20,6 +20,8 @@ from whoop.client import WhoopClient
 
 def _parse_whoop_time(ts_str):
     """Parse Whoop ISO timestamp to our format YYYY-MM-DDTHH:MM."""
+    if not ts_str:
+        return None
     # Whoop timestamps: "2026-07-15T03:00:00.000Z" or similar
     try:
         dt = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
@@ -358,7 +360,8 @@ def sync_daily_metrics(days_back=30):
         for c in cycles:
             d = _date_from_ts(c.get("end"))
             if not d:
-                continue
+                # 进行中的周期 end 为 None → 归到今天（本地日期）
+                d = today.strftime("%Y-%m-%d")
             score = c.get("score") or {}
             row = daily.setdefault(d, {})
             row["strain"] = score.get("strain")
@@ -377,10 +380,11 @@ def sync_daily_metrics(days_back=30):
         recovery = client.get_all_recovery_data(start_date=from_date, end_date=to_date)
         for r in recovery:
             cid = r.get("cycle_id")
-            d = cycle_date.get(cid)
+            # 恢复分数优先用其自身创建时间（= 醒来当天的日期，与睡眠卡片一致）；
+            # 仅当 created_at 缺失时才退回 cycle 的 end 日期。
+            d = _date_from_ts(r.get("created_at"))
             if not d:
-                # Fallback: use recovery created_at date
-                d = _date_from_ts(r.get("created_at"))
+                d = cycle_date.get(cid)
             if not d:
                 continue
             score = r.get("score") or {}
