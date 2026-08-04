@@ -274,7 +274,7 @@ body {
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     color: var(--text);
-    font-size: 0.95rem;
+    font-size: 1rem;
     font-family: inherit;
     transition: border-color var(--transition);
 }
@@ -911,7 +911,8 @@ body {
         gap: 6px;
     }
     .cat-nav-item {
-        padding: 5px 12px;
+        padding: 8px 14px;
+        min-height: 40px;
         font-size: 0.8rem;
     }
     .category-group {
@@ -928,8 +929,10 @@ body {
         gap: 6px;
     }
     .date-navigator button {
-        font-size: 0.85rem;
-        padding: 4px 10px;
+        width: 44px;
+        height: 44px;
+        font-size: 1rem;
+        padding: 0;
     }
 
     .app-main {
@@ -955,8 +958,9 @@ body {
         font-size: 0.85rem;
     }
     .form-input, .form-textarea, .form-select {
-        font-size: 0.85rem;
-        padding: 8px 10px;
+        font-size: 1rem;
+        padding: 10px 12px;
+        min-height: 44px;
     }
     .radio-label, .checkbox-label {
         padding: 6px 12px;
@@ -999,8 +1003,9 @@ body {
         padding: 1px 6px;
     }
     .btn-record-edit, .btn-record-delete {
-        font-size: 0.8rem;
-        padding: 2px 6px;
+        font-size: 0.85rem;
+        padding: 8px 12px;
+        min-height: 40px;
     }
 
     /* Whoop detail */
@@ -1058,8 +1063,12 @@ body {
 
     /* Buttons */
     .btn {
-        font-size: 0.82rem;
-        padding: 8px 14px;
+        font-size: 0.9rem;
+        padding: 10px 18px;
+        min-height: 44px;
+    }
+    .btn-today {
+        min-height: 44px;
     }
 
     /* Footer */
@@ -1595,6 +1604,13 @@ body {
 
 /* Calendar responsive */
 @media (max-width: 640px) {
+    .cal-nav-btn {
+        width: 44px;
+        height: 44px;
+    }
+    .toggle-btn {
+        min-height: 40px;
+    }
     .calendar-cells {
         gap: 2px;
     }
@@ -1714,4 +1730,103 @@ body {
     position: absolute;
     left: 0;
     color: var(--accent);
+}
+
+/* ── Today at a glance (top card) ───────────── */
+.today-overview {
+    border-color: var(--accent);
+    background: linear-gradient(135deg, var(--bg-card), rgba(129, 140, 248, 0.06));
+}
+
+.today-overview h2 {
+    margin-bottom: 14px;
+}
+
+.today-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+}
+
+.today-cell {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-height: 88px;
+    justify-content: center;
+}
+
+.today-cell__label {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.today-cell__value {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+}
+
+.today-cell__value small {
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    margin-left: 4px;
+}
+
+.today-cell__hint {
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    line-height: 1.4;
+}
+
+.today-cell__value.good { color: var(--green); }
+.today-cell__value.average { color: var(--yellow); }
+.today-cell__value.poor { color: var(--red); }
+
+.today-skeleton {
+    color: var(--text-dim);
+    padding: 20px 0;
+    text-align: center;
+    grid-column: 1 / -1;
+}
+
+.today-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 16px;
+    flex-wrap: wrap;
+}
+
+.today-actions .btn {
+    font-size: 0.82rem;
+    padding: 8px 16px;
+    min-height: 40px;
+}
+
+.today-actions .form-message {
+    margin-left: 0;
+}
+
+@media (max-width: 640px) {
+    .today-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    .today-cell {
+        min-height: 80px;
+        padding: 12px 10px;
+    }
+    .today-cell__value {
+        font-size: 1.15rem;
+    }
 }

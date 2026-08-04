@@ -44,6 +44,14 @@ class _TursoConnectionWrapper:
         cur = self._conn.execute(sql, params)
         return _TursoCursorWrapper(cur, self.row_factory)
 
+    def executemany(self, sql, seq_of_params):
+        if seq_of_params is None:
+            seq_of_params = []
+        seq = [tuple(p) if not isinstance(p, (tuple, list)) else tuple(p)
+               for p in seq_of_params]
+        self._conn.executemany(sql, seq)
+        return self
+
     def commit(self):
         self._conn.commit()
 

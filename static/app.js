@@ -46,6 +46,9 @@ const App = {
         await this._refreshTimeline();
         await this.health.load();
 
+        // Load today-at-a-glance card
+        await this._loadToday();
+
         // Initialize Whoop integration
         this._initWhoop();
 
@@ -53,6 +56,12 @@ const App = {
         this._registerServiceWorker();
         this._initInstallPrompt();
         this._initCategoryNav();
+
+        // Lazily load heavy sections (health overview) when scrolled into view
+        this._initLazyHealth();
+
+        // Backup: export / import
+        this._initBackup();
     },
 
     /* ── Callbacks (called by child modules) ── */
@@ -60,16 +69,22 @@ const App = {
     onRecordSaved(record) {
         this._refreshTimeline();
         this.calendar.refresh();
+        this._loadToday();
+        this.health.refresh();
     },
 
     onRecordDeleted(dateStr) {
         this._refreshTimeline();
         this.calendar.refresh();
+        this._loadToday();
+        this.health.refresh();
     },
 
     onPeriodSaved() {
         this._refreshTimeline();
         this.calendar.refresh();
+        this._loadToday();
+        this.health.refresh();
     },
 
     onTimelineClick(dateStr) {
@@ -79,6 +94,87 @@ const App = {
         this.meal.loadDate(dateStr);
         this.period.loadDate(dateStr);
         this.calendar.showDate(dateStr);
+    },
+
+    /* ── Today at a glance ─────────────────── */
+
+    async _loadToday() {
+        try {
+            const resp = await fetch('/api/dashboard/today');
+            if (!resp.ok) return;
+            const d = await resp.json();
+            this._renderToday(d);
+        } catch (e) {
+            console.error('today load failed', e);
+        }
+    },
+
+    _renderToday(d) {
+        const grid = document.getElementById('today-grid');
+        if (!grid) return;
+        const qMap = { good: '良好', average: '一般', poor: '较差' };
+        const cMap = { early: '早睡', late: '晚睡' };
+        const typeNames = { breakfast: '早', lunch: '午', dinner: '晚', snack: '加' };
+        const sleepTypeNames = { night: '夜间', nap: '午睡', segment: '分段' };
+        const phaseNames = { menstrual: '经期', follicular: '卵泡期', ovulation: '排卵期', luteal: '黄体期' };
+        const cells = [];
+
+        // Last sleep
+        const sl = d.last_sleep;
+        if (sl) {
+            const when = (sl.record_date === this._todayStr()) ? '今晨' : (sl.record_date || '');
+            const tName = sleepTypeNames[sl.record_type] || '';
+            const qtxt = qMap[sl.quality] || sl.quality || '';
+            const hours = sl.hours != null ? sl.hours + '<small>h</small>' : '—';
+            cells.push(`<div class="today-cell">
+                <div class="today-cell__label">😴 最近睡眠</div>
+                <div class="today-cell__value ${sl.quality || ''}">${hours}</div>
+                <div class="today-cell__hint">${when}${tName ? ' · ' + tName : ''}${qtxt ? ' · ' + qtxt : ''}${cMap[sl.classification] ? ' · ' + cMap[sl.classification] : ''}${sl.device_score != null ? ' · 手环' + sl.device_score : ''}</div>
+            </div>`);
+        } else {
+            cells.push(`<div class="today-cell">
+                <div class="today-cell__label">😴 最近睡眠</div>
+                <div class="today-cell__value">—</div>
+                <div class="today-cell__hint">还没有记录，点下方「记录睡眠」</div>
+            </div>`);
+        }
+
+        // Today meals
+        const m = d.today_meals || { count: 0, types: [] };
+        const done = (m.types || []).map(t => typeNames[t] || t).join(' ');
+        cells.push(`<div class="today-cell">
+            <div class="today-cell__label">🍽️ 今日饮食</div>
+            <div class="today-cell__value">${m.count}<small>餐</small></div>
+            <div class="today-cell__hint">${m.count ? '已记：' + done : '今天还没记录饮食'}</div>
+        </div>`);
+
+        // Cycle
+        const cy = d.cycle || {};
+        let cycleVal = '—', cycleHint = '记录两次经期开始日可自动推算';
+        if (cy.has_data) {
+            cycleVal = phaseNames[cy.current_phase] || cy.current_phase || '—';
+            if (cy.days_until_next != null) {
+                if (cy.days_until_next > 0) cycleHint = '距下次经期约 ' + cy.days_until_next + ' 天';
+                else if (cy.days_until_next === 0) cycleHint = '预计今天来潮';
+                else cycleHint = '已过预测日 ' + (-cy.days_until_next) + ' 天';
+            }
+        }
+        cells.push(`<div class="today-cell">
+            <div class="today-cell__label">🌸 经期阶段</div>
+            <div class="today-cell__value">${cycleVal}</div>
+            <div class="today-cell__hint">${cycleHint}</div>
+        </div>`);
+
+        // Whoop sync
+        const w = d.whoop || {};
+        const whoopHint = w.last_sync_date ? '最近同步 ' + w.last_sync_date : '尚未同步手环数据';
+        cells.push(`<div class="today-cell">
+            <div class="today-cell__label">⌚ Whoop 同步</div>
+            <div class="today-cell__value">${w.authenticated ? '已连接' : '未连接'}</div>
+            <div class="today-cell__hint">${whoopHint}</div>
+        </div>`);
+
+        grid.innerHTML = cells.join('');
     },
 
     /* ── Date Navigation ──────────────────── */
@@ -166,8 +262,6 @@ const App = {
                 const steps = await stepsResp.json();
                 this.timeline.setSteps(steps);
             }
-            // Keep the health overview dashboard in sync (non-blocking)
-            if (this.health) this.health.refresh();
         } catch (err) {
             console.error('Failed to refresh timeline:', err);
         }
@@ -407,6 +501,75 @@ const App = {
             { rootMargin: '-140px 0px -60% 0px', threshold: 0 }
         );
         groups.forEach((g) => observer.observe(g));
+    },
+
+    _initLazyHealth() {
+        const section = document.querySelector('.health-overview-section');
+        if (!section || !this.health) return;
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach((e) => {
+                if (e.isIntersecting) {
+                    this.health.load();
+                    observer.disconnect();
+                }
+            });
+        }, { rootMargin: '200px 0px' });
+        observer.observe(section);
+    },
+
+    _initBackup() {
+        const exportBtn = document.getElementById('btn-export');
+        const importBtn = document.getElementById('btn-import');
+        const fileInput = document.getElementById('import-file');
+        const msg = document.getElementById('backup-msg');
+        if (exportBtn) {
+            exportBtn.addEventListener('click', () => {
+                const a = document.createElement('a');
+                a.href = '/api/export';
+                a.download = 'sleep-tracker-backup.json';
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+            });
+        }
+        if (importBtn && fileInput) {
+            importBtn.addEventListener('click', () => fileInput.click());
+            fileInput.addEventListener('change', async (e) => {
+                const file = e.target.files && e.target.files[0];
+                if (!file) return;
+                importBtn.disabled = true;
+                msg.textContent = '导入中…';
+                msg.className = 'form-message';
+                try {
+                    const text = await file.text();
+                    const resp = await fetch('/api/import', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: text
+                    });
+                    const data = await resp.json();
+                    if (data.ok) {
+                        const n = Object.keys(data.summary || {}).length;
+                        msg.textContent = '✅ 导入成功（' + n + ' 张表）';
+                        msg.className = 'form-message success';
+                        this.meal.loadDate(this.currentDate);
+                        this.period.loadDate(this.currentDate);
+                        this.form.loadDate(this.currentDate);
+                        this._refreshTimeline();
+                        this._loadToday();
+                    } else {
+                        msg.textContent = '❌ ' + (data.error || '导入失败');
+                        msg.className = 'form-message error';
+                    }
+                } catch (err) {
+                    msg.textContent = '❌ ' + err.message;
+                    msg.className = 'form-message error';
+                } finally {
+                    importBtn.disabled = false;
+                    fileInput.value = '';
+                }
+            });
+        }
     },
 
     /* ── Date Utilities ───────────────────── */

@@ -275,6 +275,7 @@ class MealManager {
                 this._setDefaultTime();
                 this._updateFormMode();
                 this._renderMealList();
+                if (typeof App !== 'undefined' && App._loadToday) App._loadToday();
             } else {
                 const err = await resp.json();
                 this._showMessage('❌ ' + (err.error || '保存失败'), 'error');
@@ -305,6 +306,7 @@ class MealManager {
                 }
 
                 this._renderMealList();
+                if (typeof App !== 'undefined' && App._loadToday) App._loadToday();
                 this._showMessage('已删除。', 'success');
             } else {
                 const err = await resp.json();

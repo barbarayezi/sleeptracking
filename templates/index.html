@@ -43,6 +43,22 @@
     <main class="app-main">
 
         <!-- ═══════════════════════════════════════ -->
+        <!--  TODAY AT A GLANCE (top card)             -->
+        <!-- ═══════════════════════════════════════ -->
+        <section class="card today-overview" id="today-overview">
+            <h2>🌅 今日速览</h2>
+            <div class="today-grid" id="today-grid">
+                <div class="today-skeleton">加载中…</div>
+            </div>
+            <div class="today-actions">
+                <button id="btn-export" class="btn btn-secondary" type="button">⬇️ 导出备份</button>
+                <button id="btn-import" class="btn btn-secondary" type="button">⬆️ 导入恢复</button>
+                <input type="file" id="import-file" accept="application/json" class="hidden">
+                <span id="backup-msg" class="form-message"></span>
+            </div>
+        </section>
+
+        <!-- ═══════════════════════════════════════ -->
         <!--  CATEGORY 1: 图表与展示                   -->
         <!-- ═══════════════════════════════════════ -->
         <div class="category-group" id="group-display">

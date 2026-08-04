@@ -4,6 +4,7 @@ All REST API routes for CRUD operations, statistics, and reports.
 """
 
 import os
+import sys
 import threading
 import urllib.parse
 from dotenv import load_dotenv
@@ -695,6 +696,148 @@ def _init_and_start(headless=False):
         _open_browser_after_delay(port)
 
     _start_server(port)
+
+
+# ──────────────────────────────────────────────
+#  Dashboard "Today at a glance" (aggregated top card)
+# ──────────────────────────────────────────────
+
+
+def _duration_hours(sleep_time, wake_time):
+    """Compute sleep duration in hours from two ISO datetime strings."""
+    try:
+        from datetime import datetime as _dt
+        st = _dt.fromisoformat(sleep_time)
+        wt = _dt.fromisoformat(wake_time)
+        delta = (wt - st).total_seconds() / 3600.0
+        if delta < 0:
+            delta += 24.0
+        return round(delta, 1)
+    except Exception:
+        return None
+
+
+@app.route('/api/dashboard/today', methods=['GET'])
+def dashboard_today():
+    """Aggregated snapshot for the top 'today at a glance' card."""
+    from database import get_connection
+    from datetime import datetime
+    from whoop.client import WhoopClient
+
+    today = datetime.now().strftime('%Y-%m-%d')
+    result = {
+        'last_sleep': None,
+        'today_meals': {'count': 0, 'types': []},
+        'cycle': period_models.get_cycle_summary(),
+        'whoop': {'authenticated': False, 'last_sync_date': None},
+        'generated_at': datetime.now().strftime('%Y-%m-%d %H:%M'),
+    }
+
+    conn = None
+    try:
+        conn = get_connection()
+        cur = conn.execute(
+            "SELECT record_date, record_type, sleep_time, wake_time, "
+            "classification, sleep_quality, device_score "
+            "FROM sleep_records ORDER BY record_date DESC, id DESC LIMIT 1"
+        )
+        row = cur.fetchone()
+        if row:
+            rec = {c: row[c] for c in row.keys()}
+            result['last_sleep'] = {
+                'record_date': rec.get('record_date'),
+                'record_type': rec.get('record_type'),
+                'hours': _duration_hours(rec.get('sleep_time'), rec.get('wake_time')),
+                'quality': rec.get('sleep_quality'),
+                'classification': rec.get('classification'),
+                'device_score': rec.get('device_score'),
+            }
+
+        cur = conn.execute(
+            "SELECT meal_type FROM meal_records WHERE meal_date = ?", (today,)
+        )
+        types = [r[0] for r in cur.fetchall()]
+        result['today_meals'] = {'count': len(types), 'types': types}
+
+        cur = conn.execute("SELECT MAX(record_date) FROM whoop_daily_metrics")
+        mx = cur.fetchone()
+        result['whoop']['last_sync_date'] = mx[0] if mx else None
+    except Exception as e:
+        print('[dashboard] db error:', e)
+    finally:
+        if conn:
+            conn.close()
+
+    try:
+        result['whoop']['authenticated'] = WhoopClient().is_authenticated()
+    except Exception:
+        result['whoop']['authenticated'] = False
+
+    return jsonify(result)
+
+
+@app.route('/api/export', methods=['GET'])
+def export_data():
+    """Dump all tables as a downloadable JSON backup."""
+    from database import get_connection
+    from datetime import datetime
+    TABLES = ['sleep_records', 'meal_records', 'period_records',
+              'whoop_daily_metrics', 'whoop_workouts', 'health_metrics', 'whoop_tokens']
+    conn = get_connection()
+    data = {'version': 1, 'exported_at': datetime.now().isoformat(), 'tables': {}}
+    try:
+        for t in TABLES:
+            cur = conn.execute(f"SELECT * FROM {t}")
+            out = []
+            for r in cur.fetchall():
+                if hasattr(r, 'keys'):
+                    out.append({k: r[k] for k in r.keys()})
+                else:
+                    out.append(dict(r))
+            data['tables'][t] = out
+    finally:
+        conn.close()
+    resp = jsonify(data)
+    resp.headers['Content-Disposition'] = (
+        'attachment; filename=sleep-tracker-backup.json'
+    )
+    return resp
+
+
+@app.route('/api/import', methods=['POST'])
+def import_data():
+    """Restore all tables from an exported JSON backup (upsert by primary key)."""
+    from database import get_connection
+    payload = request.get_json(force=True, silent=True)
+    if not isinstance(payload, dict) or 'tables' not in payload:
+        return jsonify({'error': '无效的备份文件'}), 400
+
+    TABLES = ['sleep_records', 'meal_records', 'period_records',
+              'whoop_daily_metrics', 'whoop_workouts', 'health_metrics', 'whoop_tokens']
+    summary = {}
+    conn = get_connection()
+    try:
+        for t in TABLES:
+            rows = payload['tables'].get(t)
+            if not isinstance(rows, list) or not rows:
+                continue
+            cols = list(rows[0].keys())
+            col_str = ','.join(cols)
+            placeholders = ','.join(['?'] * len(cols))
+            conn.executemany(
+                f"INSERT OR REPLACE INTO {t} ({col_str}) VALUES ({placeholders})",
+                [tuple(r.get(c) for c in cols) for r in rows]
+            )
+            summary[t] = len(rows)
+        conn.commit()
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+    return jsonify({'ok': True, 'summary': summary})
 
 
 if __name__ == '__main__':
