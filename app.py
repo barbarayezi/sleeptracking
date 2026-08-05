@@ -435,6 +435,46 @@ def whoop_status():
     return jsonify(result)
 
 
+def _get_meta(key, default=None):
+    """Read a key from the _meta table (cross-run state like last sync time)."""
+    try:
+        conn = get_connection()
+        try:
+            conn.execute("CREATE TABLE IF NOT EXISTS _meta (key TEXT PRIMARY KEY, value TEXT)")
+            cur = conn.execute("SELECT value FROM _meta WHERE key = ?", (key,))
+            row = cur.fetchone()
+        finally:
+            conn.close()
+        return row[0] if row else default
+    except Exception:
+        return default
+
+
+def _set_meta(key, value):
+    """Write a key to the _meta table (best-effort)."""
+    try:
+        conn = get_connection()
+        try:
+            conn.execute("CREATE TABLE IF NOT EXISTS _meta (key TEXT PRIMARY KEY, value TEXT)")
+            conn.execute(
+                "INSERT OR REPLACE INTO _meta (key, value) VALUES (?, ?)",
+                (str(key), str(value)),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception:
+        pass
+
+
+def _record_sync_time():
+    """Stamp the last successful Whoop sync time, stored in Beijing time (+8)
+    so it matches the timezone all other displayed times use in this app."""
+    from datetime import datetime, timedelta
+    beijing = datetime.now() + timedelta(hours=8)
+    _set_meta("last_whoop_sync", beijing.strftime("%Y-%m-%d %H:%M:%S"))
+
+
 @app.route('/api/whoop/sync', methods=['POST'])
 def whoop_sync():
     """Trigger a full Whoop data sync (sleep + daily metrics + workouts)."""
@@ -442,11 +482,43 @@ def whoop_sync():
     from whoop.sync import sync_all_whoop
     try:
         stats = sync_all_whoop(days_back=days_back)
+        _record_sync_time()
         return jsonify(stats)
     except PermissionError as e:
         return jsonify({'error': str(e), 'need_auth': True}), 401
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/sync-health')
+def sync_health():
+    """Report sync health facts: whether a given date's sleep arrived + last sync.
+
+    The 'date' param is supplied by the client in its own local timezone (browser)
+    to avoid server/UTC drift. The *decision* of whether a gap is suspected is left
+    to the client, which knows the user's real local time — this endpoint only
+    returns the raw facts.
+    """
+    from datetime import datetime, timedelta
+    date = request.args.get('date') or (datetime.now() + timedelta(hours=8)).strftime("%Y-%m-%d")
+    conn = get_connection()
+    try:
+        cur = conn.execute(
+            "SELECT COUNT(*) AS c FROM sleep_records WHERE record_date = ?", (date,)
+        )
+        row = cur.fetchone()
+        sleep_count = int(row[0]) if row else 0
+        cur2 = conn.execute("SELECT COUNT(*) AS c FROM sleep_records")
+        row2 = cur2.fetchone()
+        total = int(row2[0]) if row2 else 0
+    finally:
+        conn.close()
+    return jsonify({
+        "date": date,
+        "sleep_count": sleep_count,
+        "has_history": total > 0,
+        "last_sync_at": _get_meta("last_whoop_sync", None),
+    })
 
 
 @app.route('/api/whoop/daily')
@@ -660,6 +732,7 @@ def _background_sync_loop(interval_minutes=30):
     while True:
         try:
             stats = sync_all_whoop(days_back=2)
+            _record_sync_time()
             s = stats.get('sleep', {})
             d = stats.get('daily', {})
             w = stats.get('workouts', {})

@@ -365,10 +365,15 @@ const App = {
                         disconnectBtn.style.display = 'none';
                     }
                 } else {
-                    resultEl.textContent = `✅ 同步完成！新增 ${data.created} 条，更新 ${data.updated} 条`;
+                    if (data.created > 0 || data.updated > 0) {
+                        resultEl.textContent = `✅ 同步完成！新增 ${data.created} 条，更新 ${data.updated} 条`;
+                    } else {
+                        resultEl.textContent = '✅ 已是最新（Whoop 暂无新睡眠数据）';
+                    }
                     resultEl.className = 'form-message success';
                     await this._refreshTimeline();
                     await this.form.loadDate(this.currentDate);
+                    this._checkSyncHealth();
                 }
             } catch (err) {
                 resultEl.textContent = '同步失败: ' + err.message;
@@ -389,6 +394,7 @@ const App = {
                     if (!data.error) {
                         await this._refreshTimeline();
                         await this.form.loadDate(this.currentDate);
+                        this._checkSyncHealth();
                     }
                 } catch (_) {}
             }, 2000);
@@ -404,6 +410,7 @@ const App = {
                     if (!data.error) {
                         await this._refreshTimeline();
                         await this.form.loadDate(this.currentDate);
+                        this._checkSyncHealth();
                     }
                 } catch (_) {}
             }
@@ -425,6 +432,46 @@ const App = {
                 resultEl.className = 'form-message error';
             }
         });
+
+        // Initial health check (after we know connection status)
+        this._checkSyncHealth();
+    },
+
+    /* ── Sync health: detect missing sleep + show last sync ── */
+
+    async _checkSyncHealth() {
+        const alertEl = document.getElementById('whoop-gap-alert');
+        const lastSyncEl = document.getElementById('whoop-last-sync');
+        const statusText = document.getElementById('whoop-status-text');
+        if (!alertEl || !lastSyncEl) return;
+        try {
+            const resp = await fetch('/api/sync-health?date=' + this._todayStr());
+            if (!resp.ok) return;
+            const d = await resp.json();
+
+            // Always surface the last successful sync time
+            lastSyncEl.textContent = d.last_sync_at
+                ? '🕒 最后同步：' + d.last_sync_at
+                : '';
+
+            // A gap is only meaningful when Whoop is connected (sync is actually running)
+            const connected = statusText && statusText.textContent.includes('已连接');
+            const hour = new Date().getHours();
+            const gapSuspected = connected && d.has_history && d.sleep_count === 0 && hour >= 9;
+
+            if (gapSuspected) {
+                alertEl.innerHTML = '⚠️ <strong>今天（' + d.date +
+                    '）的睡眠数据还没收到。</strong>最常见原因是 Whoop 手环蓝牙断开、' +
+                    '没把数据同步到云端。请打开 Whoop App 确认手环已连接并手动同步一次；' +
+                    '重新同步后本应用会在几分钟内自动补上。';
+                alertEl.style.display = 'block';
+            } else {
+                alertEl.style.display = 'none';
+            }
+        } catch (e) {
+            // Non-fatal: never block the UI over a health-check failure
+            alertEl.style.display = 'none';
+        }
     },
 
     /* ── PWA: Service Worker & Install ────────── */

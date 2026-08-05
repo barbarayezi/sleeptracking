@@ -43,6 +43,11 @@
     <main class="app-main">
 
         <!-- ═══════════════════════════════════════ -->
+        <!--  SYNC GAP ALERT (auto, hidden by default) -->
+        <!-- ═══════════════════════════════════════ -->
+        <div id="whoop-gap-alert" class="whoop-gap-alert" style="display:none;"></div>
+
+        <!-- ═══════════════════════════════════════ -->
         <!--  TODAY AT A GLANCE (top card)             -->
         <!-- ═══════════════════════════════════════ -->
         <section class="card today-overview" id="today-overview">
@@ -159,6 +164,7 @@
                     <button id="btn-whoop-sync" class="btn" style="display:none;">🔄 同步数据</button>
                     <button id="btn-whoop-disconnect" class="btn btn-danger" style="display:none;">断开连接</button>
                     <div id="whoop-result" class="form-message" style="margin-top:8px;"></div>
+                    <div id="whoop-last-sync" class="whoop-meta"></div>
                 </div>
             </section>
         </div>
