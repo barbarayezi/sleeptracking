@@ -16,6 +16,12 @@ from reports import generate_report, get_quick_stats
 import models as models
 import meal_models as meal_models
 import period_models as period_models
+import time
+import socket
+
+# 全局 socket 超时：防止 Turso/libsql 连接在网络抖动时无限阻塞，
+# 否则会把整个 waitress 工作线程池拖死、导致服务器对任何请求都不响应。
+socket.setdefaulttimeout(15)
 
 app = Flask(__name__)
 # 本地个人应用：禁用静态文件客户端缓存，改完前端刷新即可见，无需手动清缓存
@@ -425,9 +431,13 @@ def whoop_callback():
 @app.route('/api/whoop/status')
 def whoop_status():
     """Check Whoop connection status."""
-    from whoop.client import WhoopClient
-    client = WhoopClient()
-    authenticated = client.is_authenticated()
+    try:
+        from whoop.client import WhoopClient
+        client = WhoopClient()
+        authenticated = client.is_authenticated()
+    except Exception as e:
+        # DB (Turso) hiccup should not be reported as "not connected"
+        return jsonify({'authenticated': False, 'db_error': True, 'error': str(e)})
     result = {'authenticated': authenticated}
     if authenticated:
         # Show masked client ID for reference
@@ -475,19 +485,71 @@ def _record_sync_time():
     _set_meta("last_whoop_sync", beijing.strftime("%Y-%m-%d %H:%M:%S"))
 
 
+# ── Async Whoop sync (non-blocking) ────────────
+# 同步要访问 Whoop 云端 + Turso 云数据库，可能很慢甚至卡住。
+# 若在 Web 请求线程里同步执行，会把 waitress 工作线程占满，导致服务器整体无响应。
+# 因此改为后台线程执行：Web 请求立即返回，前端轮询 /api/whoop/sync/status 取结果。
+
+_sync_state = {
+    "running": False,
+    "started_at": None,   # epoch seconds
+    "finished_at": None,  # epoch seconds
+    "result": None,
+    "error": None,
+}
+
+
+def _run_sync_job(days_back):
+    """Run the Whoop sync in a daemon thread; update _sync_state."""
+    global _sync_state
+    _sync_state["started_at"] = time.time()
+    _sync_state["error"] = None
+    _sync_state["result"] = None
+    try:
+        from whoop.sync import sync_all_whoop
+        stats = sync_all_whoop(days_back=days_back)
+        _sync_state["result"] = stats
+    except PermissionError as e:
+        _sync_state["error"] = {"message": str(e), "need_auth": True}
+    except Exception as e:
+        _sync_state["error"] = {"message": str(e), "need_auth": False}
+    else:
+        # 记录最后同步时间（best-effort，绝不能因它失败而覆盖成功的同步结果）
+        try:
+            _record_sync_time()
+        except Exception:
+            pass
+    finally:
+        _sync_state["running"] = False
+        _sync_state["finished_at"] = time.time()
+
+
 @app.route('/api/whoop/sync', methods=['POST'])
 def whoop_sync():
-    """Trigger a full Whoop data sync (sleep + daily metrics + workouts)."""
+    """Trigger a Whoop data sync. Runs in background; poll /api/whoop/sync/status."""
     days_back = request.args.get('days', 30, type=int)
-    from whoop.sync import sync_all_whoop
-    try:
-        stats = sync_all_whoop(days_back=days_back)
-        _record_sync_time()
-        return jsonify(stats)
-    except PermissionError as e:
-        return jsonify({'error': str(e), 'need_auth': True}), 401
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    if _sync_state["running"]:
+        return jsonify({"status": "already_running", "started_at": _sync_state["started_at"]})
+    _sync_state["running"] = True
+    _sync_state["started_at"] = time.time()
+    threading.Thread(target=_run_sync_job, args=(days_back,), daemon=True).start()
+    return jsonify({"status": "started", "started_at": _sync_state["started_at"]})
+
+
+@app.route('/api/whoop/sync/status')
+def whoop_sync_status():
+    """Poll the current/last Whoop sync job state."""
+    st = dict(_sync_state)
+    if st["started_at"]:
+        st["elapsed"] = int(time.time() - st["started_at"])
+    return jsonify(st)
+
+
+@app.route('/api/healthz')
+def healthz():
+    """Lightweight liveness probe — does NOT touch DB or Whoop.
+    Use this to tell 'server alive' from 'server wedged'."""
+    return jsonify({"status": "ok", "now": int(time.time())})
 
 
 @app.route('/api/sync-health')
@@ -501,18 +563,29 @@ def sync_health():
     """
     from datetime import datetime, timedelta
     date = request.args.get('date') or (datetime.now() + timedelta(hours=8)).strftime("%Y-%m-%d")
-    conn = get_connection()
     try:
-        cur = conn.execute(
-            "SELECT COUNT(*) AS c FROM sleep_records WHERE record_date = ?", (date,)
-        )
-        row = cur.fetchone()
-        sleep_count = int(row[0]) if row else 0
-        cur2 = conn.execute("SELECT COUNT(*) AS c FROM sleep_records")
-        row2 = cur2.fetchone()
-        total = int(row2[0]) if row2 else 0
-    finally:
-        conn.close()
+        conn = get_connection()
+        try:
+            cur = conn.execute(
+                "SELECT COUNT(*) AS c FROM sleep_records WHERE record_date = ?", (date,)
+            )
+            row = cur.fetchone()
+            sleep_count = int(row[0]) if row else 0
+            cur2 = conn.execute("SELECT COUNT(*) AS c FROM sleep_records")
+            row2 = cur2.fetchone()
+            total = int(row2[0]) if row2 else 0
+        finally:
+            conn.close()
+    except Exception as e:
+        # DB (Turso) unreachable — report facts we have, flag the DB error
+        return jsonify({
+            "date": date,
+            "sleep_count": 0,
+            "has_history": None,
+            "last_sync_at": _get_meta("last_whoop_sync", None),
+            "db_error": True,
+            "error": str(e),
+        })
     return jsonify({
         "date": date,
         "sleep_count": sleep_count,
@@ -702,7 +775,7 @@ def _start_server(port):
         print(f"  Binding: {host}:{port}")
         print("=" * 50)
         from waitress import serve
-        serve(app, host=host, port=port)
+        serve(app, host=host, port=port, threads=12)
     else:
         try:
             app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
@@ -730,6 +803,10 @@ def _background_sync_loop(interval_minutes=30):
 
     print(f"[auto-sync] Background sync enabled (every {interval_minutes} min).")
     while True:
+        # 避免与手动触发的同步重叠（手动同步会置 _sync_state['running']=True）
+        if _sync_state["running"]:
+            time.sleep(30)
+            continue
         try:
             stats = sync_all_whoop(days_back=2)
             _record_sync_time()

@@ -347,7 +347,35 @@ const App = {
             }
         });
 
-        // Sync button → trigger sync
+        // 轮询同步任务状态，直到完成（最多 ~120s）
+        this._pollSyncUntilDone = async (onProgress) => {
+            const deadline = Date.now() + 120000;
+            while (Date.now() < deadline) {
+                try {
+                    const resp = await fetch('/api/whoop/sync/status');
+                    const st = await resp.json();
+                    if (!st.running) return st;
+                    if (onProgress) onProgress(st.elapsed || 0);
+                } catch (_) {}
+                await new Promise(r => setTimeout(r, 2000));
+            }
+            return null;
+        };
+
+        // 静默自动同步（页面加载 / 定时）：触发后轮询，完成时刷新时间线
+        this._autoSync = async (days) => {
+            try {
+                await fetch(`/api/whoop/sync?days=${days}`, { method: 'POST' });
+                const st = await this._pollSyncUntilDone(null);
+                if (st && !st.error) {
+                    await this._refreshTimeline();
+                    await this.form.loadDate(this.currentDate);
+                    this._checkSyncHealth();
+                }
+            } catch (_) {}
+        };
+
+        // Sync button → trigger async sync (returns immediately, UI polls status)
         this._whoopSyncWithUI = async (days) => {
             syncBtn.textContent = '🔄 同步中...';
             syncBtn.disabled = true;
@@ -355,18 +383,28 @@ const App = {
             try {
                 const resp = await fetch(`/api/whoop/sync?days=${days}`, { method: 'POST' });
                 const data = await resp.json();
-                if (data.error) {
-                    resultEl.textContent = '同步失败: ' + data.error;
+                if (data.status === 'already_running') {
+                    resultEl.textContent = '同步已在进行中…';
+                }
+                const st = await this._pollSyncUntilDone((elapsed) => {
+                    resultEl.textContent = `🔄 同步中…（已 ${elapsed}s）`;
+                });
+                if (!st) {
+                    resultEl.textContent = '同步状态查询超时，请稍后刷新页面查看';
+                    resultEl.className = 'form-message';
+                } else if (st.error) {
+                    resultEl.textContent = '同步失败: ' + st.error.message;
                     resultEl.className = 'form-message error';
-                    if (data.need_auth) {
+                    if (st.error.need_auth) {
                         statusText.textContent = '❌ 未连接';
                         connectBtn.style.display = 'inline-block';
                         syncBtn.style.display = 'none';
                         disconnectBtn.style.display = 'none';
                     }
                 } else {
-                    if (data.created > 0 || data.updated > 0) {
-                        resultEl.textContent = `✅ 同步完成！新增 ${data.created} 条，更新 ${data.updated} 条`;
+                    const s = (st.result && st.result.sleep) || {};
+                    if ((s.created || 0) > 0 || (s.updated || 0) > 0) {
+                        resultEl.textContent = `✅ 同步完成！新增 ${s.created} 条，更新 ${s.updated} 条`;
                     } else {
                         resultEl.textContent = '✅ 已是最新（Whoop 暂无新睡眠数据）';
                     }
@@ -376,7 +414,7 @@ const App = {
                     this._checkSyncHealth();
                 }
             } catch (err) {
-                resultEl.textContent = '同步失败: ' + err.message;
+                resultEl.textContent = '同步请求失败: ' + err.message;
                 resultEl.className = 'form-message error';
             } finally {
                 syncBtn.textContent = '🔄 同步数据';
@@ -387,32 +425,13 @@ const App = {
 
         // Auto-sync: when page loads, silently sync recent data
         if (statusText.textContent.includes('已连接')) {
-            setTimeout(async () => {
-                try {
-                    const resp = await fetch('/api/whoop/sync?days=2', { method: 'POST' });
-                    const data = await resp.json();
-                    if (!data.error) {
-                        await this._refreshTimeline();
-                        await this.form.loadDate(this.currentDate);
-                        this._checkSyncHealth();
-                    }
-                } catch (_) {}
-            }, 2000);
+            setTimeout(() => this._autoSync(2), 2000);
         }
 
         // Periodic auto-sync every 5 minutes (near-real-time while page is open)
-        setInterval(async () => {
+        setInterval(() => {
             if (statusText.textContent.includes('已连接')) {
-                try {
-                    const resp = await fetch('/api/whoop/sync?days=2', { method: 'POST' });
-                    if (!resp.ok) return;
-                    const data = await resp.json();
-                    if (!data.error) {
-                        await this._refreshTimeline();
-                        await this.form.loadDate(this.currentDate);
-                        this._checkSyncHealth();
-                    }
-                } catch (_) {}
+                this._autoSync(2);
             }
         }, 5 * 60 * 1000);
 
