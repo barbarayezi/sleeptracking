@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
 from flask import Flask, request, jsonify, render_template, redirect
-from database import init_db
+from database import init_db, get_connection
 from reports import generate_report, get_quick_stats
 import models as models
 import meal_models as meal_models
@@ -562,6 +562,7 @@ def sync_health():
     returns the raw facts.
     """
     from datetime import datetime, timedelta
+    from database import get_connection
     date = request.args.get('date') or (datetime.now() + timedelta(hours=8)).strftime("%Y-%m-%d")
     try:
         conn = get_connection()

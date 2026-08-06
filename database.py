@@ -123,7 +123,12 @@ class CursorStub:
 def get_connection():
     """Return a new database connection (Turso or local SQLite)."""
     if USE_TURSO:
-        import libsql_experimental as libsql
+        # The libsql Python package was renamed from `libsql_experimental` to
+        # `libsql` at v0.1.x. Support both so the app runs on either install.
+        try:
+            import libsql_experimental as libsql
+        except ImportError:
+            import libsql
 
         raw_conn = libsql.connect(
             database=TURSO_URL,
