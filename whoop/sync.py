@@ -202,17 +202,21 @@ def sync_sleep_data(days_back=30):
             "skin_temp_celsius": recovery.get("skin_temp_celsius"),
         }
 
-        # Check if record exists
+        # Check if a Whoop night record already exists for the same sleep start.
+        # Whoop may revise the wake_time of the same sleep session later, so we
+        # match by (sleep_time, record_date, record_type) and update wake_time too.
         cursor = conn.execute(
-            "SELECT id, device_score FROM sleep_records WHERE sleep_time = ? AND wake_time = ?",
-            (sleep_start, sleep_end),
+            "SELECT id, device_score FROM sleep_records WHERE sleep_time = ? AND record_date = ? AND record_type = ?",
+            (sleep_start, record_date, record_type),
         )
         existing = cursor.fetchone()
 
         if existing:
             updates = []
             params = []
-            # Basic fields
+            # Basic fields — always update wake_time so a revised end time wins
+            updates.append("wake_time = ?")
+            params.append(sleep_end)
             if sleep_score is not None:
                 updates.append("device_score = ?")
                 params.append(sleep_score)
@@ -222,9 +226,6 @@ def sync_sleep_data(days_back=30):
             if quality:
                 updates.append("sleep_quality = ?")
                 params.append(quality)
-            if record_type:
-                updates.append("record_type = ?")
-                params.append(record_type)
             # Whoop health metrics
             for col in ("respiratory_rate", "sleep_efficiency", "sleep_consistency",
                         "deep_sleep_minutes", "light_sleep_minutes", "rem_sleep_minutes",
@@ -235,13 +236,12 @@ def sync_sleep_data(days_back=30):
                 if val is not None:
                     updates.append(f"{col} = ?")
                     params.append(val)
-            if updates:
-                params.append(existing["id"])
-                conn.execute(
-                    f"UPDATE sleep_records SET {', '.join(updates)} WHERE id = ?",
-                    params,
-                )
-                stats["updated"] += 1
+            params.append(existing["id"])
+            conn.execute(
+                f"UPDATE sleep_records SET {', '.join(updates)} WHERE id = ?",
+                params,
+            )
+            stats["updated"] += 1
         else:
             sleep_problems = []
             if quality and quality != "good" and sleep_score is not None and sleep_score < 40:
