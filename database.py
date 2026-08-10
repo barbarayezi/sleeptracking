@@ -6,6 +6,7 @@ Set TURSO_URL and TURSO_AUTH_TOKEN to use Turso; otherwise falls back to local S
 
 import os
 import sqlite3
+import time
 
 # Load .env file for local development
 from dotenv import load_dotenv
@@ -25,6 +26,40 @@ else:
     USE_TURSO = False
 
 
+def _is_retryable_db_error(exc):
+    """Return True if exc is a transient Turso/Hrana network error worth retrying."""
+    msg = str(exc).lower()
+    return any(
+        phrase in msg
+        for phrase in (
+            "hrana",
+            "unexpected eof",
+            "eof during chunk",
+            "connection reset",
+            "connection refused",
+            "broken pipe",
+            "timeout",
+            "timed out",
+            "temporarily unavailable",
+        )
+    )
+
+
+def _with_retry(fn, retries=3, delay=1.0):
+    """Call fn, retrying on transient Turso/Hrana errors with exponential backoff."""
+    last_exc = None
+    for attempt in range(retries):
+        try:
+            return fn()
+        except Exception as exc:
+            last_exc = exc
+            if not _is_retryable_db_error(exc):
+                raise
+            if attempt < retries - 1:
+                time.sleep(delay * (2 ** attempt))
+    raise last_exc
+
+
 class _TursoConnectionWrapper:
     """
     Wraps a libsql-experimental connection to behave like a sqlite3 connection
@@ -41,8 +76,12 @@ class _TursoConnectionWrapper:
             params = ()
         elif isinstance(params, (list, dict)):
             params = tuple(params)
-        cur = self._conn.execute(sql, params)
-        return _TursoCursorWrapper(cur, self.row_factory)
+
+        def _do():
+            cur = self._conn.execute(sql, params)
+            return _TursoCursorWrapper(cur, self.row_factory)
+
+        return _with_retry(_do, retries=3, delay=1.0)
 
     def executemany(self, sql, seq_of_params):
         if seq_of_params is None:
@@ -121,7 +160,12 @@ class CursorStub:
 
 
 def get_connection():
-    """Return a new database connection (Turso or local SQLite)."""
+    """Return a new database connection (Turso or local SQLite).
+
+    Turso/Hrana connections occasionally fail with transient EOF/connection
+    errors (especially over long-distance links). Retry a few times before
+    giving up so a single network hiccup does not wedge the whole app.
+    """
     if USE_TURSO:
         # The libsql Python package was renamed from `libsql_experimental` to
         # `libsql` at v0.1.x. Support both so the app runs on either install.
@@ -130,14 +174,16 @@ def get_connection():
         except ImportError:
             import libsql
 
-        raw_conn = libsql.connect(
-            database=TURSO_URL,
-            auth_token=TURSO_AUTH_TOKEN,
-        )
-        raw_conn.execute("PRAGMA foreign_keys=ON")
-        conn = _TursoConnectionWrapper(raw_conn)
+        def _connect():
+            raw_conn = libsql.connect(
+                database=TURSO_URL,
+                auth_token=TURSO_AUTH_TOKEN,
+            )
+            raw_conn.execute("PRAGMA foreign_keys=ON")
+            return _TursoConnectionWrapper(raw_conn)
+
         # _TursoRow already provides dict-like interface, no need for sqlite3.Row
-        return conn
+        return _with_retry(_connect, retries=3, delay=1.0)
     else:
         conn = sqlite3.connect(DB_PATH)
         conn.row_factory = sqlite3.Row

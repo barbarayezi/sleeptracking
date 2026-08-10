@@ -64,6 +64,18 @@ const App = {
         this._initBackup();
     },
 
+    /** Fetch with a timeout so a wedged backend does not leave the UI hanging forever. */
+    async _fetchWithTimeout(url, options = {}, timeoutMs = 10000) {
+        const controller = new AbortController();
+        const id = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+            const resp = await fetch(url, { ...options, signal: controller.signal });
+            return resp;
+        } finally {
+            clearTimeout(id);
+        }
+    },
+
     /* ── Callbacks (called by child modules) ── */
 
     onRecordSaved(record) {
@@ -352,7 +364,7 @@ const App = {
             const deadline = Date.now() + 120000;
             while (Date.now() < deadline) {
                 try {
-                    const resp = await fetch('/api/whoop/sync/status');
+                    const resp = await this._fetchWithTimeout('/api/whoop/sync/status', {}, 5000);
                     const st = await resp.json();
                     if (!st.running) return st;
                     if (onProgress) onProgress(st.elapsed || 0);
@@ -365,7 +377,7 @@ const App = {
         // 静默自动同步（页面加载 / 定时）：触发后轮询，完成时刷新时间线
         this._autoSync = async (days) => {
             try {
-                await fetch(`/api/whoop/sync?days=${days}`, { method: 'POST' });
+                await this._fetchWithTimeout(`/api/whoop/sync?days=${days}`, { method: 'POST' }, 8000);
                 const st = await this._pollSyncUntilDone(null);
                 if (st && !st.error) {
                     await this._refreshTimeline();
@@ -381,7 +393,7 @@ const App = {
             syncBtn.disabled = true;
             resultEl.textContent = '';
             try {
-                const resp = await fetch(`/api/whoop/sync?days=${days}`, { method: 'POST' });
+                const resp = await this._fetchWithTimeout(`/api/whoop/sync?days=${days}`, { method: 'POST' }, 8000);
                 const data = await resp.json();
                 if (data.status === 'already_running') {
                     resultEl.textContent = '同步已在进行中…';
@@ -414,7 +426,11 @@ const App = {
                     this._checkSyncHealth();
                 }
             } catch (err) {
-                resultEl.textContent = '同步请求失败: ' + err.message;
+                if (err.name === 'AbortError') {
+                    resultEl.textContent = '同步请求超时：后端未响应，请检查后端是否卡住或重启服务';
+                } else {
+                    resultEl.textContent = '同步请求失败: ' + err.message;
+                }
                 resultEl.className = 'form-message error';
             } finally {
                 syncBtn.textContent = '🔄 同步数据';

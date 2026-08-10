@@ -498,6 +498,27 @@ _sync_state = {
     "error": None,
 }
 
+# 后台同步任务如果超过这么久仍未结束，就视为卡死/丢失，允许前端重新触发。
+_SYNC_JOB_MAX_AGE_SECONDS = 5 * 60
+
+
+def _is_sync_stale():
+    """Return True if a previously-started sync is suspiciously old."""
+    if not _sync_state["running"] or not _sync_state["started_at"]:
+        return False
+    return (time.time() - _sync_state["started_at"]) > _SYNC_JOB_MAX_AGE_SECONDS
+
+
+def _reset_sync_state():
+    """Mark any running sync as finished-with-timeout."""
+    _sync_state["running"] = False
+    _sync_state["finished_at"] = time.time()
+    if _sync_state["error"] is None and _sync_state["result"] is None:
+        _sync_state["error"] = {
+            "message": "同步任务超时未完成，请检查后端日志或重启服务",
+            "need_auth": False,
+        }
+
 
 def _run_sync_job(days_back):
     """Run the Whoop sync in a daemon thread; update _sync_state."""
@@ -529,7 +550,10 @@ def whoop_sync():
     """Trigger a Whoop data sync. Runs in background; poll /api/whoop/sync/status."""
     days_back = request.args.get('days', 30, type=int)
     if _sync_state["running"]:
-        return jsonify({"status": "already_running", "started_at": _sync_state["started_at"]})
+        if _is_sync_stale():
+            _reset_sync_state()
+        else:
+            return jsonify({"status": "already_running", "started_at": _sync_state["started_at"]})
     _sync_state["running"] = True
     _sync_state["started_at"] = time.time()
     threading.Thread(target=_run_sync_job, args=(days_back,), daemon=True).start()
