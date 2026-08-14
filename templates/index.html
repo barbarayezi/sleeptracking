@@ -6,7 +6,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="睡眠追踪">
-    <meta name="theme-color" content="#1e293b">
+    <meta name="theme-color" content="#2A2018">
     <link rel="manifest" href="/static/manifest.json">
     <link rel="apple-touch-icon" href="/static/icon.svg">
     <title>睡眠追踪器 — Sleep Tracker</title>
@@ -19,15 +19,16 @@
     <!-- ═══════════════════════════════════════════ -->
     <div class="app-topbar">
         <header class="app-header">
-            <h1>🌙 睡眠追踪器</h1>
+            <h1><span class="brand-mark">🌙</span> 睡眠追踪</h1>
             <div class="header-right">
                 <div class="date-navigator">
                     <button id="btn-prev-day" title="前一天">&larr;</button>
                     <span id="current-date-label">今天</span>
                     <button id="btn-next-day" title="后一天">&rarr;</button>
-                    <button id="btn-today" class="btn-today">今天</button>
-                </div>
-                <button id="btn-install" class="btn-install-pwa hidden" title="安装到桌面">
+                        <button id="btn-today" class="btn-today">今天</button>
+                    </div>
+                    <button id="btn-quick-record" class="btn-record-quick" type="button"><span class="plus">＋</span> 记录睡眠</button>
+                    <button id="btn-install" class="btn-install-pwa hidden" title="安装到桌面">
                     <span class="install-icon">📲</span> 安装应用
                 </button>
             </div>
@@ -37,6 +38,7 @@
             <a href="#group-display" class="cat-nav-item active">📊 图表展示</a>
             <a href="#group-actions" class="cat-nav-item">🔗 数据同步</a>
             <a href="#group-forms" class="cat-nav-item">✍️ 手动记录</a>
+            <a href="#group-agent" class="cat-nav-item">💬 AI 分析</a>
         </nav>
     </div>
 
@@ -50,12 +52,53 @@
         <!-- ═══════════════════════════════════════ -->
         <!--  TODAY AT A GLANCE (top card)             -->
         <!-- ═══════════════════════════════════════ -->
-        <section class="card today-overview" id="today-overview">
-            <h2>🌅 今日速览</h2>
-            <div class="today-grid" id="today-grid">
-                <div class="today-skeleton">加载中…</div>
+        <!-- ═══════════════════════════════════════ -->
+        <!--  HERO · 昨晚睡眠（设计稿首页重构）          -->
+        <!-- ═══════════════════════════════════════ -->
+        <section class="card hero-overview" id="hero-overview">
+            <div class="hero-card">
+                <div class="hero-left">
+                    <div class="hero-label" id="hero-label">昨晚睡眠</div>
+                    <div class="hero-duration" id="hero-duration">—</div>
+                    <div class="hero-sub" id="hero-sub">加载中…</div>
+                    <div class="hero-pill" id="hero-pill" hidden>
+                        <span class="hero-pill-dot"></span>
+                        <span id="hero-pill-text">恢复 —</span>
+                    </div>
+                </div>
+                <div class="hero-ring" id="hero-ring"></div>
             </div>
-            <div class="today-actions">
+
+            <div class="metric-chips" id="metric-chips">
+                <div class="metric-chip metric-chip--skeleton">加载中…</div>
+            </div>
+
+            <div class="hero-lower">
+                <div class="hero-week-card">
+                    <div class="hero-week-head">
+                        <span class="hero-week-title">本周睡眠</span>
+                        <span class="hero-week-hint">按质量着色 · 今日高亮</span>
+                    </div>
+                    <div class="hero-week-strip" id="hero-week-strip"></div>
+                    <div class="hero-week-legend">
+                        <span><i class="dot dot--good"></i>良好</span>
+                        <span><i class="dot dot--average"></i>一般</span>
+                        <span><i class="dot dot--poor"></i>较差</span>
+                    </div>
+                </div>
+
+                <div class="hero-whoop-card">
+                    <div class="hero-week-head">
+                        <span class="hero-week-title">健康总览 · Whoop</span>
+                        <span class="hero-week-hint" id="hero-whoop-date"></span>
+                    </div>
+                    <div class="hero-whoop-rows" id="hero-whoop-rows">
+                        <div class="hero-whoop-empty">尚未同步手环数据</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="hero-actions">
                 <button id="btn-export" class="btn btn-secondary" type="button">⬇️ 导出备份</button>
                 <button id="btn-import" class="btn btn-secondary" type="button">⬆️ 导入恢复</button>
                 <input type="file" id="import-file" accept="application/json" class="hidden">
@@ -559,6 +602,34 @@
             </section>
         </div>
 
+        <!-- ═══════════════════════════════════════ -->
+        <!--  CATEGORY 4: AI 分析 (嵌入 Agent 应用)     -->
+        <!-- ═══════════════════════════════════════ -->
+        <div class="category-group" id="group-agent">
+            <div class="category-banner"><span>💬</span> AI 分析</div>
+
+            <section class="card ai-agent-section">
+                <h2>🤖 健康数据分析师</h2>
+                <p class="section-hint">用自然语言随时分析你的睡眠 / Whoop 恢复 / 苹果健康 / 饮食数据。下方即内嵌的 AI 助手（需 Agent 服务运行在 5188 端口）。</p>
+                <div class="ai-agent-frame-wrap">
+                    <div id="ai-agent-placeholder" class="ai-agent-placeholder">
+                        <div class="ai-agent-loading">⏳ 正在加载 AI 助手…</div>
+                        <p class="ai-agent-tip">若长时间无响应，请确认 Agent 服务已启动：<br>
+                        <code>cd health-agent &amp;&amp; npm run dev</code><br>
+                        并访问 <a href="http://localhost:5188" target="_blank" rel="noopener">http://localhost:5188</a> 自检。</p>
+                    </div>
+                    <!-- iframe 由 app.js 懒加载，src 指向 Agent 应用 -->
+                    <iframe
+                        id="ai-agent-frame"
+                        class="ai-agent-frame hidden"
+                        title="健康数据分析师"
+                        loading="lazy"
+                        allow="clipboard-write"
+                        referrerpolicy="no-referrer"></iframe>
+                </div>
+            </section>
+        </div>
+
     </main>
 
     <footer class="app-footer">
@@ -572,6 +643,21 @@
     <script src="/static/timeline.js?v=3"></script>
     <script src="/static/reports.js?v=3"></script>
     <script src="/static/healthOverview.js?v=3"></script>
-    <script src="/static/app.js?v=3"></script>
+    <script src="/static/hero.js?v=1"></script>
+    <script src="/static/app.js?v=5"></script>
+    <script>
+        (function () {
+            var btn = document.getElementById('btn-quick-record');
+            if (btn) {
+                btn.addEventListener('click', function () {
+                    var form = document.getElementById('sleep-form');
+                    if (!form) return;
+                    form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    var t = document.getElementById('sleep-time');
+                    if (t) setTimeout(function () { t.focus(); }, 450);
+                });
+            }
+        })();
+    </script>
 </body>
 </html>

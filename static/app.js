@@ -46,8 +46,8 @@ const App = {
         await this._refreshTimeline();
         await this.health.load();
 
-        // Load today-at-a-glance card
-        await this._loadToday();
+        // Load Hero 首页概览（昨晚睡眠 + 指标芯片 + 本周/Whoop 总览）
+        if (window.HeroOverview) HeroOverview.refresh();
 
         // Initialize Whoop integration
         this._initWhoop();
@@ -59,6 +59,9 @@ const App = {
 
         // Lazily load heavy sections (health overview) when scrolled into view
         this._initLazyHealth();
+
+        // Lazily embed the AI Agent iframe (health-agent on :5188) when scrolled near
+        this._initAgentFrame();
 
         // Backup: export / import
         this._initBackup();
@@ -81,21 +84,21 @@ const App = {
     onRecordSaved(record) {
         this._refreshTimeline();
         this.calendar.refresh();
-        this._loadToday();
+        if (window.HeroOverview) HeroOverview.refresh();
         this.health.refresh();
     },
 
     onRecordDeleted(dateStr) {
         this._refreshTimeline();
         this.calendar.refresh();
-        this._loadToday();
+        if (window.HeroOverview) HeroOverview.refresh();
         this.health.refresh();
     },
 
     onPeriodSaved() {
         this._refreshTimeline();
         this.calendar.refresh();
-        this._loadToday();
+        if (window.HeroOverview) HeroOverview.refresh();
         this.health.refresh();
     },
 
@@ -383,6 +386,7 @@ const App = {
                     await this._refreshTimeline();
                     await this.form.loadDate(this.currentDate);
                     this._checkSyncHealth();
+                    if (window.HeroOverview) HeroOverview.refresh();
                 }
             } catch (_) {}
         };
@@ -560,6 +564,53 @@ const App = {
     },
 
     /* ── Category Nav (scroll-spy) ──────────── */
+    _initAgentFrame() {
+        const frame = document.getElementById('ai-agent-frame');
+        const placeholder = document.getElementById('ai-agent-placeholder');
+        if (!frame || frame.dataset.loaded) return;
+
+        // iframe 地址：同源用 5188 端口；Tailscale/外部访问时沿用当前 host 的 5188
+        const agentUrl = (() => {
+            try {
+                const u = new URL(window.location.href);
+                return `${u.protocol}//${u.hostname}:5188/`;
+            } catch (e) {
+                return 'http://localhost:5188/';
+            }
+        })();
+
+        const load = () => {
+            if (frame.dataset.loaded) return;
+            frame.dataset.loaded = '1';
+            frame.src = agentUrl;
+            frame.addEventListener('load', () => {
+                frame.classList.remove('hidden');
+                if (placeholder) placeholder.classList.add('hidden');
+            });
+            frame.addEventListener('error', () => {
+                if (placeholder) {
+                    placeholder.querySelector('.ai-agent-loading').textContent = '⚠️ 无法连接 AI 助手服务';
+                }
+            });
+        };
+
+        //  IntersectionObserver：滚到该区块附近才加载 iframe
+        const section = document.getElementById('group-agent');
+        if (!section || !('IntersectionObserver' in window)) {
+            load();
+            return;
+        }
+        const io = new IntersectionObserver((entries) => {
+            entries.forEach((e) => {
+                if (e.isIntersecting) {
+                    load();
+                    io.disconnect();
+                }
+            });
+        }, { rootMargin: '300px 0px' });
+        io.observe(section);
+    },
+
     _initCategoryNav() {
         const navItems = Array.from(document.querySelectorAll('.cat-nav-item'));
         if (!navItems.length || !('IntersectionObserver' in window)) return;

@@ -10,6 +10,10 @@ venv/
 .last_started
 .playwright-mcp/
 
+# Third-party sub-project: independent Node app with its own node_modules,
+# build cache (*.tsbuildinfo) and .env — not part of this repo's source
+health-agent/
+
 # Tool / IDE generated state (machine-specific, not source code)
 .qoder/
 .workbuddy/

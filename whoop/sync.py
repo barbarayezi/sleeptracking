@@ -477,7 +477,29 @@ def sync_workouts(days_back=30):
 
 def sync_all_whoop(days_back=30):
     """Run all Whoop syncs and return combined stats."""
-    stats = {"sleep": sync_sleep_data(days_back),
-             "daily": sync_daily_metrics(days_back),
-             "workouts": sync_workouts(days_back)}
+    sleep_stats = sync_sleep_data(days_back)
+    daily_stats = sync_daily_metrics(days_back)
+    workout_stats = sync_workouts(days_back)
+
+    # Aggregate top-level counts for the UI message.
+    created = (
+        sleep_stats.get("created", 0)
+        + daily_stats.get("synced", 0)
+        + workout_stats.get("synced", 0)
+    )
+    updated = sleep_stats.get("updated", 0)
+    synced = (
+        sleep_stats.get("synced", 0)
+        + daily_stats.get("synced", 0)
+        + workout_stats.get("synced", 0)
+    )
+
+    stats = {
+        "created": created,
+        "updated": updated,
+        "synced": synced,
+        "sleep": sleep_stats,
+        "daily": daily_stats,
+        "workouts": workout_stats,
+    }
     return stats
