@@ -1,11 +1,16 @@
 /**
  * Service Worker — Sleep Tracker PWA
- * 策略：所有请求 network-first（网络可用时永远取最新），离线才回退缓存。
- * 新版本激活时强制已打开的页面自动重新加载，确保用户看到的永远是最新版，
- * 无需手动清缓存 / 开 DevTools。
+ *
+ * 策略（针对「代码已更新但浏览器顽固显示旧样式」的缓存陷阱）：
+ *  - 静态资源走 network-first，且每次强制向服务器验证（cache:'no-cache'），
+ *    绕过任何 HTTP / SW 旧缓存，代码更新后浏览器立刻看到最新 CSS/JS，无需手动清缓存。
+ *  - 缓存版本号随发布递增（每次改 UI 必须 +1），activate 阶段删除所有旧缓存，
+ *    彻底清掉陈旧资源（否则旧 style.css 会一直被 SW 回放）。
+ *  - 新 SW 安装即 skipWaiting，activate 即 clients.claim 并强制已打开页面重新导航，
+ *    确保用户看到的永远是最新版。
  */
 
-const CACHE_NAME = 'sleep-tracker-v3';
+const CACHE_NAME = 'sleep-tracker-v4';   // ← 每次发布改 UI 必须 +1，否则旧缓存不会被清
 
 // Install — 直接 skipWaiting，让新 SW 尽快接管
 self.addEventListener('install', (event) => {
@@ -33,12 +38,13 @@ self.addEventListener('activate', (event) => {
     })());
 });
 
-// Fetch — network-first，离线时回退缓存（ignoreSearch 让 ?v= 变体共用一份缓存）
+// Fetch — 仅拦截 GET；network-first 且强制向服务器验证，离线才回退缓存
 self.addEventListener('fetch', (event) => {
+    if (event.request.method !== 'GET') return;   // 非 GET 不拦截，避免干扰接口请求
     event.respondWith(
-        fetch(event.request)
+        fetch(event.request, { cache: 'no-cache' })   // 每次都向服务器拿最新，绕过缓存层
             .then((response) => {
-                if (response.ok && event.request.method === 'GET') {
+                if (response.ok) {
                     const clone = response.clone();
                     caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
                 }

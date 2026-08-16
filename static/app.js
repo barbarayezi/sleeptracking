@@ -517,7 +517,7 @@ const App = {
 
     _registerServiceWorker() {
         if (!('serviceWorker' in navigator)) return;
-        navigator.serviceWorker.register('/sw.js')
+        navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' })
             .then((reg) => {
                 console.log('SW registered, scope:', reg.scope);
                 // 主动检查更新；发现新 SW 时尝试让它立即生效
