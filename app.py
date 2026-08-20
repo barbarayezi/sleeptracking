@@ -33,6 +33,20 @@ app.config['TEMPLATES_AUTO_RELOAD'] = True
 _ingest_key_warned = False
 
 
+@app.after_request
+def _set_no_cache_headers(response):
+    """禁止浏览器/Service Worker 缓存所有 GET JSON API 响应。
+
+    动态数据（记录、Whoop 指标等）如果被缓存，会出现‘代码已更新但页面仍显示旧数据’
+    的诡异现象。静态文件由 send_static_file 自行处理，不受影响。
+    """
+    if request.method == 'GET' and response.is_json:
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+    return response
+
+
 # ──────────────────────────────────────────────
 #  Page route
 # ──────────────────────────────────────────────

@@ -69,6 +69,7 @@ class Timeline {
     setRecords(records) {
         this.records = records;
         this._groupByDate();
+        console.log('[timeline] records loaded:', records.length, 'dates:', this._dates);
         this.render();
     }
 

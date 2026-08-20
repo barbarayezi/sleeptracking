@@ -10,7 +10,7 @@
  *    确保用户看到的永远是最新版。
  */
 
-const CACHE_NAME = 'sleep-tracker-v4';   // ← 每次发布改 UI 必须 +1，否则旧缓存不会被清
+const CACHE_NAME = 'sleep-tracker-v5';   // ← 每次发布改 UI 必须 +1，否则旧缓存不会被清
 
 // Install — 直接 skipWaiting，让新 SW 尽快接管
 self.addEventListener('install', (event) => {
@@ -38,9 +38,27 @@ self.addEventListener('activate', (event) => {
     })());
 });
 
-// Fetch — 仅拦截 GET；network-first 且强制向服务器验证，离线才回退缓存
+// Fetch — 仅拦截 GET；API 请求永远不缓存，静态资源走 network-first
 self.addEventListener('fetch', (event) => {
     if (event.request.method !== 'GET') return;   // 非 GET 不拦截，避免干扰接口请求
+
+    const url = new URL(event.request.url);
+
+    // API 请求：永远直连服务器，不读、不写 Service Worker 缓存。
+    // 这彻底避免 /api/records 等指标数据被旧缓存覆盖。
+    if (url.pathname.startsWith('/api/')) {
+        event.respondWith(
+            fetch(event.request, { cache: 'no-cache' }).catch(() =>
+                new Response(JSON.stringify({ error: 'offline' }), {
+                    status: 503,
+                    headers: { 'Content-Type': 'application/json' }
+                })
+            )
+        );
+        return;
+    }
+
+    // 静态资源：network-first 且强制向服务器验证，离线才回退缓存
     event.respondWith(
         fetch(event.request, { cache: 'no-cache' })   // 每次都向服务器拿最新，绕过缓存层
             .then((response) => {
