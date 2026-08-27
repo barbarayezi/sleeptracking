@@ -57,21 +57,36 @@ class HealthOverview {
         }
 
         const metrics = [
-            { key: 'recovery_score', label: '恢复分', unit: '', color: '#4ade80', min: 0, max: 100 },
-            { key: 'strain', label: 'Strain 负荷', unit: '', color: '#818cf8', min: 0, max: 21 },
-            { key: 'hrv', label: 'HRV', unit: 'ms', color: '#2dd4bf', min: null, max: null },
-            { key: 'resting_heart_rate', label: '静息心率', unit: 'bpm', color: '#fb923c', min: null, max: null },
-            { key: 'spo2_percentage', label: '血氧', unit: '%', color: '#38bdf8', min: 90, max: 100 },
-            { key: 'skin_temp_celsius', label: '皮肤温度', unit: '°C', color: '#f472b6', min: null, max: null },
-            { key: 'steps', label: '步数', unit: '', color: '#60a5fa', min: 0, max: null }
+            { key: 'recovery_score', label: '恢复分', unit: '', color: '#4ade80', min: 0, max: 100,
+              higher: true, goodAt: 70, badAt: 40,
+              explain: '越高越好。Whoop 经验:>70 恢复良好,40–70 中等,<40 偏低。' },
+            { key: 'strain', label: 'Strain 负荷', unit: '', color: '#818cf8', min: 0, max: 21,
+              higher: null,
+              explain: '训练/压力负荷,非越高越好。<10 休息日,10–14 中等,>14 高负荷。' },
+            { key: 'hrv', label: 'HRV', unit: 'ms', color: '#2dd4bf', min: null, max: null,
+              higher: true,
+              explain: '心率变异性,越高代表身体恢复越好、压力越低。' },
+            { key: 'resting_heart_rate', label: '静息心率', unit: 'bpm', color: '#fb923c', min: null, max: null,
+              higher: false, goodAt: 60, badAt: 70,
+              explain: '越低越好,是心肺功能的好标志。' },
+            { key: 'spo2_percentage', label: '血氧', unit: '%', color: '#38bdf8', min: 90, max: 100,
+              higher: true, goodAt: 95, badAt: 90,
+              explain: '正常≥95%,<90% 需注意。' },
+            { key: 'skin_temp_celsius', label: '皮肤温度', unit: '°C', color: '#f472b6', min: null, max: null,
+              higher: null,
+              explain: '看相对你自身基线的波动;升高常伴随炎症或经期。' },
+            { key: 'steps', label: '步数', unit: '', color: '#60a5fa', min: 0, max: null,
+              higher: true, goodAt: 8000, badAt: 4000,
+              explain: '日常活动量,8k–12k 即可,并非越多越好。' }
         ];
 
         let html = '<div class="ho-grid">';
         for (const m of metrics) {
             html += `<div class="ho-card" data-metric="${m.key}">
                 <div class="ho-card__head">
-                    <span class="ho-card__label">${m.label}</span>
+                    <span class="ho-card__label" title="${m.explain || ''}">${m.label}</span>
                     <span class="ho-card__val" id="ho-val-${m.key}">—</span>
+                    <span class="ho-badge" id="ho-badge-${m.key}"></span>
                 </div>
                 <canvas class="ho-spark" id="ho-spark-${m.key}"></canvas>
                 <div class="ho-card__meta" id="ho-meta-${m.key}"></div>
@@ -83,9 +98,12 @@ class HealthOverview {
         const insights = (data && data.insights) || [];
         if (insights.length > 0) {
             html += '<div class="ho-insights"><h3>💡 关联洞察</h3><ul>';
-            for (const ins of insights) {
-                html += `<li>${this._escape(ins)}</li>`;
-            }
+        for (const ins of insights) {
+            let main = ins, caveat = '';
+            const idx = ins.indexOf('（注：');
+            if (idx >= 0) { main = ins.slice(0, idx); caveat = ins.slice(idx); }
+            html += `<li>${this._escape(main)}${caveat ? `<span class="ho-caveat">${this._escape(caveat)}</span>` : ''}</li>`;
+        }
             html += '</ul></div>';
         } else {
             html += '<p class="report-placeholder" style="margin-top:12px;">记录更多数据后，这里会自动给出「经期/Strain/步数」与睡眠质量的关联洞察。</p>';
@@ -108,9 +126,21 @@ class HealthOverview {
         const pts = days.map((d, i) => ({ x: i, y: d[m.key], period: !!d.is_period }))
                         .filter((p) => p.y != null);
         const last = days.filter((d) => d[m.key] != null).pop();
+        const vals = pts.map(p => p.y);
 
+        const badgeEl = document.getElementById('ho-badge-' + m.key);
         if (valEl) {
             valEl.textContent = last ? this._fmt(last[m.key]) + (m.unit ? ' ' + m.unit : '') : '—';
+        }
+        if (badgeEl) {
+            if (last && pts.length > 0) {
+                const interp = this._interpret(m, last[m.key], vals);
+                badgeEl.textContent = interp.text;
+                badgeEl.style.color = interp.color;
+                badgeEl.style.borderColor = interp.color;
+            } else {
+                badgeEl.textContent = '';
+            }
         }
 
         const dpr = window.devicePixelRatio || 1;
@@ -173,7 +203,6 @@ class HealthOverview {
         }
 
         // Meta: avg + range
-        const vals = pts.map(p => p.y);
         const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
         if (metaEl) {
             metaEl.textContent = `均值 ${this._fmt(avg)}${m.unit ? m.unit : ''} · 区间 ${this._fmt(Math.min(...vals))}–${this._fmt(Math.max(...vals))}`;
@@ -185,6 +214,33 @@ class HealthOverview {
         if (Math.abs(v) >= 10000) return (v / 1000).toFixed(1) + 'k';
         if (!Number.isInteger(v)) return v.toFixed(1);
         return String(v);
+    }
+
+    _interpret(m, value, vals) {
+        const s = [...vals].sort((a, b) => a - b);
+        const q = (p) => s[Math.max(0, Math.min(s.length - 1, Math.floor(s.length * p)))] || 0;
+        const p25 = q(0.25), p75 = q(0.75);
+        const enough = s.length >= 5;
+        const toneColor = { good: '#22c55e', neutral: '#64748b', bad: '#f59e0b' };
+
+        if (m.higher === true) {
+            const hi = enough ? p75 : (m.goodAt != null ? m.goodAt : Infinity);
+            const lo = enough ? p25 : (m.badAt != null ? m.badAt : -Infinity);
+            if (value >= hi) return { text: '优', color: toneColor.good };
+            if (value <= lo) return { text: '偏低', color: toneColor.bad };
+            return { text: '中', color: toneColor.neutral };
+        }
+        if (m.higher === false) {
+            const lo = enough ? p25 : (m.goodAt != null ? m.goodAt : -Infinity);
+            const hi = enough ? p75 : (m.badAt != null ? m.badAt : Infinity);
+            if (value <= lo) return { text: '优', color: toneColor.good };
+            if (value >= hi) return { text: '偏高', color: toneColor.bad };
+            return { text: '中', color: toneColor.neutral };
+        }
+        // Informational (strain / skin temp): no inherent good/bad
+        if (value >= p75) return { text: '偏高', color: toneColor.neutral };
+        if (value <= p25) return { text: '偏低', color: toneColor.neutral };
+        return { text: '正常', color: toneColor.neutral };
     }
 
     _escape(s) {
