@@ -13,14 +13,13 @@ sleeptracking/
 ├── period_models.py     # 经期记录 CRUD
 ├── health_models.py     # HealthKit 数据 CRUD
 ├── reports.py           # 报告生成（结构化数据 + CLI 接口）
-├── health_export_import.py  # Apple Health 导出文件导入（一次性迁移用）
 ├── requirements.txt     # Python 依赖
 ├── .env.example         # 环境变量模板
 ├── render.yaml          # Render 部署配置
 ├── templates/index.html # 前端单页
 ├── static/              # 前端 JS/CSS（app.js / timeline.js / meal.js 等）
 ├── whoop/               # Whoop API 客户端（client.py / sync.py）
-├── scripts/             # 工具脚本（export_excel.py 等）
+├── scripts/             # 工具脚本（export_excel.py / health_export_import.py）
 ├── tools/launchers/     # Windows 启动器脚本（bat / ps1 / vbs）
 ├── reports/             # 分析报告存档（Markdown）
 ├── health-agent/        # 独立 Node 子项目（已 gitignore）
