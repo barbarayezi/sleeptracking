@@ -181,7 +181,11 @@ class WhoopClient:
 
     def _token_request(self, data):
         """Make a token exchange request to the Whoop OAuth endpoint.
-        Uses form-encoded POST with client credentials in body (matching official whoop-sdk)."""
+        Uses form-encoded POST with client credentials in body (matching official whoop-sdk).
+
+        4xx (other than 429 rate-limit) is treated as an auth failure: the stored
+        token is wiped and PermissionError is raised so the UI can prompt re-authorization.
+        5xx and network errors propagate as RuntimeError for caller-level retry handling."""
         try:
             resp = requests.post(TOKEN_URL, data=data, timeout=30)
             resp.raise_for_status()
@@ -189,6 +193,18 @@ class WhoopClient:
         except requests.exceptions.HTTPError as e:
             status = e.response.status_code
             text = e.response.text[:500]
+            if 400 <= status < 500 and status != 429:
+                # Token/credentials rejected. Wipe local copy so next /api/whoop/status
+                # shows "未连接" instead of "已连接" with a still-broken token.
+                try:
+                    _delete_tokens()
+                except Exception:
+                    pass
+                # Short message preferred — Whoop's error body is verbose and the
+                # misleading "redirect_uri whitelist" hint confuses users.
+                raise PermissionError(
+                    f"Whoop 授权已失效（HTTP {status}），请重新连接"
+                )
             raise RuntimeError(f"Token request failed: {status} {text}")
 
     # ── Authentication state ──────────────────────────
