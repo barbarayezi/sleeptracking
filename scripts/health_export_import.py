@@ -22,7 +22,8 @@ import zipfile
 import xml.etree.ElementTree as ET
 
 # Make project imports resolvable when run directly
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# 脚本位于 scripts/ 时，需把项目根目录（上级）加入 path 才能 import health_models
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import health_models
 
 STEP_TYPE = "HKQuantityTypeIdentifierStepCount"
