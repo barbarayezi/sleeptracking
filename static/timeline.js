@@ -148,6 +148,25 @@ class Timeline {
         return match ? match[1] : null;
     }
 
+    /** Return today's date as YYYY-MM-DD in local time. */
+    _todayStr() {
+        const d = new Date();
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    }
+
+    /** Add/subtract days from a YYYY-MM-DD string. */
+    _addDays(dateStr, days) {
+        const d = new Date(dateStr + 'T12:00:00');
+        d.setDate(d.getDate() + days);
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    }
+
     /** Return the weekday label (周一..周日) for a YYYY-MM-DD string. */
     _weekdayLabel(dateStr) {
         if (!dateStr) return '';
@@ -172,26 +191,29 @@ class Timeline {
     /* ── Render ───────────────────────────── */
 
     render() {
-        const dates = this._dates.slice(0, this.daysToShow);
+        // Always anchor the timeline to today so empty days (no data) are still shown.
+        const today = this._todayStr();
+        const anchorDates = [];
+        for (let i = 0; i < this.daysToShow; i++) {
+            anchorDates.push(this._addDays(today, -i));
+        }
 
-        // Also include dates that only have meals (no sleep records)
-        const mealDates = Object.keys(this._mealByDate);
-        for (const md of mealDates) {
-            if (!dates.includes(md)) {
-                dates.push(md);
-            }
-        }
-        // Include dates that only have Whoop daily metrics or Apple Health steps
-        for (const d of Object.keys(this._dailyByDate)) {
-            if (!dates.includes(d)) dates.push(d);
-        }
-        for (const d of Object.keys(this._stepsByDate)) {
-            if (!dates.includes(d)) dates.push(d);
-        }
-        dates.sort().reverse();
+        // Merge any data-bearing dates that might be older than the anchored window.
+        const dataDates = new Set(anchorDates);
+        for (const d of this._dates) dataDates.add(d);
+        for (const d of Object.keys(this._mealByDate)) dataDates.add(d);
+        for (const d of Object.keys(this._dailyByDate)) dataDates.add(d);
+        for (const d of Object.keys(this._stepsByDate)) dataDates.add(d);
 
-        // Truncate to daysToShow after merging
-        const displayDates = dates.slice(0, this.daysToShow);
+        // Sort descending and truncate to daysToShow, but keep today at the top.
+        const allDates = Array.from(dataDates).sort().reverse();
+        const todayIndex = allDates.indexOf(today);
+        let displayDates;
+        if (todayIndex === -1) {
+            displayDates = allDates.slice(0, this.daysToShow);
+        } else {
+            displayDates = allDates.slice(todayIndex, todayIndex + this.daysToShow);
+        }
 
         if (displayDates.length === 0) {
             this.emptyEl.classList.remove('hidden');
