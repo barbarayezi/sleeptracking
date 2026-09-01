@@ -1,4 +1,4 @@
-$taskName = "SleepTracker"
+﻿$taskName = "SleepTracker"
 $scriptPath = "D:\01_Projects\self_coding\sleep_traking\run.ps1"
 $action = "powershell.exe -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$scriptPath`""
 

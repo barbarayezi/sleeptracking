@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Sleep Tracker — 开机自启启动器（固定端口 61023 + 受管 venv python）。
     设计为以 Windows 计划任务运行，开机/登录后自动拉起服务；
@@ -13,7 +13,10 @@
 $ErrorActionPreference = "Stop"
 $ProjectRoot = Split-Path -Parent $PSCommandPath
 $LogDir      = Join-Path $ProjectRoot ".logs"
-$Port        = 61023
+# 端口固定为 5800（文件名里的 61023 是历史遗留）。
+# 原因：Whoop 控制台 OAuth 白名单只登记了 http://localhost:5800/api/whoop/callback，
+# 服务跑在其他端口会导致授权回调落空、Whoop 静默断连、数据连续多天空缺。
+$Port        = 5800
 $Python      = "C:/Users/wucai/.workbuddy/binaries/python/envs/default/Scripts/python.exe"
 
 New-Item -ItemType Directory -Path $LogDir -Force -ErrorAction SilentlyContinue | Out-Null
@@ -37,6 +40,8 @@ $env:HEADLESS = "1"
 $RestartCount = 0
 while ($true) {
     $LogFile = Join-Path $LogDir "app-$(Get-Date -Format 'yyyyMMdd-HHmmss').log"
+    # PowerShell 5.1 禁止 stdout / stderr 重定向到同一文件，必须分开
+    $ErrFile = Join-Path $LogDir "app-$(Get-Date -Format 'yyyyMMdd-HHmmss').err.log"
     $ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     Write-Host "[$ts] Starting app.py on port $Port (venv) ..."
     try {
@@ -45,7 +50,7 @@ while ($true) {
             -WorkingDirectory $ProjectRoot `
             -NoNewWindow -PassThru `
             -RedirectStandardOutput $LogFile `
-            -RedirectStandardError $LogFile
+            -RedirectStandardError $ErrFile
         $p.WaitForExit()
         $code = $p.ExitCode
     } catch {

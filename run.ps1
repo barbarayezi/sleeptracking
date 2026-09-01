@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Sleep Tracker — auto-restart launcher for Windows.
     Keeps the Flask app running. Restarts on crash. Logs crashes.
@@ -18,6 +18,15 @@ $LogDir = Join-Path $ProjectRoot ".logs"
 $RestartCount = 0
 $MaxRestartsPerMinute = 6  # rate-limit: max 6 restarts in 1 minute (prevents crash-loop frenzy)
 
+# 固定端口 5800 —— 不要改成自动分配！
+# Whoop 开发者控制台白名单里登记的回调地址是
+#   http://localhost:5800/api/whoop/callback
+# 端口一旦随机变化，OAuth 授权后的回调就会打到没有服务的端口，
+# 表现为「授权页面点了允许，但应用仍然显示未连接、数据继续断档」。
+$Port = 5800
+$env:PORT     = "$Port"
+$env:HEADLESS = "1"
+
 # Ensure log directory exists
 New-Item -ItemType Directory -Path $LogDir -Force -ErrorAction SilentlyContinue | Out-Null
 
@@ -26,18 +35,24 @@ Write-Host " Sleep Tracker — Auto-Restart Launcher" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "Project : $ProjectRoot"
 Write-Host "Logs    : $LogDir"
-Write-Host "Port    : auto-assigned (zero-conflict)"
+Write-Host "Port    : $Port (fixed — required by Whoop OAuth callback whitelist)"
 Write-Host ""
 
 while ($true) {
     $StartTime = Get-Date
     $LogFile = Join-Path $LogDir "app-$(Get-Date -Format 'yyyyMMdd-HHmmss').log"
+    # PowerShell 5.1 禁止 stdout / stderr 重定向到同一文件，必须分开
+    $ErrFile = Join-Path $LogDir "app-$(Get-Date -Format 'yyyyMMdd-HHmmss').err.log"
     $Timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
 
     Write-Host "[$Timestamp] Starting app.py ..." -ForegroundColor Green
     Write-Host "[$Timestamp] Logging to: $LogFile" -ForegroundColor DarkGray
 
-    $process = Start-Process -FilePath "python" -ArgumentList "app.py" -WorkingDirectory $ProjectRoot -NoNewWindow -PassThru -RedirectStandardOutput $LogFile -RedirectStandardError $LogFile -Environment @{"HEADLESS"="1"}
+    # PORT/HEADLESS 通过脚本级环境变量继承给子进程（不依赖 PS7 的 -Environment 参数）
+    # 优先用受管 venv 的 python（依赖已装齐）；找不到时退回 PATH 里的 python。
+    $Python = "C:/Users/wucai/.workbuddy/binaries/python/envs/default/Scripts/python.exe"
+    if (-not (Test-Path $Python)) { $Python = "python" }
+    $process = Start-Process -FilePath $Python -ArgumentList "app.py" -WorkingDirectory $ProjectRoot -NoNewWindow -PassThru -RedirectStandardOutput $LogFile -RedirectStandardError $ErrFile
 
     # Wait a moment then show the live port
     Start-Sleep -Seconds 3

@@ -502,6 +502,65 @@ def _record_sync_time():
     _set_meta("last_whoop_sync", beijing.strftime("%Y-%m-%d %H:%M:%S"))
 
 
+def _sync_stats_succeeded(stats):
+    """Return True only when a sync actually moved data.
+
+    `sync_all_whoop()` never raises on auth failure — it returns per-source
+    dicts like {"error": "Not authenticated with Whoop", "synced": 0} instead.
+    Treating such a run as "successful" would keep refreshing last_sync_at and
+    make the UI claim "最后同步：<now>" while nothing was ever written — which
+    is exactly how a multi-day data gap stayed invisible for 5 days.
+    """
+    if not isinstance(stats, dict):
+        return False
+    total = 0
+    for key in ("created", "updated", "synced"):
+        try:
+            total += int(stats.get(key) or 0)
+        except (TypeError, ValueError):
+            pass
+    return total > 0
+
+
+def _sync_stats_error(stats):
+    """Extract the first per-source error message from sync stats, if any."""
+    if not isinstance(stats, dict):
+        return None
+    for source in ("sleep", "daily", "workouts"):
+        err = (stats.get(source) or {}).get("error")
+        if err:
+            return str(err)
+    return None
+
+
+def _whoop_authenticated():
+    """Best-effort Whoop connection check that never raises.
+
+    Returned by /api/sync-health so the frontend can trust the backend's
+    authoritative state instead of scraping its own status text from the DOM.
+    """
+    try:
+        from whoop.client import WhoopClient
+        return bool(WhoopClient().is_authenticated())
+    except Exception:
+        return False
+
+
+def _stamp_sync_outcome(stats):
+    """Record sync outcome: refresh last_sync_at only on real data movement;
+    otherwise persist the reason so the UI can surface the failure."""
+    try:
+        if _sync_stats_succeeded(stats):
+            _record_sync_time()
+            _set_meta("last_whoop_sync_error", "")
+        else:
+            err = _sync_stats_error(stats) or "未同步到任何数据（手环无新数据或未连接）"
+            _set_meta("last_whoop_sync_error", err)
+            print(f"[sync] no data synced: {err}")
+    except Exception as e:
+        print(f"[sync] failed to stamp outcome: {e}")
+
+
 # ── Async Whoop sync (non-blocking) ────────────
 # 同步要访问 Whoop 云端 + Turso 云数据库，可能很慢甚至卡住。
 # 若在 Web 请求线程里同步执行，会把 waitress 工作线程占满，导致服务器整体无响应。
@@ -552,11 +611,9 @@ def _run_sync_job(days_back):
     except Exception as e:
         _sync_state["error"] = {"message": str(e), "need_auth": False}
     else:
-        # 记录最后同步时间（best-effort，绝不能因它失败而覆盖成功的同步结果）
-        try:
-            _record_sync_time()
-        except Exception:
-            pass
+        # 只有真正写入/更新了数据才算同步成功；空跑时记录原因，不再刷新
+        # last_sync_at（否则前端会一直显示“最后同步：刚刚”，掩盖掉线故障）
+        _stamp_sync_outcome(stats)
     finally:
         _sync_state["running"] = False
         _sync_state["finished_at"] = time.time()
@@ -616,6 +673,11 @@ def sync_health():
             cur2 = conn.execute("SELECT COUNT(*) AS c FROM sleep_records")
             row2 = cur2.fetchone()
             total = int(row2[0]) if row2 else 0
+            # 最后一条记录的日期 → 前端据此展示“已断档 N 天”。
+            # 单日缺失（今天还没睡）属正常，连续多日缺失才值得报警。
+            cur3 = conn.execute("SELECT MAX(record_date) AS d FROM sleep_records")
+            row3 = cur3.fetchone()
+            last_record_date = (row3[0] if row3 else None)
         finally:
             conn.close()
     except Exception as e:
@@ -625,14 +687,33 @@ def sync_health():
             "sleep_count": 0,
             "has_history": None,
             "last_sync_at": _get_meta("last_whoop_sync", None),
+            "last_sync_error": _get_meta("last_whoop_sync_error", None),
+            "authenticated": _whoop_authenticated(),
             "db_error": True,
             "error": str(e),
         })
+    # 断档天数：最后一条记录距今几个自然日（今天 8-31、末条 8-26 → 5）
+    missing_days = 0
+    if last_record_date:
+        try:
+            from datetime import date as _date_cls
+            last_d = _date_cls.fromisoformat(last_record_date[:10])
+            today_d = _date_cls.fromisoformat(str(date)[:10])
+            missing_days = max(0, (today_d - last_d).days)
+        except (ValueError, TypeError):
+            missing_days = 0
+
     return jsonify({
         "date": date,
         "sleep_count": sleep_count,
         "has_history": total > 0,
+        "last_record_date": last_record_date,
+        "missing_days": missing_days,
         "last_sync_at": _get_meta("last_whoop_sync", None),
+        # 非空 → 上一次同步“跑了但没拿到数据”，前端据此报警而非显示假的成功时间
+        "last_sync_error": _get_meta("last_whoop_sync_error", None),
+        # 由后端权威判定连接状态，前端不再依赖 DOM 文本猜测
+        "authenticated": _whoop_authenticated(),
     })
 
 
@@ -864,7 +945,8 @@ def _background_sync_loop(interval_minutes=30):
             continue
         try:
             stats = sync_all_whoop(days_back=2)
-            _record_sync_time()
+            # 同样只在真正同步到数据时才刷新 last_sync_at
+            _stamp_sync_outcome(stats)
             s = stats.get('sleep', {})
             d = stats.get('daily', {})
             w = stats.get('workouts', {})

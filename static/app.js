@@ -488,17 +488,37 @@ const App = {
             if (!resp.ok) return;
             const d = await resp.json();
 
-            // Always surface the last successful sync time
-            lastSyncEl.textContent = d.last_sync_at
-                ? '🕒 最后同步：' + d.last_sync_at
-                : '';
+            // 连接状态以后端为准；旧版接口无 authenticated 字段时退回 DOM 文本
+            const connected = (typeof d.authenticated === 'boolean')
+                ? d.authenticated
+                : !!(statusText && statusText.textContent.includes('已连接'));
 
-            // A gap is only meaningful when Whoop is connected (sync is actually running)
-            const connected = statusText && statusText.textContent.includes('已连接');
+            // 同步失败时不再谎报“最后同步：刚刚”，改为显示真实原因
+            if (d.last_sync_error) {
+                lastSyncEl.textContent = '⚠️ 上次同步未取到数据：' + d.last_sync_error;
+            } else {
+                lastSyncEl.textContent = d.last_sync_at
+                    ? '🕒 最后同步：' + d.last_sync_at
+                    : '';
+            }
+
             const hour = new Date().getHours();
-            const gapSuspected = connected && d.has_history && d.sleep_count === 0 && hour >= 9;
+            const missingDays = d.missing_days || 0;
 
-            if (gapSuspected) {
+            if (!connected && d.has_history) {
+                // 未连接 = 静默丢数据的真凶，此前完全无提示
+                alertEl.innerHTML = '⚠️ <strong>Whoop 未连接，睡眠数据已停止同步'
+                    + (missingDays >= 2 ? '（最近 ' + missingDays + ' 天无记录）' : '')
+                    + '。</strong>请点击上方「连接 Whoop」重新授权；'
+                    + '授权成功后会自动补拉最近 30 天数据。';
+                alertEl.style.display = 'block';
+            } else if (connected && d.has_history && missingDays >= 2) {
+                alertEl.innerHTML = '⚠️ <strong>最近 ' + missingDays +
+                    ' 天没有睡眠数据。</strong>最常见原因是 Whoop 手环蓝牙断开、' +
+                    '没把数据同步到云端。请打开 Whoop App 确认手环已连接并手动同步一次；' +
+                    '重新同步后本应用会在几分钟内自动补上。';
+                alertEl.style.display = 'block';
+            } else if (connected && d.sleep_count === 0 && hour >= 9) {
                 alertEl.innerHTML = '⚠️ <strong>今天（' + d.date +
                     '）的睡眠数据还没收到。</strong>最常见原因是 Whoop 手环蓝牙断开、' +
                     '没把数据同步到云端。请打开 Whoop App 确认手环已连接并手动同步一次；' +
