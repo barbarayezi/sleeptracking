@@ -165,7 +165,7 @@ def get_health_overview(from_date, to_date):
         agg = sleep_by_date.setdefault(d, {"sleep_hours": 0.0, "qualities": [], "device_scores": [],
                                            "recovery_score": None, "resting_heart_rate": None,
                                            "hrv": None, "spo2_percentage": None,
-                                           "skin_temp_celsius": None})
+                                           "skin_temp_celsius": None, "steps": 0})
         hrs = _hours_between(r["sleep_time"], r["wake_time"])
         if hrs is not None:
             agg["sleep_hours"] += hrs
@@ -173,6 +173,11 @@ def get_health_overview(from_date, to_date):
             agg["qualities"].append(r["sleep_quality"])
         if r["device_score"] is not None:
             agg["device_scores"].append(r["device_score"])
+        if r["steps"] is not None and r["steps"] != '':
+            try:
+                agg["steps"] += float(r["steps"])
+            except (ValueError, TypeError):
+                pass
         for fld in ("recovery_score", "resting_heart_rate", "hrv", "spo2_percentage", "skin_temp_celsius"):
             if r[fld] is not None and agg[fld] is None:
                 agg[fld] = r[fld]
@@ -253,6 +258,9 @@ def get_health_overview(from_date, to_date):
             day["steps"] = hm.get("steps")
             day["active_energy_kj"] = hm.get("active_energy_kj")
             day["distance_km"] = hm.get("distance_km")
+        # Fallback to manually-entered steps from sleep records when Apple Health is absent
+        if day.get("steps") is None and s and s.get("steps"):
+            day["steps"] = s["steps"]
         pd = period_by_date.get(d)
         if pd:
             day["is_period"] = bool(pd["is_period_start"]) or (pd["flow"] not in (None, "", "none"))
@@ -296,9 +304,17 @@ def _compute_insights(days):
         high_steps = ws_sorted[half:]
         r_low = sum(d["recovery_score"] for d in low_steps) / len(low_steps)
         r_high = sum(d["recovery_score"] for d in high_steps) / len(high_steps)
+
+        # Detect a single extreme step day that could distort the average
+        step_vals = sorted(d["steps"] for d in with_steps)
+        median_step = step_vals[len(step_vals) // 2]
+        caveat = ""
+        if step_vals[-1] > 3 * (median_step if median_step > 0 else 1):
+            outlier = max(with_steps, key=lambda d: d["steps"])
+            caveat = f"（注：{outlier['date']} 的 {outlier['steps']:.0f} 步为异常高值，可能夸大该结论，仅供参考。）"
         insights.append(
             f"步数多的日子平均恢复分 {r_high:.0f}，步数少的日子 {r_low:.0f}"
-            f"（{'步数多恢复更好' if r_high > r_low else '步数多恢复反而更低'}）。"
+            f"（{'步数多恢复更好' if r_high > r_low else '步数多恢复反而更低'}）。{caveat}"
         )
 
     # Sleep quality vs period

@@ -5,23 +5,24 @@ Sleep Tracker — Flask + Turso (cloud SQLite) 睡眠追踪应用。
 ## 架构
 
 ```
-sleep_traking/
+sleeptracking/
 ├── app.py               # Flask 入口，REST API 路由
 ├── database.py          # 数据库连接管理（Turso 优先，本地 SQLite 回退）
 ├── models.py            # 睡眠记录 CRUD
 ├── meal_models.py       # 饮食记录 CRUD
+├── period_models.py     # 经期记录 CRUD
+├── health_models.py     # HealthKit 数据 CRUD
 ├── reports.py           # 报告生成（结构化数据 + CLI 接口）
 ├── requirements.txt     # Python 依赖
 ├── .env.example         # 环境变量模板
+├── render.yaml          # Render 部署配置
 ├── templates/index.html # 前端单页
-├── static/
-│   ├── app.js           # 主前端逻辑
-│   ├── form.js          # 表单/多记录展示
-│   ├── timeline.js      # 时间线视图
-│   ├── reports.js       # 报告页面
-│   ├── meal.js          # 饮食记录页面
-│   └── style.css        # 样式
+├── static/              # 前端 JS/CSS（app.js / timeline.js / meal.js 等）
+├── whoop/               # Whoop API 客户端（client.py / sync.py）
+├── scripts/             # 工具脚本（export_excel.py / health_export_import.py）
+├── tools/launchers/     # Windows 启动器脚本（bat / ps1 / vbs）
 ├── reports/             # 分析报告存档（Markdown）
+├── health-agent/        # 独立 Node 子项目（已 gitignore）
 └── sleep_tracker.db     # 本地回退数据库（已 gitignore）
 ```
 
@@ -39,6 +40,8 @@ sleep_traking/
 pip install -r requirements.txt
 python app.py    # 启动在 localhost:5001（或 5002，端口冲突时自动切换）
 ```
+
+**生产运行：** launchd 服务 `com.sleeptracking.server`（`~/Library/LaunchAgents/`）常驻运行 `app.py`，端口 `61023`，日志写入 `sleeptracker_launchd.log`。核心文件路径不可随意移动，launchd plist 里有硬编码引用。
 
 ## API 路由
 

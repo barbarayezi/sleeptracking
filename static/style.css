@@ -1690,8 +1690,8 @@ body {
 
 .ho-card__head {
     display: flex;
-    justify-content: space-between;
     align-items: baseline;
+    gap: 6px;
     margin-bottom: 4px;
 }
 
@@ -1699,12 +1699,24 @@ body {
     font-size: 0.85rem;
     font-weight: 600;
     color: var(--text);
+    margin-right: auto;
+    cursor: help;
 }
 
 .ho-card__val {
     font-size: 1rem;
     font-weight: 700;
     color: var(--accent);
+    font-variant-numeric: tabular-nums;
+}
+
+.ho-badge {
+    font-size: 0.7rem;
+    font-weight: 700;
+    line-height: 1;
+    padding: 2px 7px;
+    border-radius: 999px;
+    border: 1px solid currentColor;
     font-variant-numeric: tabular-nums;
 }
 
@@ -1732,6 +1744,13 @@ body {
     font-size: 0.9rem;
     color: var(--text);
     margin-bottom: 8px;
+}
+
+.ho-caveat {
+    display: block;
+    margin-top: 3px;
+    font-size: 0.78rem;
+    color: #f59e0b;
 }
 
 .ho-insights ul {
