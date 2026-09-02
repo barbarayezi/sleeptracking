@@ -4,6 +4,8 @@ All CRUD operations against the meal_records table.
 Works with both local SQLite and Turso (cloud SQLite).
 """
 
+import json
+
 from database import get_connection
 
 
@@ -12,6 +14,27 @@ def row_to_dict(row):
     if row is None:
         return None
     return dict(row)
+
+
+def _dump_items(value):
+    """Normalise items_json to a storable JSON string (or None).
+
+    The frontend posts a list of item dicts; older/imported rows may already
+    carry a JSON string. Anything unparseable is dropped rather than written
+    as corrupt text, because the UI would then fail to render the meal.
+    """
+    if value is None or value == "":
+        return None
+    if isinstance(value, str):
+        try:
+            json.loads(value)
+            return value
+        except (ValueError, TypeError):
+            return None
+    try:
+        return json.dumps(value, ensure_ascii=False)
+    except (TypeError, ValueError):
+        return None
 
 
 # ── Query helpers ─────────────────────────────────
@@ -90,8 +113,10 @@ def create_meal(data):
         """
         INSERT INTO meal_records
             (meal_date, meal_type, meal_time, meal_name, meal_content,
-             meal_quantity, health_rating, notes, allergy_reaction)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+             meal_quantity, health_rating, notes, allergy_reaction,
+             calorie_kcal, protein_g, fat_g, carbs_g, health_score,
+             items_json, ai_pros, ai_cons, ai_suggestion, ai_analyzed_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             data["meal_date"],
@@ -103,6 +128,16 @@ def create_meal(data):
             data.get("health_rating", "average"),
             data.get("notes", ""),
             data.get("allergy_reaction", ""),
+            data.get("calorie_kcal"),
+            data.get("protein_g"),
+            data.get("fat_g"),
+            data.get("carbs_g"),
+            data.get("health_score"),
+            _dump_items(data.get("items_json")),
+            data.get("ai_pros", ""),
+            data.get("ai_cons", ""),
+            data.get("ai_suggestion", ""),
+            data.get("ai_analyzed_at"),
         ),
     )
 
@@ -158,6 +193,22 @@ def update_meal_by_id(meal_id, data):
     if "allergy_reaction" in data:
         fields.append("allergy_reaction = ?")
         params.append(data["allergy_reaction"])
+
+    # ── Nutrition / AI analysis (v11) ──
+    # `in data` (not truthiness) so an explicit null/0/"" clears the field.
+    for numeric_field in ("calorie_kcal", "protein_g", "fat_g", "carbs_g", "health_score"):
+        if numeric_field in data:
+            fields.append(f"{numeric_field} = ?")
+            params.append(data[numeric_field])
+
+    if "items_json" in data:
+        fields.append("items_json = ?")
+        params.append(_dump_items(data["items_json"]))
+
+    for text_field in ("ai_pros", "ai_cons", "ai_suggestion", "ai_analyzed_at"):
+        if text_field in data:
+            fields.append(f"{text_field} = ?")
+            params.append(data[text_field])
 
     fields.append("updated_at = datetime('now', 'localtime')")
 

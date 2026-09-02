@@ -15,6 +15,7 @@ from database import init_db, get_connection
 from reports import generate_report, get_quick_stats
 import models as models
 import meal_models as meal_models
+import nutrition as nutrition
 import period_models as period_models
 import time
 import socket
@@ -260,6 +261,30 @@ def _validate_meal_data(data):
     if 'health_rating' in data and data['health_rating'] not in ('good', 'average', 'poor'):
         errors.append('health_rating must be "good", "average", or "poor"')
 
+    # Validate nutrition numbers (all optional; null/'' means "not recorded")
+    NUMBER_RANGES = {
+        'calorie_kcal': (0, 5000),
+        'protein_g': (0, 500),
+        'fat_g': (0, 500),
+        'carbs_g': (0, 500),
+    }
+    for field, (lo, hi) in NUMBER_RANGES.items():
+        if field in data and data[field] is not None and data[field] != '':
+            try:
+                v = float(data[field])
+                if v < lo or v > hi:
+                    errors.append(f'{field} must be between {lo} and {hi}')
+            except (ValueError, TypeError):
+                errors.append(f'{field} must be a number')
+
+    if 'health_score' in data and data['health_score'] is not None and data['health_score'] != '':
+        try:
+            s = float(data['health_score'])
+            if s < 0 or s > 10:
+                errors.append('health_score must be between 0 and 10')
+        except (ValueError, TypeError):
+            errors.append('health_score must be a number')
+
     return errors
 
 
@@ -321,6 +346,108 @@ def delete_meal(meal_id):
     if not deleted:
         return jsonify({'error': 'Meal record not found'}), 404
     return '', 204
+
+
+@app.route('/api/meals/analyze', methods=['POST'])
+def analyze_meal():
+    """Estimate nutrition for a meal from its text description.
+
+    Read-only: returns an estimate for the user to review and edit before it
+    is ever persisted. Nothing is written here — saving goes through the
+    normal POST/PUT /api/meals routes.
+
+    Route is declared before /api/meals/<int:meal_id> would matter only for
+    GET; this is POST-only so there is no ambiguity either way.
+    """
+    data = request.get_json(silent=True) or {}
+
+    meal_type = data.get('meal_type', '')
+    if meal_type and meal_type not in ('breakfast', 'lunch', 'dinner', 'snack'):
+        return jsonify({'error': 'meal_type 取值无效'}), 400
+
+    # The model round-trip takes several seconds; a second click would just
+    # duplicate the cost. The frontend disables the button, this is the
+    # backstop for programmatic callers.
+    try:
+        result = nutrition.analyze_meal(
+            meal_name=data.get('meal_name', ''),
+            meal_content=data.get('meal_content', ''),
+            meal_quantity=data.get('meal_quantity') or 'normal',
+            meal_type=meal_type,
+        )
+    except Exception as e:
+        # Defensive backstop: nutrition.analyze_meal is meant to never raise,
+        # but if anything escapes we return a friendly 502 instead of a 500.
+        return jsonify({'error': f'AI 估算失败：{e}'}), 502
+
+    if not result.get('ok'):
+        # 502 rather than 500: the failure is upstream (LLM/credentials),
+        # not a bug in our handler, and the message is user-facing.
+        return jsonify({'error': result.get('error', 'AI 估算失败')}), 502
+
+    return jsonify(result['data'])
+
+
+@app.route('/api/meals/analyze-image', methods=['POST'])
+def meal_analyze_image():
+    """Estimate nutrition for a meal from a photo (multipart/form-data).
+
+    Read-only, mirrors /api/meals/analyze: returns an estimate for the user to
+    review before persisting. Expects an 'image' file plus optional form fields
+    'meal_name' / 'meal_type' / 'meal_quantity'. The image is used for
+    recognition only — it is not stored here.
+    """
+    upload = request.files.get('image')
+    if not upload or not upload.filename:
+        return jsonify({'error': '未收到图片文件'}), 400
+
+    raw = upload.read()
+    if len(raw) == 0:
+        return jsonify({'error': '图片为空'}), 400
+    if len(raw) > 10 * 1024 * 1024:
+        return jsonify({'error': '图片过大（上限 10MB）'}), 413
+
+    meal_type = request.form.get('meal_type', '')
+    if meal_type and meal_type not in ('breakfast', 'lunch', 'dinner', 'snack'):
+        return jsonify({'error': 'meal_type 取值无效'}), 400
+
+    try:
+        result = nutrition.analyze_meal_image(
+            raw,
+            meal_name=request.form.get('meal_name', ''),
+            meal_quantity=request.form.get('meal_quantity') or 'normal',
+            meal_type=meal_type,
+        )
+    except Exception as e:
+        # Defensive backstop: nutrition.analyze_meal_image is meant to never
+        # raise, but if anything escapes we return a friendly 502.
+        return jsonify({'error': f'图片分析失败：{e}'}), 502
+
+    if not result.get('ok'):
+        return jsonify({'error': result.get('error', '图片分析失败')}), 502
+
+    return jsonify(result['data'])
+
+
+@app.route('/api/meals/nutrition/summary', methods=['GET'])
+def meal_nutrition_summary():
+    """Aggregate nutrition totals over a date range (or a single date).
+
+    Returns {"summary": null} when none of the meals in range carry numeric
+    nutrition data, so the UI can show an empty state instead of a row of
+    misleading zeros.
+    """
+    from_date = request.args.get('from')
+    to_date = request.args.get('to')
+    date = request.args.get('date')
+
+    try:
+        meals = meal_models.get_all_meals(from_date=from_date, to_date=to_date, date=date)
+    except Exception as e:
+        return jsonify({'error': f'读取餐食记录失败：{e}'}), 500
+
+    summary = nutrition.summarize(meals)
+    return jsonify({'summary': summary, 'meal_count': len(meals)})
 
 
 # ──────────────────────────────────────────────

@@ -394,6 +394,9 @@
             <section class="card meal-section">
                 <h2>🍽️ 饮食记录</h2>
 
+                <!-- Daily nutrition summary (v11) -->
+                <div id="meal-day-summary" class="meal-day-summary hidden"></div>
+
                 <!-- Meal list for current date -->
                 <div id="meals-list" class="records-list">
                     <p id="meals-empty" class="report-placeholder" style="padding:16px 0;">暂无饮食记录，在下方添加今天的餐食。</p>
@@ -491,6 +494,92 @@
                             </label>
                         </div>
                     </fieldset>
+
+                    <!-- Nutrition (v11) — manual entry or AI estimation -->
+                    <div class="meal-nutrition-block">
+                        <div class="meal-nutrition-head">
+                            <span class="form-label">营养分析 <span class="label-hint">（选填）</span></span>
+                            <button type="button" id="btn-meal-ai" class="btn btn-ai">🤖 AI 估算</button>
+                            <button type="button" id="btn-meal-ai-image" class="btn btn-ai">📷 拍照识别</button>
+                            <input type="file" id="meal-image-input" accept="image/*" hidden>
+                        </div>
+
+                        <!-- Image preview (shown after selecting a photo) -->
+                        <div id="meal-image-preview" class="meal-image-preview hidden">
+                            <img id="meal-image-thumb" class="meal-image-thumb" alt="餐食预览">
+                            <button type="button" id="btn-meal-image-clear" class="meal-image-clear" title="移除图片">×</button>
+                        </div>
+
+                        <div class="nutrition-inputs">
+                            <div class="nutri-item">
+                                <label class="nutri-label" for="meal-kcal">热量</label>
+                                <div class="input-with-unit">
+                                    <input type="number" id="meal-kcal" class="form-input"
+                                        min="0" max="5000" step="1" placeholder="—">
+                                    <span class="input-unit">kcal</span>
+                                </div>
+                            </div>
+                            <div class="nutri-item">
+                                <label class="nutri-label" for="meal-protein">蛋白质</label>
+                                <div class="input-with-unit">
+                                    <input type="number" id="meal-protein" class="form-input"
+                                        min="0" max="500" step="0.1" placeholder="—">
+                                    <span class="input-unit">g</span>
+                                </div>
+                            </div>
+                            <div class="nutri-item">
+                                <label class="nutri-label" for="meal-fat">脂肪</label>
+                                <div class="input-with-unit">
+                                    <input type="number" id="meal-fat" class="form-input"
+                                        min="0" max="500" step="0.1" placeholder="—">
+                                    <span class="input-unit">g</span>
+                                </div>
+                            </div>
+                            <div class="nutri-item">
+                                <label class="nutri-label" for="meal-carbs">碳水</label>
+                                <div class="input-with-unit">
+                                    <input type="number" id="meal-carbs" class="form-input"
+                                        min="0" max="500" step="0.1" placeholder="—">
+                                    <span class="input-unit">g</span>
+                                </div>
+                            </div>
+                            <div class="nutri-item">
+                                <label class="nutri-label" for="meal-score">健康分</label>
+                                <div class="input-with-unit">
+                                    <input type="number" id="meal-score" class="form-input"
+                                        min="0" max="10" step="1" placeholder="—">
+                                    <span class="input-unit">/10</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- AI analysis result (shown after a successful estimate) -->
+                        <div id="meal-ai-result" class="meal-ai-result hidden">
+                            <div class="ai-row ai-row--pros">
+                                <span class="ai-tag">优点</span>
+                                <p id="ai-pros-text"></p>
+                            </div>
+                            <div class="ai-row ai-row--cons">
+                                <span class="ai-tag">可优化</span>
+                                <p id="ai-cons-text"></p>
+                            </div>
+                            <div class="ai-row ai-row--sugg">
+                                <span class="ai-tag">小建议</span>
+                                <p id="ai-sugg-text"></p>
+                            </div>
+                            <details class="ai-items" id="ai-items-wrap">
+                                <summary>菜品明细 <span id="ai-items-count" class="ai-items-count"></span></summary>
+                                <table class="ai-items-table">
+                                    <thead>
+                                        <tr><th>菜品</th><th>重量</th><th>热量</th><th>蛋白</th><th>脂肪</th><th>碳水</th></tr>
+                                    </thead>
+                                    <tbody id="ai-items-body"></tbody>
+                                </table>
+                            </details>
+                        </div>
+
+                        <div id="meal-ai-msg" class="form-message"></div>
+                    </div>
 
                     <!-- Allergy Reaction & Notes -->
                     <div class="form-row form-row-2col">
@@ -637,15 +726,15 @@
         <p>Sleep Tracker &copy; 2026 — 本地数据，安全私密</p>
     </footer>
 
-    <script src="/static/form.js?v=6"></script>
-    <script src="/static/meal.js?v=6"></script>
-    <script src="/static/period.js?v=6"></script>
-    <script src="/static/calendar.js?v=6"></script>
-    <script src="/static/timeline.js?v=6"></script>
-    <script src="/static/reports.js?v=6"></script>
-    <script src="/static/healthOverview.js?v=6"></script>
+    <script src="/static/form.js?v=7"></script>
+    <script src="/static/meal.js?v=7"></script>
+    <script src="/static/period.js?v=7"></script>
+    <script src="/static/calendar.js?v=7"></script>
+    <script src="/static/timeline.js?v=7"></script>
+    <script src="/static/reports.js?v=7"></script>
+    <script src="/static/healthOverview.js?v=7"></script>
     <script src="/static/hero.js?v=2"></script>
-    <script src="/static/app.js?v=6"></script>
+    <script src="/static/app.js?v=7"></script>
     <script>
         (function () {
             var btn = document.getElementById('btn-quick-record');

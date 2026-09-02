@@ -164,6 +164,60 @@ class CursorStub:
         self.description = tuple((col,) for col in columns)
 
 
+class _SqliteConnectionWrapper:
+    """Proxy a sqlite3 connection so that close() becomes a no-op.
+
+    Connections are cached per thread and every call site does
+    `conn.close()` when it is done. For local SQLite we want the connection
+    to survive that call and be reused by the next request.
+
+    The previous implementation monkey-patched `conn.close = lambda: None`,
+    but sqlite3.Connection is a C extension type whose `close` attribute is
+    read-only — the assignment raises
+    `AttributeError: 'sqlite3.Connection' object attribute 'close' is read-only`
+    on Python 3.12+. That made the whole local-SQLite fallback path unusable;
+    it went unnoticed because production runs on Turso and never touches it.
+
+    Proxying (instead of patching) keeps the real connection alive while
+    presenting the same interface.
+    """
+    def __init__(self, conn):
+        self._conn = conn
+
+    def execute(self, sql, params=None):
+        if params is None:
+            return self._conn.execute(sql)
+        if isinstance(params, (list, tuple)):
+            params = tuple(params)
+        return self._conn.execute(sql, params)
+
+    def executemany(self, sql, seq_of_params):
+        seq = [tuple(p) if isinstance(p, (list, tuple)) else p
+               for p in seq_of_params]
+        return self._conn.executemany(sql, seq)
+
+    def commit(self):
+        return self._conn.commit()
+
+    def rollback(self):
+        return self._conn.rollback()
+
+    def close(self):
+        """No-op: keep the connection alive for thread-local reuse.
+
+        Flushes pending work so callers that relied on close() committing
+        still get their data persisted.
+        """
+        try:
+            self._conn.commit()
+        except Exception:
+            pass
+
+    def __getattr__(self, name):
+        # Forward everything else (row_factory, total_changes, ...)
+        return getattr(self._conn, name)
+
+
 # 线程本地连接缓存:每个线程复用同一个连接,避免 Turso 网络库每请求都新建连接。
 _local = threading.local()
 
@@ -200,9 +254,9 @@ def _create_connection():
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA busy_timeout=5000")
         conn.execute("PRAGMA foreign_keys=ON")
-        # 连接复用:覆盖 close(),使各调用点的 conn.close() 不再真正关闭连接。
-        conn.close = lambda: None
-        return conn
+        # 连接复用：包装成代理，使各调用点的 conn.close() 不再真正关闭连接。
+        # （不能直接给 sqlite3.Connection 赋 close —— C 扩展类型属性只读。）
+        return _SqliteConnectionWrapper(conn)
 
 
 def _ping(conn):
@@ -396,9 +450,10 @@ def _migrate(conn):
                 # Already v2, just update version
                 _set_schema_version(conn, 2)
         else:
-            # No table yet — fresh install. init_db() creates the full schema below,
-            # so skip directly to the latest version to avoid ALTER TABLE on nothing.
-            _set_schema_version(conn, 8)
+            # No table yet — fresh install. init_db() creates the full schema
+            # (including every v11 nutrition column) before calling _migrate(),
+            # so jump straight to the latest version and skip all migrations.
+            _set_schema_version(conn, 11)
 
     # Re-read version after potential v2 migration
     version = _get_schema_version(conn)
@@ -439,6 +494,11 @@ def _migrate(conn):
     version = _get_schema_version(conn)
     if version < 10:
         _migrate_v10(conn)
+
+    # Re-read version after potential v10 migration
+    version = _get_schema_version(conn)
+    if version < 11:
+        _migrate_v11(conn)
 
 
 def _migrate_v6(conn):
@@ -591,6 +651,47 @@ def _migrate_v10(conn):
     print("  Migration v9 -> v10 completed.")
 
 
+# Nutrition columns added to meal_records in v11.
+# SQLite cannot add a NOT NULL column without a default, so every new column
+# is nullable/empty-defaulted — old rows simply read back as NULL and the UI
+# falls back to the pre-existing categorical health_rating.
+_MEAL_NUTRITION_COLUMNS = {
+    "calorie_kcal":   "ALTER TABLE meal_records ADD COLUMN calorie_kcal REAL DEFAULT NULL",
+    "protein_g":      "ALTER TABLE meal_records ADD COLUMN protein_g REAL DEFAULT NULL",
+    "fat_g":          "ALTER TABLE meal_records ADD COLUMN fat_g REAL DEFAULT NULL",
+    "carbs_g":        "ALTER TABLE meal_records ADD COLUMN carbs_g REAL DEFAULT NULL",
+    "health_score":   "ALTER TABLE meal_records ADD COLUMN health_score INTEGER DEFAULT NULL",
+    "items_json":     "ALTER TABLE meal_records ADD COLUMN items_json TEXT DEFAULT NULL",
+    "ai_pros":        "ALTER TABLE meal_records ADD COLUMN ai_pros TEXT DEFAULT ''",
+    "ai_cons":        "ALTER TABLE meal_records ADD COLUMN ai_cons TEXT DEFAULT ''",
+    "ai_suggestion":  "ALTER TABLE meal_records ADD COLUMN ai_suggestion TEXT DEFAULT ''",
+    "ai_analyzed_at": "ALTER TABLE meal_records ADD COLUMN ai_analyzed_at TEXT DEFAULT NULL",
+}
+
+
+def _migrate_v11(conn):
+    """Migrate from v10 to v11: nutrition analysis columns on meal_records.
+
+    Idempotent: checks PRAGMA table_info before each ALTER, so re-running on an
+    already-migrated database (or a fresh one created with the full schema) is
+    a no-op rather than an error.
+    """
+    print("  Running migration v10 -> v11 ...")
+    col_cursor = conn.execute("PRAGMA table_info('meal_records')")
+    existing = {row[1] for row in col_cursor.fetchall()}
+
+    added = []
+    for col, sql in _MEAL_NUTRITION_COLUMNS.items():
+        if col not in existing:
+            conn.execute(sql)
+            added.append(col)
+
+    if added:
+        print(f"    added columns: {', '.join(added)}")
+    _set_schema_version(conn, 11)
+    print("  Migration v10 -> v11 completed.")
+
+
 def init_db():
     """Create the database schema or migrate from an older version."""
     conn = get_connection()
@@ -640,7 +741,7 @@ def init_db():
         ON sleep_records(record_type)
     """)
 
-    # Meal records table (v5)
+    # Meal records table (v5, extended in v11 with nutrition columns)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS meal_records (
             id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -656,6 +757,16 @@ def init_db():
                             CHECK(health_rating IN ('good', 'average', 'poor')),
             notes           TEXT DEFAULT '',
             allergy_reaction TEXT DEFAULT '',
+            calorie_kcal    REAL DEFAULT NULL,
+            protein_g       REAL DEFAULT NULL,
+            fat_g           REAL DEFAULT NULL,
+            carbs_g         REAL DEFAULT NULL,
+            health_score    INTEGER DEFAULT NULL,
+            items_json      TEXT DEFAULT NULL,
+            ai_pros         TEXT DEFAULT '',
+            ai_cons         TEXT DEFAULT '',
+            ai_suggestion   TEXT DEFAULT '',
+            ai_analyzed_at  TEXT DEFAULT NULL,
             created_at      TEXT DEFAULT (datetime('now', 'localtime')),
             updated_at      TEXT DEFAULT (datetime('now', 'localtime'))
         )
