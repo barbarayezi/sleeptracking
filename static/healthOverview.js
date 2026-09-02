@@ -24,6 +24,18 @@ class HealthOverview {
                 this.load();
             });
         });
+
+        // Re-paint sparklines on resize so canvas keeps matching the layout
+        // (otherwise dpr or container width changes leave stale geometry).
+        if (!this._resizeWired && typeof ResizeObserver !== 'undefined') {
+            const ro = new ResizeObserver(() => {
+                if (this._lastDays) this.render({ days: this._lastDays });
+            });
+            const host = document.getElementById('health-overview');
+            if (host) ro.observe(host);
+            this._resizeWired = true;
+            this._resizeObserver = ro;
+        }
     }
 
     async load() {
@@ -111,6 +123,9 @@ class HealthOverview {
 
         this.el.innerHTML = html;
 
+        // Cache for ResizeObserver re-paint.
+        this._lastDays = days;
+
         // Draw each sparkline + stats
         for (const m of metrics) {
             this._drawMetric(m, days);
@@ -144,12 +159,19 @@ class HealthOverview {
         }
 
         const dpr = window.devicePixelRatio || 1;
-        const cssW = canvas.parentElement.clientWidth || 280;
+        // Use the canvas's own rendered width — CSS `.ho-spark { width: 100% }`
+        // already constrains it to the .ho-card content-box, so reading it back
+        // here guarantees the drawing coordinates exactly match the visible
+        // pixels (avoids the sparkline-bleeds-past-card bug).
+        const rect = canvas.getBoundingClientRect();
+        const cssW = Math.max(40, Math.round(rect.width));
         const cssH = 56;
         canvas.width = cssW * dpr;
         canvas.height = cssH * dpr;
-        canvas.style.width = cssW + 'px';
         canvas.style.height = cssH + 'px';
+        // Keep CSS width:100% authoritative (do not overwrite with an inline
+        // pixel width — that's what caused the overflow previously).
+        canvas.style.width = '100%';
         const ctx = canvas.getContext('2d');
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         ctx.clearRect(0, 0, cssW, cssH);
