@@ -1347,6 +1347,87 @@ body {
 .sleep-dot--average { background: var(--yellow); }
 .sleep-dot--poor { background: var(--red); }
 
+/* Numeric device sleep score badge (replaces the colored dot when a
+   device_score exists for the day). 0-100, colour-tiered. */
+.sleep-score {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 16px;
+    min-width: 24px;
+    padding: 0 5px;
+    border-radius: 8px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0;
+}
+
+.sleep-score--great   { background: var(--green);  color: #1a120a; }
+.sleep-score--good    { background: rgba(237, 138, 107, 0.55); color: #1a120a; }
+.sleep-score--average { background: var(--yellow); color: #1a120a; }
+.sleep-score--poor    { background: var(--red);    color: #ffffff; }
+
+/* Whoop recovery score badge — same shape, cyan palette to distinguish
+   from device sleep score when both are present on the same day. */
+.recovery-score {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 16px;
+    min-width: 24px;
+    padding: 0 5px;
+    border-radius: 8px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0;
+}
+
+.recovery-score--primed { background: #2dd4bf; color: #062b29; }       /* teal */
+.recovery-score--fair   { background: #fde68a; color: #4a3500; }       /* light amber */
+.recovery-score--poor   { background: #f87171; color: #2a0606; }       /* coral */
+
+/* Mini badge rendering the same tier at legend-row size. */
+.legend-score {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 16px;
+    min-width: 24px;
+    padding: 0 5px;
+    border-radius: 8px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    line-height: 1;
+    margin-right: 2px;
+}
+
+.legend-score--great   { background: var(--green);  color: #1a120a; }
+.legend-score--good    { background: rgba(237, 138, 107, 0.55); color: #1a120a; }
+.legend-score--average { background: var(--yellow); color: #1a120a; }
+.legend-score--poor    { background: var(--red);    color: #ffffff; }
+
+.legend-recovery {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 16px;
+    min-width: 24px;
+    padding: 0 5px;
+    border-radius: 8px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    line-height: 1;
+    margin-right: 2px;
+}
+
+.legend-recovery--primed { background: #2dd4bf; color: #062b29; }
+.legend-recovery--fair   { background: #fde68a; color: #4a3500; }
+.legend-recovery--poor   { background: #f87171; color: #2a0606; }
+
 .meal-dot {
     font-size: 0.8rem;
     line-height: 1;

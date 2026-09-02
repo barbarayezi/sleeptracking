@@ -15,6 +15,23 @@
 const QUALITY_COLORS = { good: '#4ade80', average: '#fbbf24', poor: '#f87171' };
 const QUALITY_RANK = { good: 1, average: 2, poor: 3 };
 
+/** Pick a tier key for a numeric device sleep score (0-100). */
+function scoreTier(score) {
+    if (score == null) return null;
+    if (score >= 80) return 'great';
+    if (score >= 65) return 'good';
+    if (score >= 50) return 'average';
+    return 'poor';
+}
+
+/** Whoop-style recovery tier (≥67 = primed, 34-66 = fair, <34 = poor). */
+function recoveryTier(score) {
+    if (score == null) return null;
+    if (score >= 67) return 'primed';
+    if (score >= 34) return 'fair';
+    return 'poor';
+}
+
 class Calendar {
     constructor() {
         this.container = document.getElementById('calendar-board');
@@ -26,6 +43,8 @@ class Calendar {
 
         this.data = { records: [], periods: [], meals: [], summary: null };
         this._sleepByDate = new Map();           // date -> quality
+        this._scoreByDate = new Map();           // date -> { sum, count } for device_score
+        this._recoveryByDate = new Map();        // date -> { sum, count } for Whoop recovery
         this._mealDates = new Set();             // dates with meals
         this._periodDays = new Map();            // date -> { flow, isStart }
         this._loadedKey = null;                  // range key currently fetched
@@ -129,6 +148,34 @@ class Calendar {
             if (!prev || QUALITY_RANK[q] > QUALITY_RANK[prev]) {
                 this._sleepByDate.set(d, q);
             }
+        }
+
+        // Device sleep score per day (averaged across records on the same day).
+        this._scoreByDate = new Map();
+        for (const r of (this.data.records || [])) {
+            const d = r.record_date;
+            const s = r.device_score;
+            if (s == null || s === '') continue;
+            const num = Number(s);
+            if (!Number.isFinite(num)) continue;
+            const entry = this._scoreByDate.get(d) || { sum: 0, count: 0 };
+            entry.sum += num;
+            entry.count += 1;
+            this._scoreByDate.set(d, entry);
+        }
+
+        // Whoop recovery score per day (averaged if multiple records carry one).
+        this._recoveryByDate = new Map();
+        for (const r of (this.data.records || [])) {
+            const d = r.record_date;
+            const s = r.recovery_score;
+            if (s == null || s === '') continue;
+            const num = Number(s);
+            if (!Number.isFinite(num)) continue;
+            const entry = this._recoveryByDate.get(d) || { sum: 0, count: 0 };
+            entry.sum += num;
+            entry.count += 1;
+            this._recoveryByDate.set(d, entry);
         }
 
         // Meal dates.
@@ -256,6 +303,16 @@ class Calendar {
 
     _cellHtml(dateStr, dayNum, isToday, isSelected, isMini) {
         const sleep = this._sleepByDate.get(dateStr);
+        const scoreEntry = this._scoreByDate.get(dateStr);
+        const scoreAvg = scoreEntry
+            ? Math.round(scoreEntry.sum / scoreEntry.count)
+            : null;
+        const score = scoreAvg != null ? scoreAvg : null;
+        const recoveryEntry = this._recoveryByDate.get(dateStr);
+        const recoveryAvg = recoveryEntry
+            ? Math.round(recoveryEntry.sum / recoveryEntry.count)
+            : null;
+        const recovery = recoveryAvg != null ? recoveryAvg : null;
         const hasMeal = this._mealDates.has(dateStr);
         const pd = this._periodDays.get(dateStr);
         const summary = this.data.summary;
@@ -270,8 +327,20 @@ class Calendar {
         if (isOvulation) classes.push('calendar-cell--ovulation');
         if (isNext && !pd) classes.push('calendar-cell--next-period');
 
+        // Numeric score badges take priority over the legacy quality dot.
+        // device_score (device sleep score) and recovery_score (Whoop recovery)
+        // each get their own colour-tier badge.
         let markers = '';
-        if (sleep) markers += `<span class="sleep-dot sleep-dot--${sleep}" title="睡眠质量：${this._qLabel(sleep)}"></span>`;
+        if (score != null) {
+            const tier = scoreTier(score);
+            markers += `<span class="sleep-score sleep-score--${tier}" title="设备睡眠评分：${score}（${this._scoreLabel(tier)}）">${score}</span>`;
+        } else if (sleep) {
+            markers += `<span class="sleep-dot sleep-dot--${sleep}" title="睡眠质量：${this._qLabel(sleep)}"></span>`;
+        }
+        if (recovery != null) {
+            const tier = recoveryTier(recovery);
+            markers += `<span class="recovery-score recovery-score--${tier}" title="Whoop 恢复评分：${recovery}（${this._recoveryLabel(tier)}）">${recovery}</span>`;
+        }
         if (hasMeal) markers += '<span class="meal-dot" title="有饮食记录">🍽</span>';
         if (isOvulation) markers += '<span class="ovulation-dot" title="预计排卵期"></span>';
         if (isNext && !pd) markers += '<span class="next-period-badge" title="预计下次经期">预</span>';
@@ -305,6 +374,13 @@ class Calendar {
             <span class="legend-item"><span class="legend-swatch legend-swatch--start">🌸</span>经期开始</span>
             <span class="legend-item"><span class="legend-swatch legend-swatch--ovulation"></span>排卵期</span>
             <span class="legend-item"><span class="legend-swatch legend-swatch--next">预</span>预计经期</span>
+            <span class="legend-item"><span class="legend-score legend-score--great">优秀</span>睡眠 ≥ 80</span>
+            <span class="legend-item"><span class="legend-score legend-score--good">良好</span>睡眠 65-79</span>
+            <span class="legend-item"><span class="legend-score legend-score--average">一般</span>睡眠 50-64</span>
+            <span class="legend-item"><span class="legend-score legend-score--poor">较差</span>睡眠 &lt; 50</span>
+            <span class="legend-item"><span class="legend-recovery legend-recovery--primed">蓄能</span>恢复 ≥ 67</span>
+            <span class="legend-item"><span class="legend-recovery legend-recovery--fair">尚可</span>恢复 34-66</span>
+            <span class="legend-item"><span class="legend-recovery legend-recovery--poor">透支</span>恢复 &lt; 34</span>
             <span class="legend-item"><span class="legend-dot legend-dot--good"></span>睡眠好</span>
             <span class="legend-item"><span class="legend-dot legend-dot--average"></span>睡眠一般</span>
             <span class="legend-item"><span class="legend-dot legend-dot--poor"></span>睡眠差</span>
@@ -400,5 +476,13 @@ class Calendar {
 
     _qLabel(q) {
         return { good: '好', average: '一般', poor: '差' }[q] || q;
+    }
+
+    _scoreLabel(tier) {
+        return { great: '优秀', good: '良好', average: '一般', poor: '较差' }[tier] || '';
+    }
+
+    _recoveryLabel(tier) {
+        return { primed: '已蓄能', fair: '尚可', poor: '透支' }[tier] || '';
     }
 }
