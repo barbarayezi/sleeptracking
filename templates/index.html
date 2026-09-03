@@ -11,7 +11,7 @@
     <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="/static/icon.svg">
     <title>睡眠追踪器 — Sleep Tracker</title>
-    <link rel="stylesheet" href="/static/style.css?v=14">
+    <link rel="stylesheet" href="/static/style.css?v=15">
 </head>
 <body>
 
@@ -174,7 +174,12 @@
             <!-- SECTION: HEALTH OVERVIEW DASHBOARD -->
             <section class="card health-overview-section">
                 <h2>❤️ 健康总览</h2>
-                <p class="section-hint">核心三分（睡眠分 / 恢复分 / 饮食健康分）+ 生理时序（Strain / HRV / RHR / 血氧 / 皮温 / 步数），含 7 日均线、±1SD 置信带、线性趋势与统计摘要。粉色竖带为经期。</p>
+                <p class="section-hint">
+                    <strong>科研级双层图表：</strong>
+                    上：核心分数（睡眠分 / 恢复分 / 饮食健康分）的时间序列，含原始数据 + 7 日 SMA + ±1 SD 滚动带 + 95% CI 均值带 + 均值参考线 + 线性 OLS 趋势（带 R² + β/周）+ 阈值参考带 + 经期阴影 + 缺失日竖线 + Z&gt;2 异常值标注。
+                    下：分布盒须图（P25–P75 箱体 + 1.5×IQR 须 + 中位数横线 + 均值十字标记 + P25/50/75 数值）+ 每个有效日的抖动散点。
+                    元数据栏：μ、σ、Md、IQR、范围、95%CI、OLS 趋势+ R²、异常值计数、缺失天数、当前值百分位、Z 分数。
+                </p>
                 <div class="report-controls">
                     <div id="health-range" class="calendar-toggle">
                         <button class="toggle-btn" data-days="7">7天</button>
@@ -764,7 +769,7 @@
     <script src="/static/calendar.js?v=10"></script>
     <script src="/static/timeline.js?v=10"></script>
     <script src="/static/reports.js?v=10"></script>
-    <script src="/static/healthOverview.js?v=11"></script>
+    <script src="/static/healthOverview.js?v=15"></script>
     <script src="/static/hero.js?v=11"></script>
     <script src="/static/app.js?v=10"></script>
     <script>
