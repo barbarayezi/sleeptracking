@@ -30,7 +30,8 @@ const HeroOverview = {
             pill: $('hero-pill'), pillText: $('hero-pill-text'),
             ring: $('hero-ring'), chips: $('metric-chips'),
             weekStrip: $('hero-week-strip'),
-            whoopRows: $('hero-whoop-rows'), whoopDate: $('hero-whoop-date')
+            whoopRows: $('hero-whoop-rows'), whoopDate: $('hero-whoop-date'),
+            algo: $('algo-body')
         };
     },
 
@@ -112,9 +113,10 @@ const HeroOverview = {
                 ${this._sparkSvg(c.spark, c.color)}
             </div>`).join('');
 
-        // ── 本周睡眠色块 + Whoop 总览
+        // ── 本周睡眠色块 + Whoop 总览 + 恢复分算法解读
         this._renderWeek(r.weekStrip, sleeps);
         this._renderWhoop(r, whoopSorted);
+        this._renderAlgo(r.algo, sleeps, whoopSorted, night);
     },
 
     _deepPct(rec) {
@@ -238,6 +240,158 @@ const HeroOverview = {
             </div>`;
         }).join('');
         r.whoopRows.innerHTML = html || '<div class="hero-whoop-empty">暂无可用指标</div>';
+    },
+
+    // ── 恢复分算法解读：基线轴拆解 + 今日建议 ──
+    _nightFor(list, date) {
+        if (!Array.isArray(list)) return null;
+        return list.find(o => o.record_date === date && (o.record_type === 'night' || o.record_type === 'segment'))
+            || list.find(o => o.record_date === date) || null;
+    },
+
+    _renderAlgo(body, sleeps, whoop, night) {
+        if (!body) return;
+        const daily = [...(whoop || [])].filter(o => o && o.record_date)
+            .sort((a, b) => (a.record_date < b.record_date ? -1 : 1));
+        const sleepsAsc = [...(sleeps || [])].filter(o => o && o.record_date)
+            .sort((a, b) => (a.record_date < b.record_date ? -1 : 1));
+        const last = daily.length ? daily[daily.length - 1] : null;
+        const anchorDate = last ? last.record_date : (night ? night.record_date : null);
+        if (!anchorDate) {
+            body.innerHTML = '<div class="algo-empty">记录夜间睡眠后，这里会自动拆解「恢复分是怎么算出来的」</div>';
+            return;
+        }
+        const cycle = this._nightFor(sleepsAsc, anchorDate)
+            || (night && (night.record_type === 'night' || night.record_type === 'segment') ? night : null);
+        const g = (o, f) => (o ? o[f] : null);
+        const recovery = g(last, 'recovery_score') ?? g(cycle, 'recovery_score') ?? g(night, 'recovery_score');
+        if (recovery == null) {
+            body.innerHTML = '<div class="algo-empty">暂无恢复分：连接 Whoop 并完成一次夜间同步后，这里会展示算法拆解。</div>';
+            return;
+        }
+        const strain = g(last, 'strain') ?? g(cycle, 'strain');
+        const sleepScore = g(cycle, 'device_score') ?? g(night, 'device_score');
+        const hrv = g(last, 'hrv') ?? g(cycle, 'hrv') ?? g(night, 'hrv');
+        const rhr = g(last, 'resting_heart_rate') ?? g(cycle, 'resting_heart_rate') ?? g(night, 'resting_heart_rate');
+        const eff = g(cycle, 'sleep_efficiency') ?? g(night, 'sleep_efficiency');
+        const resp = g(cycle, 'respiratory_rate') ?? g(night, 'respiratory_rate');
+
+        const bl = (arr, field) => {
+            const vals = arr.filter(o => o[field] != null && o.record_date < anchorDate)
+                .slice(-28).map(o => Number(o[field]));
+            return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+        };
+        const nightOnly = sleepsAsc.filter(o => o.record_type === 'night' || o.record_type === 'segment');
+        const baseHRV = bl(daily, 'hrv');
+        const baseRHR = bl(daily, 'resting_heart_rate');
+        const baseEff = bl(nightOnly, 'sleep_efficiency');
+        const baseResp = bl(nightOnly, 'respiratory_rate');
+
+        const rows = [
+            this._algoRow('HRV 心率变异性', '自主神经恢复力 · 越高越好', 3, 'ms', hrv, baseHRV, 0, true, null,
+                '权重最高 · 恢复分的第一主导项', '低于基线', '高于基线'),
+            this._algoRow('静息心率', '身体负荷残留 · 越低越好', 2, '', rhr, baseRHR, 0, false, null,
+                '偏高 = 压力 / 炎症负荷未清', '低于基线', '高于基线'),
+            this._algoRow('睡眠效率', '实际睡眠 vs 所需 · 越高越好', 2, '%', eff, baseEff, 0, true,
+                '来自睡眠分 · 唯一汇入通道', '睡眠分只以这一项参与恢复计算', '偏低', '充足'),
+            this._algoRow('呼吸率', '疾病 / 压力信号 · 越低越好', 1, '次/分', resp, baseResp, 1, false, null,
+                '低权重 · 明显升高时提示健康波动', '低于基线', '高于基线')
+        ].filter(Boolean);
+
+        if (!rows.length) {
+            body.innerHTML = '<div class="algo-empty">体征数据不足：需要至少一条历史记录用于计算 28 天基线。</div>';
+            return;
+        }
+
+        const relHtml = `<div class="algo-rel">
+            <span class="rel-sleep">睡眠分 <span class="rel-num">${sleepScore == null ? '—' : Math.round(sleepScore)}</span></span>
+            <span class="rel-sep">· 夜间质量</span><span class="rel-sep">→</span>
+            <span class="rel-gate">睡眠效率 ${eff == null ? '—' : Math.round(eff) + '%'} · 唯一汇入</span>
+            <span class="rel-sep">→</span>
+            <span class="rel-rec">恢复分 <span class="rel-num">${Math.round(recovery)}</span></span>
+            <span class="rel-sep">· 今晨状态（HRV 主导）</span>
+        </div>`;
+
+        const zone = recovery >= 67 ? 'green' : recovery >= 34 ? 'yellow' : 'red';
+        const zoneLbl = {
+            green: '绿区 67–100 · 可较高强度',
+            yellow: '黄区 34–66 · 中等强度',
+            red: '红区 0–33 · 以恢复为主'
+        };
+        const zoneWord = { green: '状态良好', yellow: '状态一般', red: '状态偏低' };
+        const adviceBase = {
+            red: '以恢复为主：今天优先低强度活动，今晚尽早入睡，不给身体加码。',
+            yellow: '中等强度：训练与工作控制在五成负荷，避免连续加码。',
+            green: '状态良好：可安排中等偏上强度的训练或工作冲刺。'
+        };
+        const strainTxt = strain != null ? '昨日 Strain ' + (typeof strain === 'number' ? strain.toFixed(1) : strain) + '。' : '';
+        let why = '';
+        if (hrv != null && baseHRV != null && Number(hrv) < Number(baseHRV)) {
+            const pct = Math.round((baseHRV - hrv) / baseHRV * 100);
+            why = 'HRV 仍低于基线 ' + pct + '%——即使睡眠分' + (sleepScore == null ? '' : ' ' + Math.round(sleepScore)) + '不错，也建议今晚优先睡够时长（而非加练）。';
+        }
+        const pos = Math.max(4, Math.min(96, recovery));
+        const sumHtml = `<div class="algo-sum">
+            <span>四项按权重合成 →</span>
+            <span class="final-chip">恢复分 ${Math.round(recovery)} · ${zoneLbl[zone]}</span>
+            <span>${zoneWord[zone]}${strainTxt}</span>
+        </div>
+        <div class="algo-zones">
+            <div class="az red">红 · 0–33</div>
+            <div class="az yel">黄 · 34–66</div>
+            <div class="az grn">绿 · 67–100</div>
+            <div class="algo-pointer" style="left:${pos}%" title="恢复 ${Math.round(recovery)}"></div>
+        </div>
+        <div class="algo-zone-scale"><span>0</span><span>33</span><span>66</span><span>100</span></div>
+        <div class="algo-advice">
+            <span class="a-badge">今日建议</span>
+            <div><p>${adviceBase[zone]}</p>${why ? '<p class="why">' + why + '</p>' : ''}</div>
+        </div>
+        <div class="algo-foot">* 权重仅作方向示意：HRV 为第一主导项，精确配比为 Whoop 专有算法；基线 = 本地近 28 天均值（不含当日）。本地库无 Whoop 的 sleep_need，故用同步到的「睡眠效率」近似其睡眠通道，方向逻辑一致。</div>`;
+
+        body.innerHTML = relHtml + '<div class="algo-rows">' + rows.join('') + '</div>' + sumHtml;
+    },
+
+    _algoRow(name, desc, wgt, unit, cur, base, dec, highBetter, fromTag, effectTxt, lowTxt, highTxt) {
+        if (cur == null || base == null) return null;
+        const baseN = Number(base), curN = Number(cur);
+        const diff = curN - baseN;
+        const absP = Math.abs(diff / baseN) * 100;
+        const dev = (diff / (baseN * 0.35 || 1)) * 25;
+        const pos = Math.max(6, Math.min(94, 50 + dev));
+        const mag = Math.abs(diff);
+        const magFmt = dec === 1 ? mag.toFixed(1) : String(Math.round(mag));
+        const sign = diff >= 0 ? '▲ +' : '▼ ';
+        const goodSide = highBetter ? diff > 0 : diff < 0;
+        const unitStr = unit || '';
+        let dotCls, chipCls, chipTxt;
+        if (absP < 2) { dotCls = 'neu'; chipCls = 'neu'; chipTxt = '≈ 贴近基线'; }
+        else if (goodSide) { dotCls = 'good'; chipCls = 'good'; chipTxt = sign + magFmt + ' · 助力'; }
+        else if (absP < 10) { dotCls = 'mild'; chipCls = 'mild'; chipTxt = sign + magFmt + ' · 轻微拉低'; }
+        else { dotCls = 'bad'; chipCls = 'bad'; chipTxt = sign + magFmt + ' · 明显拉低'; }
+        const dotFmt = dec === 1 ? curN.toFixed(1) : String(Math.round(curN));
+        const baseFmt = dec === 1 ? baseN.toFixed(1) : String(Math.round(baseN));
+        const wdots = [1, 2, 3].map(i => '<i class="' + (i <= wgt ? 'on' : '') + '"></i>').join('');
+        const loCls = highBetter ? 'tint-bad' : 'tint-good';
+        const hiCls = highBetter ? 'tint-good' : 'tint-bad';
+        const fromHtml = fromTag ? '<div class="algo-fromsleep">' + fromTag + '</div>' : '';
+        return '<div class="algo-row">' +
+            '<div><div class="algo-m-name">' + name + '<span class="algo-wdots">' + wdots + '</span></div>' +
+            '<div class="algo-m-desc">' + desc + '</div>' + fromHtml + '</div>' +
+            '<div class="algo-meter">' +
+                '<div class="algo-axis"><span>' + lowTxt + '</span><span>' + highTxt + '</span></div>' +
+                '<div class="algo-bar">' +
+                    '<div class="lo ' + loCls + '"></div><div class="hi ' + hiCls + '"></div>' +
+                    '<div class="algo-baseline"></div>' +
+                    '<div class="algo-basetag">基线 ' + baseFmt + unitStr + '</div>' +
+                '</div>' +
+                '<div class="algo-dot algo-dot--' + dotCls + '" style="left:' + pos + '%"></div>' +
+                '<div class="algo-dotval" style="left:' + pos + '%">' + dotFmt + unitStr +
+                    '<small> 基线 ' + baseFmt + unitStr + '</small></div>' +
+            '</div>' +
+            '<div class="algo-result"><span class="algo-chip ' + chipCls + '">' + chipTxt + '</span>' +
+            '<div class="algo-effect">' + effectTxt + '</div></div>' +
+        '</div>';
     },
 
     _num(v) {

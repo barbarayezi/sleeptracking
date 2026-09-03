@@ -147,13 +147,14 @@ def get_period_days(from_date=None, to_date=None):
 # ── Combined overview ───────────────────────────────
 
 def get_health_overview(from_date, to_date):
-    """Join sleep + Whoop + Apple Health + period into one per-date series.
+    """Join sleep + Whoop + Apple Health + period + meal into one per-date series.
 
     Returns { from, to, days: [...], insights: [...] }.
     Each day dict may contain: date, sleep_hours, sleep_quality, device_score,
     recovery_score, resting_heart_rate, hrv, spo2_percentage, skin_temp_celsius,
     strain, kilojoule, avg_heart_rate, max_heart_rate, workout_count, workout_strain,
-    sports (list), steps, active_energy_kj, distance_km, is_period, phase.
+    sports (list), steps, active_energy_kj, distance_km, is_period, phase,
+    meal_health_score (0–10 daily avg), meal_health_rating (good/average/poor majority).
     """
     conn = get_connection()
 
@@ -181,6 +182,22 @@ def get_health_overview(from_date, to_date):
         for fld in ("recovery_score", "resting_heart_rate", "hrv", "spo2_percentage", "skin_temp_celsius"):
             if r[fld] is not None and agg[fld] is None:
                 agg[fld] = r[fld]
+
+    # 1b) Meal records aggregated per date — health_score (numeric 0-10) and health_rating
+    meal_by_date = {}
+    for r in conn.execute(
+        "SELECT meal_date, health_rating, health_score FROM meal_records WHERE meal_date >= ? AND meal_date <= ?",
+        (from_date, to_date),
+    ).fetchall():
+        d = r["meal_date"]
+        agg = meal_by_date.setdefault(d, {"scores": [], "ratings": []})
+        if r["health_score"] is not None:
+            try:
+                agg["scores"].append(float(r["health_score"]))
+            except (ValueError, TypeError):
+                pass
+        if r["health_rating"]:
+            agg["ratings"].append(r["health_rating"])
 
     # 2) Whoop daily
     daily_by_date = {}
@@ -265,6 +282,24 @@ def get_health_overview(from_date, to_date):
         if pd:
             day["is_period"] = bool(pd["is_period_start"]) or (pd["flow"] not in (None, "", "none"))
             day["phase"] = pd["phase"] or ("period" if day.get("is_period") else None)
+        # Meal health score aggregation
+        ml = meal_by_date.get(d)
+        if ml:
+            if ml["scores"]:
+                day["meal_health_score"] = round(sum(ml["scores"]) / len(ml["scores"]), 1)
+            if ml["ratings"]:
+                # majority vote: good=3, average=2, poor=1
+                rating_map = {"good": 3, "average": 2, "poor": 1}
+                scored = [rating_map.get(r, 2) for r in ml["ratings"]]
+                day["meal_health_rating_num"] = round(sum(scored) / len(scored), 1)
+                # back-convert majority for display
+                avg_r = sum(scored) / len(scored)
+                if avg_r >= 2.5:
+                    day["meal_health_rating"] = "good"
+                elif avg_r >= 1.5:
+                    day["meal_health_rating"] = "average"
+                else:
+                    day["meal_health_rating"] = "poor"
         days.append(day)
         cur += timedelta(days=1)
 
@@ -333,5 +368,18 @@ def _compute_insights(days):
         insights.append(
             f"HRV 区间 {min(hrvs):.0f}–{max(hrvs):.0f} ms，越高代表身体恢复越好、压力越低。"
         )
+
+    # Meal health score vs recovery
+    meal_rec = [d for d in days if d.get("meal_health_score") is not None and d.get("recovery_score") is not None]
+    if len(meal_rec) >= 5:
+        hi_meal = [d for d in meal_rec if d["meal_health_score"] >= 7]
+        lo_meal = [d for d in meal_rec if d["meal_health_score"] < 5]
+        if hi_meal and lo_meal:
+            r_hi = sum(d["recovery_score"] for d in hi_meal) / len(hi_meal)
+            r_lo = sum(d["recovery_score"] for d in lo_meal) / len(lo_meal)
+            insights.append(
+                f"饮食高分日（≥7分）平均恢复 {r_hi:.0f}，低分日（<5分）平均恢复 {r_lo:.0f}"
+                f"（{'饮食越好恢复越强' if r_hi > r_lo else '未观察到明显关联'}）。"
+            )
 
     return insights

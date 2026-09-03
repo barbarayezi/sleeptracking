@@ -2934,3 +2934,244 @@ body {
 .brief-error {
     color: #dc2626;
 }
+
+/* ═══ 恢复分算法解读卡（hero 之后） ═══ */
+.algo-card {
+    border-color: var(--border);
+    background: linear-gradient(180deg, rgba(242, 166, 90, 0.06), transparent 46%), var(--bg-card);
+}
+.algo-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 4px;
+}
+.algo-title { font-size: 1.02rem; font-weight: 700; }
+.algo-hint { font-size: 0.72rem; color: var(--text-dim); }
+.algo-legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 0.68rem; color: var(--text-muted); }
+.algo-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.algo-legend i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+i.algo-lg-bad { background: var(--red); }
+i.algo-lg-mild { background: var(--yellow); }
+i.algo-lg-good { background: var(--mint); }
+i.algo-lg-line { background: transparent; border-left: 1px solid rgba(247, 238, 221, 0.45); border-radius: 0; width: 1px; height: 11px; }
+
+.algo-empty {
+    padding: 26px 10px;
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 0.85rem;
+}
+
+/* 关系条：睡眠分 —睡眠效率→ 恢复分 */
+.algo-rel {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin: 10px 0 12px;
+    padding: 10px 12px;
+    border: 1px dashed var(--border);
+    border-radius: 10px;
+    background: rgba(247, 238, 221, 0.02);
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+.algo-rel .rel-sep { color: var(--text-dim); }
+.rel-num { font-weight: 700; font-size: 0.92rem; }
+.rel-sleep .rel-num { color: var(--accent); }
+.rel-rec .rel-num { color: var(--mint); }
+.rel-gate {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.72rem;
+    color: var(--accent);
+    border: 1px solid rgba(242, 166, 90, 0.4);
+    border-radius: 7px;
+    padding: 1px 7px;
+    background: rgba(242, 166, 90, 0.08);
+}
+
+.algo-note {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    background: rgba(247, 238, 221, 0.03);
+    border: 1px dashed var(--border);
+    border-radius: 10px;
+    padding: 8px 12px;
+    margin-bottom: 12px;
+    line-height: 1.7;
+}
+.algo-note b { color: var(--accent); font-weight: 600; }
+
+.algo-row {
+    display: grid;
+    grid-template-columns: 200px minmax(0, 1fr) 172px;
+    gap: 14px;
+    align-items: center;
+    padding: 10px 12px;
+    border-radius: 10px;
+}
+.algo-row:hover { background: rgba(247, 238, 221, 0.04); }
+.algo-m-name { font-size: 0.83rem; font-weight: 600; }
+.algo-m-desc { font-size: 0.7rem; color: var(--text-dim); margin-top: 1px; }
+.algo-wdots { display: inline-flex; gap: 3px; margin-left: 6px; vertical-align: 2px; }
+.algo-wdots i { width: 5px; height: 5px; border-radius: 50%; background: var(--text-dim); opacity: 0.4; display: inline-block; }
+.algo-wdots i.on { background: var(--accent); opacity: 1; }
+.algo-fromsleep {
+    display: inline-block;
+    font-size: 0.62rem;
+    color: var(--accent);
+    border: 1px solid rgba(242, 166, 90, 0.4);
+    border-radius: 6px;
+    padding: 0 5px;
+    margin-top: 4px;
+}
+
+.algo-meter { position: relative; padding: 16px 2px 4px; }
+.algo-axis {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.62rem;
+    color: var(--text-dim);
+    margin-bottom: 3px;
+    padding: 0 2px;
+}
+.algo-bar { position: relative; height: 12px; border-radius: 6px; background: rgba(247, 238, 221, 0.07); overflow: hidden; }
+.algo-bar .lo { position: absolute; left: 0; top: 0; bottom: 0; width: 50%; }
+.algo-bar .hi { position: absolute; right: 0; top: 0; bottom: 0; width: 50%; }
+.algo-bar .lo.tint-bad { background: var(--red-bg); }
+.algo-bar .hi.tint-good { background: var(--mint-bg); }
+.algo-bar .lo.tint-good { background: var(--mint-bg); }
+.algo-bar .hi.tint-bad { background: var(--red-bg); }
+.algo-baseline {
+    position: absolute;
+    left: 50%;
+    top: -5px;
+    bottom: -5px;
+    width: 1px;
+    background: rgba(247, 238, 221, 0.45);
+    z-index: 2;
+}
+.algo-basetag {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    top: -14px;
+    font-size: 0.6rem;
+    color: var(--text-dim);
+    background: var(--bg-card);
+    padding: 0 4px;
+    white-space: nowrap;
+}
+.algo-dot {
+    position: absolute;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid var(--bg-card);
+    z-index: 3;
+}
+.algo-dot--bad { background: var(--red); }
+.algo-dot--mild { background: var(--yellow); }
+.algo-dot--good { background: var(--mint); }
+.algo-dot--neu { background: #D8CDBC; }
+.algo-dotval {
+    position: absolute;
+    transform: translateX(-50%);
+    top: 18px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.algo-dotval small { font-weight: 400; color: var(--text-dim); font-size: 0.62rem; }
+
+.algo-result { text-align: right; }
+.algo-chip {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.7rem;
+    padding: 2px 9px;
+    border-radius: 14px;
+    white-space: nowrap;
+}
+.algo-chip.bad { color: #F2A9A0; background: var(--red-bg); }
+.algo-chip.mild { color: #F0CE8D; background: var(--yellow-bg); }
+.algo-chip.good { color: #AFE3C2; background: var(--mint-bg); }
+.algo-chip.neu { color: var(--text-muted); background: rgba(247, 238, 221, 0.07); }
+.algo-effect { font-size: 0.66rem; color: var(--text-dim); margin-top: 4px; line-height: 1.5; }
+
+.algo-sum {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--line, rgba(247, 238, 221, 0.14));
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+.algo-sum .final-chip {
+    font-weight: 600;
+    color: var(--text);
+    background: var(--mint-bg);
+    border: 1px solid rgba(143, 211, 168, 0.35);
+    border-radius: 8px;
+    padding: 3px 10px;
+    font-size: 0.8rem;
+}
+
+.algo-zones { position: relative; height: 32px; border-radius: 16px; overflow: hidden; display: flex; margin: 12px 0 6px; }
+.algo-zones .az { flex: 1; display: flex; align-items: center; justify-content: center; font-size: 0.72rem; font-weight: 600; gap: 6px; }
+.az.red { background: var(--red-bg); color: #F0B3AA; }
+.az.yel { background: var(--yellow-bg); color: #F0D08C; }
+.az.grn { background: var(--mint-bg); color: #B6E5C8; }
+.algo-pointer {
+    position: absolute;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 0;
+    height: 0;
+    border-left: 7px solid transparent;
+    border-right: 7px solid transparent;
+    border-top: 9px solid var(--text);
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
+}
+.algo-zone-scale { display: flex; justify-content: space-between; font-size: 0.62rem; color: var(--text-dim); padding: 0 4px; }
+.algo-advice {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    background: rgba(247, 238, 221, 0.03);
+    border: 1px solid rgba(247, 238, 221, 0.1);
+    border-radius: 10px;
+    padding: 10px 13px;
+    margin-top: 10px;
+    font-size: 0.8rem;
+    line-height: 1.7;
+}
+.algo-advice .a-badge {
+    flex: 0 0 auto;
+    font-size: 0.66rem;
+    font-weight: 700;
+    color: #0F0A06;
+    background: var(--mint);
+    border-radius: 6px;
+    padding: 2px 8px;
+    margin-top: 2px;
+}
+.algo-advice b { color: var(--mint); font-weight: 600; }
+.algo-advice .why { color: var(--text-dim); font-size: 0.72rem; margin-top: 2px; }
+.algo-foot { font-size: 0.66rem; color: var(--text-dim); margin-top: 12px; line-height: 1.7; }
+
+@media (max-width: 820px) {
+    .algo-row { grid-template-columns: 1fr; gap: 4px; }
+    .algo-result { text-align: left; }
+}
+

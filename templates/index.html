@@ -11,7 +11,7 @@
     <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="/static/icon.svg">
     <title>睡眠追踪器 — Sleep Tracker</title>
-    <link rel="stylesheet" href="/static/style.css?v=10">
+    <link rel="stylesheet" href="/static/style.css?v=11">
 </head>
 <body>
 
@@ -104,6 +104,25 @@
                 <button id="btn-import" class="btn btn-secondary" type="button">⬆️ 导入恢复</button>
                 <input type="file" id="import-file" accept="application/json" class="hidden">
                 <span id="backup-msg" class="form-message"></span>
+            </div>
+        </section>
+
+        <!-- ═══════════════════════════════════════ -->
+        <!--  ALGO · 恢复分算法解读（依据设计稿 v2 落地） -->
+        <!-- ═══════════════════════════════════════ -->
+        <section class="card algo-card" id="algo-card">
+            <div class="algo-head">
+                <span class="algo-title">恢复分是怎么算出来的</span>
+                <span class="algo-hint">整夜体征 vs 个人 28 天基线 · 权重为方向示意</span>
+                <span class="algo-legend">
+                    <span><i class="algo-lg-bad"></i>拖累</span>
+                    <span><i class="algo-lg-mild"></i>轻微拖累</span>
+                    <span><i class="algo-lg-good"></i>助力</span>
+                    <span><i class="algo-lg-line"></i>基线（近 28 天均值）</span>
+                </span>
+            </div>
+            <div id="algo-body">
+                <div class="algo-empty">加载中…</div>
             </div>
         </section>
 
@@ -741,8 +760,8 @@
     <script src="/static/calendar.js?v=10"></script>
     <script src="/static/timeline.js?v=10"></script>
     <script src="/static/reports.js?v=10"></script>
-    <script src="/static/healthOverview.js?v=10"></script>
-    <script src="/static/hero.js?v=10"></script>
+    <script src="/static/healthOverview.js?v=11"></script>
+    <script src="/static/hero.js?v=11"></script>
     <script src="/static/app.js?v=10"></script>
     <script>
         (function () {
