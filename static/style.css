@@ -1082,6 +1082,10 @@ body {
 .role-btn { flex: 1; font-size: 12px; padding: 3px 0; border: 1px solid var(--gray-200); border-radius: var(--radius-sm); background: #fff; color: var(--gray-600); cursor: pointer; }
 .role-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
 
+/* File inputs are triggered by the preceding <label for="…"> button — hide the
+   browser-native "选择文件 / 未选择任何文件" chrome so only our DS-style button shows. */
+.meal-image-input { display: none !important; }
+
 /* ── Meal brief ── */
 .meal-brief-block { margin-top: 10px; }
 .meal-brief-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
