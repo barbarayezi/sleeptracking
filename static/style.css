@@ -8,66 +8,66 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-    /* 背景层：极淡紫白系列 */
-    --bg:           #f4f1fb;
-    --bg-soft:      #ece6fa;
+    /* 背景层：极浅中性灰白（去掉强紫倾向，更接近数据看板调性） */
+    --bg:           #f7f8fb;
+    --bg-soft:      #eef1f6;
     --bg-card:      #ffffff;
-    --bg-card-hover:#faf7ff;
-    --bg-tint:      #f8f5ff;
+    --bg-card-hover:#fafbfd;
+    --bg-tint:      #f3f5f9;
 
-    /* 文字：深紫色阶 */
-    --text:         #2a2050;
-    --text-muted:   #6b6480;
-    --text-dim:     #9d96b3;
+    /* 文字：降对比度，深但不过黑 */
+    --text:         #2a2645;
+    --text-muted:   #635c7a;
+    --text-dim:     #8e88a3;
 
-    /* 描边 / 分隔线 */
-    --border:       #ebe4f7;
-    --border-strong:#d9cdf0;
+    /* 描边 / 分隔线：更淡、更中性 */
+    --border:       #e7eaf0;
+    --border-strong:#d3d8e3;
 
-    /* 主色：紫 / 粉 / 绿 / 黄 / 橘 */
-    --primary:      #7c5cff;
-    --primary-deep: #6845ee;
-    --primary-soft: #efebff;
-    --pink:         #ff5ca7;
-    --pink-soft:    #ffe4f1;
-    --mint:         #5cd9a8;
-    --mint-soft:    #d9f7ea;
-    --sky:          #5cb8ff;
-    --sky-soft:     #d9f0ff;
-    --yellow:       #ffb547;
-    --yellow-soft:  #fff0d9;
+    /* 主色：紫 / 粉 / 绿 / 黄 / 橘 — 整体降饱和 ~35%、提亮度 */
+    --primary:      #9c8cf0;          /* 柔紫（替代高饱和 #7c5cff） */
+    --primary-deep: #8475d8;
+    --primary-soft: #ecedfa;
+    --pink:         #f0a3c2;          /* 柔粉 */
+    --pink-soft:    #fbe6ee;
+    --mint:         #87d8b5;          /* 柔绿 */
+    --mint-soft:    #ddf3e9;
+    --sky:          #93c8ee;          /* 柔蓝 */
+    --sky-soft:     #dceefa;
+    --yellow:       #f3c682;          /* 柔橘黄 */
+    --yellow-soft:  #fbecd0;
 
-    /* 兼容旧类名引用（语义色保持映射） */
-    --accent:       var(--primary);    /* 主高亮 */
+    /* 兼容旧类名引用（语义色保持映射，整体也降饱和） */
+    --accent:       var(--primary);
     --accent-hover: var(--primary-deep);
     --accent-bg:    var(--primary-soft);
-    --green:        #38b97e;            /* good 状态（深一点的绿，可读性好） */
-    --green-bg:     rgba(56,185,126,0.12);
-    --red:          #e5487f;            /* 错误 / 经期（樱红） */
-    --red-bg:       rgba(229,72,127,0.10);
+    --green:        #4ab48a;          /* 比之前的 #38b97e 更柔 */
+    --green-bg:     rgba(74,180,138,0.12);
+    --red:          #d65d8a;          /* 樱红（从 #e5487f 降饱和） */
+    --red-bg:       rgba(214,93,138,0.10);
 
-    /* 多色渐变（参考图核心） */
-    --grad-primary: linear-gradient(135deg, #7c5cff 0%, #ff5ca7 100%);
-    --grad-purple:  linear-gradient(135deg, #a385ff 0%, #7c5cff 100%);
-    --grad-pink:    linear-gradient(135deg, #ff7ab8 0%, #ff5ca7 100%);
-    --grad-green:   linear-gradient(135deg, #5cd9a8 0%, #5cb8ff 100%);
-    --grad-yellow:  linear-gradient(135deg, #ffd966 0%, #ffb547 100%);
-    --grad-orange:  linear-gradient(135deg, #ff9a5c 0%, #ff5c8a 100%);
-    --grad-soft:    linear-gradient(135deg, #efebff 0%, #ffe4f1 100%);
+    /* 多色渐变（柔化版本：参考图风格的"活泼"保留，但不再糖果化） */
+    --grad-primary: linear-gradient(135deg, #a89bf2 0%, #f0a3c2 100%);
+    --grad-purple:  linear-gradient(135deg, #c2b8f5 0%, #9c8cf0 100%);
+    --grad-pink:    linear-gradient(135deg, #fac8d8 0%, #f0a3c2 100%);
+    --grad-green:   linear-gradient(135deg, #b8e6d2 0%, #93c8ee 100%);
+    --grad-yellow:  linear-gradient(135deg, #fce4ba 0%, #f3c682 100%);
+    --grad-orange:  linear-gradient(135deg, #fad7b8 0%, #f0a3c2 100%);
+    --grad-soft:    linear-gradient(135deg, #ecedfa 0%, #fbe6ee 100%);
 
-    /* 圆角 */
-    --radius:       20px;
-    --radius-sm:    14px;
-    --radius-lg:    28px;
-    --radius-xl:    36px;
+    /* 圆角（从 28px → 22px，更接近数据看板气质，去掉糖果感） */
+    --radius:       18px;
+    --radius-sm:    12px;
+    --radius-lg:    22px;
+    --radius-xl:    32px;
     --radius-pill:  999px;
 
-    /* 阴影：紫色基调（参考图风格：柔和彩色阴影） */
-    --shadow:       0 8px 24px rgba(124, 92, 255, 0.10);
-    --shadow-sm:    0 4px 12px rgba(124, 92, 255, 0.08);
-    --shadow-lg:    0 16px 40px rgba(124, 92, 255, 0.16);
-    --shadow-pop:   0 12px 32px rgba(255, 92, 167, 0.18);
-    --shadow-inner: inset 0 1px 0 rgba(255,255,255,0.7);
+    /* 阴影：中性更淡（紫色调 → 中性蓝灰，且透明度降低） */
+    --shadow:       0 4px 14px rgba(31, 36, 70, 0.06);
+    --shadow-sm:    0 2px 8px rgba(31, 36, 70, 0.05);
+    --shadow-lg:    0 10px 28px rgba(31, 36, 70, 0.08);
+    --shadow-pop:   0 8px 22px rgba(156, 140, 240, 0.20);
+    --shadow-inner: inset 0 1px 0 rgba(255,255,255,0.6);
 
     --transition:   0.2s cubic-bezier(0.4, 0, 0.2, 1);
 
@@ -97,7 +97,7 @@ body {
     backdrop-filter: saturate(180%) blur(14px);
     -webkit-backdrop-filter: saturate(180%) blur(14px);
     border-bottom: 1px solid var(--border);
-    box-shadow: 0 2px 12px rgba(124, 92, 255, 0.04);
+    box-shadow: 0 2px 12px rgba(156, 140, 240, 0.06);
 }
 
 /* ── Header ──────────────────────────────────────── */
@@ -129,7 +129,7 @@ body {
     background: var(--grad-primary);
     color: #fff;
     font-size: 1rem;
-    box-shadow: 0 4px 12px rgba(124, 92, 255, 0.25);
+    box-shadow: 0 4px 12px rgba(156, 140, 240, 0.28);
 }
 
 .header-right {
@@ -207,11 +207,11 @@ body {
     transition: all var(--transition);
     font-family: inherit;
     white-space: nowrap;
-    box-shadow: 0 6px 18px rgba(124, 92, 255, 0.35);
+    box-shadow: 0 6px 18px rgba(156, 140, 240, 0.36);
 }
 .btn-record-quick:hover {
     transform: translateY(-2px);
-    box-shadow: 0 10px 24px rgba(255, 92, 167, 0.40);
+    box-shadow: 0 10px 24px rgba(240, 163, 194, 0.40);
 }
 .btn-record-quick .plus {
     font-size: 1.15rem;
@@ -252,7 +252,7 @@ body {
     background: var(--grad-primary);
     color: #fff;
     border-color: transparent;
-    box-shadow: 0 4px 14px rgba(124, 92, 255, 0.30);
+    box-shadow: 0 4px 14px rgba(156, 140, 240, 0.32);
 }
 
 /* ── Category Groups & Banners ──────────────── */
@@ -543,11 +543,11 @@ body {
 .btn-primary {
     background: var(--grad-primary);
     color: #fff;
-    box-shadow: 0 6px 18px rgba(124, 92, 255, 0.30);
+    box-shadow: 0 6px 18px rgba(156, 140, 240, 0.32);
 }
 .btn-primary:hover {
     transform: translateY(-2px);
-    box-shadow: 0 10px 24px rgba(255, 92, 167, 0.40);
+    box-shadow: 0 10px 24px rgba(240, 163, 194, 0.40);
 }
 .btn-primary:active { transform: translateY(0); }
 
@@ -582,11 +582,11 @@ body {
     font-weight: 600;
     cursor: pointer;
     transition: all var(--transition);
-    box-shadow: 0 4px 12px rgba(124, 92, 255, 0.25);
+    box-shadow: 0 4px 12px rgba(156, 140, 240, 0.28);
 }
 .btn-ai:hover:not(:disabled) {
     transform: translateY(-1px);
-    box-shadow: 0 6px 18px rgba(255, 92, 167, 0.35);
+    box-shadow: 0 6px 18px rgba(240, 163, 194, 0.36);
 }
 .btn-ai:disabled {
     opacity: 0.55;
@@ -951,18 +951,18 @@ body {
     transition: all var(--transition);
     font-family: inherit;
     white-space: nowrap;
-    box-shadow: 0 4px 12px rgba(124, 92, 255, 0.30);
+    box-shadow: 0 4px 12px rgba(156, 140, 240, 0.32);
     animation: install-pulse 2s ease-in-out 3;
 }
 .btn-install-pwa:hover {
     transform: translateY(-1px);
-    box-shadow: 0 6px 18px rgba(124, 92, 255, 0.40);
+    box-shadow: 0 6px 18px rgba(156, 140, 240, 0.40);
 }
 .install-icon { font-size: 1rem; }
 
 @keyframes install-pulse {
-    0%, 100% { box-shadow: 0 4px 12px rgba(124, 92, 255, 0.30); }
-    50%      { box-shadow: 0 4px 12px rgba(124, 92, 255, 0.30), 0 0 0 10px rgba(124, 92, 255, 0); }
+    0%, 100% { box-shadow: 0 4px 12px rgba(156, 140, 240, 0.32); }
+    50%      { box-shadow: 0 4px 12px rgba(156, 140, 240, 0.32), 0 0 0 10px rgba(156, 140, 240, 0); }
 }
 
 /* ═══════════════════════════════════════════════
@@ -971,8 +971,8 @@ body {
 .hero-overview {
     border-color: transparent;
     background:
-        radial-gradient(120% 140% at 100% 0%, rgba(255, 92, 167, 0.12), transparent 60%),
-        radial-gradient(100% 120% at 0% 100%, rgba(124, 92, 255, 0.10), transparent 60%),
+        radial-gradient(120% 140% at 100% 0%, rgba(240, 163, 194, 0.18), transparent 60%),
+        radial-gradient(100% 120% at 0% 100%, rgba(156, 140, 240, 0.16), transparent 60%),
         linear-gradient(135deg, #ffffff 0%, #faf5ff 100%);
     overflow: hidden;
     position: relative;
@@ -1054,7 +1054,7 @@ body {
     width: 140px;
     height: 140px;
     flex-shrink: 0;
-    filter: drop-shadow(0 8px 18px rgba(124, 92, 255, 0.25));
+    filter: drop-shadow(0 8px 18px rgba(156, 140, 240, 0.28));
 }
 .hero-ring svg { width: 100%; height: 100%; display: block; }
 
@@ -1085,7 +1085,7 @@ body {
 .metric-chip:nth-child(5n+5) { background: var(--grad-purple);  box-shadow: 0 6px 18px rgba(163,133,255,0.30); }
 .metric-chip:hover {
     transform: translateY(-3px);
-    box-shadow: 0 12px 28px rgba(124, 92, 255, 0.30);
+    box-shadow: 0 12px 28px rgba(156, 140, 240, 0.32);
 }
 
 .metric-chip__label {
@@ -1362,7 +1362,7 @@ body {
 .toggle-btn.active {
     background: var(--grad-primary);
     color: #fff;
-    box-shadow: 0 4px 12px rgba(124, 92, 255, 0.25);
+    box-shadow: 0 4px 12px rgba(156, 140, 240, 0.28);
 }
 
 .calendar-weekdays {
@@ -1813,9 +1813,9 @@ body {
     transition: all var(--transition);
     position: relative;
 }
-.ho2-core-card:nth-child(1) { background: linear-gradient(135deg, #efebff 0%, #d9cdff 100%); }
-.ho2-core-card:nth-child(2) { background: linear-gradient(135deg, #ffe4f1 0%, #ffb8d4 100%); }
-.ho2-core-card:nth-child(3) { background: linear-gradient(135deg, #d9f7ea 0%, #a8ecd0 100%); }
+.ho2-core-card:nth-child(1) { background: linear-gradient(135deg, #ecedfa 0%, #d8d3f5 100%); }
+.ho2-core-card:nth-child(2) { background: linear-gradient(135deg, #fbe6ee 0%, #f4c8d8 100%); }
+.ho2-core-card:nth-child(3) { background: linear-gradient(135deg, #ddf3e9 0%, #b5e6cf 100%); }
 .ho2-core-card:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
 
 .ho2-core__head {
@@ -1976,7 +1976,7 @@ body {
 .today-overview {
     border-color: var(--primary);
     background:
-        radial-gradient(120% 140% at 100% 0%, rgba(255, 92, 167, 0.10), transparent 58%),
+        radial-gradient(120% 140% at 100% 0%, rgba(240, 163, 194, 0.16), transparent 58%),
         linear-gradient(135deg, #ffffff 0%, #faf5ff 100%);
     position: relative;
     overflow: hidden;
@@ -2514,7 +2514,7 @@ body {
     margin-top: 26px;
     padding: 20px 18px 6px;
     border-top: 1px dashed var(--border);
-    background: linear-gradient(180deg, rgba(124, 92, 255, 0.04), transparent 62%);
+    background: linear-gradient(180deg, rgba(156, 140, 240, 0.06), transparent 62%);
     border-radius: var(--radius);
 }
 
@@ -2577,7 +2577,7 @@ i.algo-lg-line {
     gap: 6px;
     font-size: 0.74rem;
     color: var(--primary);
-    border: 1px solid rgba(124, 92, 255, 0.30);
+    border: 1px solid rgba(156, 140, 240, 0.32);
     border-radius: var(--radius-pill);
     padding: 2px 10px;
     background: var(--primary-soft);
