@@ -12,6 +12,7 @@ so the Flask route can render a friendly message instead of a 500.
 
 import json
 import base64
+import io
 import os
 import re
 import ssl
@@ -368,17 +369,39 @@ def _load_vision_config():
     return base, key, model
 
 
-def _guess_media_type(raw):
-    """Best-effort sniff of image format from the first bytes."""
-    if raw[:8] == b"\x89PNG\r\n\x1a\n":
-        return "image/png"
-    if raw[:3] == b"\xff\xd8\xff":
-        return "image/jpeg"
-    if raw[:6] in (b"GIF87a", b"GIF89a"):
-        return "image/gif"
-    if raw[:4] == b"RIFF" and raw[8:12] == b"WEBP":
-        return "image/webp"
-    return "image/jpeg"  # safe fallback
+_JPEG_MAX_SIDE = 1600  # qwen-vl 侧尺寸上限以内留余量；也控制请求体大小
+
+
+def _to_jpeg_bytes(raw, max_side=_JPEG_MAX_SIDE):
+    """Convert any decodeable image (PNG/WebP/JPEG/GIF...) to a JPEG blob.
+
+    Measured (2026-09-03): the Aliyun MaaS vision gateway REJECTS PNG outright
+    ("The image format is illegal and cannot be opened") while JPEG goes through
+    — it sniffs the real bytes, so lying about media_type does not help. So every
+    upload is normalised to JPEG before being sent.
+
+    Returns (jpeg_bytes, None) on success, or (None, user_friendly_error).
+    """
+    try:
+        from PIL import Image, ImageOps
+    except Exception:
+        return None, "服务器缺少 Pillow 图片处理依赖，无法分析图片。"
+    try:
+        im = Image.open(io.BytesIO(raw))
+        im = ImageOps.exif_transpose(im)
+        if im.mode == "RGBA":
+            bg = Image.new("RGB", im.size, (255, 255, 255))
+            bg.paste(im, mask=im.split()[3])
+            im = bg
+        elif im.mode != "RGB":
+            im = im.convert("RGB")
+        if max(im.size) > max_side:
+            im.thumbnail((max_side, max_side), Image.LANCZOS)
+        buf = io.BytesIO()
+        im.save(buf, "JPEG", quality=88)
+        return buf.getvalue(), None
+    except Exception as e:
+        return None, f"图片无法解析：{e}"
 
 
 def analyze_meal_image(image_bytes, meal_name="", meal_quantity="normal", meal_type=""):
@@ -391,8 +414,11 @@ def analyze_meal_image(image_bytes, meal_name="", meal_quantity="normal", meal_t
     if not image_bytes:
         return {"ok": False, "error": "未收到图片数据。"}
 
+    jpeg_bytes, err = _to_jpeg_bytes(image_bytes)
+    if err:
+        return {"ok": False, "error": err}
     try:
-        b64 = base64.b64encode(image_bytes).decode("ascii")
+        b64 = base64.b64encode(jpeg_bytes).decode("ascii")
     except Exception:
         return {"ok": False, "error": "图片编码失败，请换一张图重试。"}
 
@@ -411,7 +437,7 @@ def analyze_meal_image(image_bytes, meal_name="", meal_quantity="normal", meal_t
             "type": "image",
             "source": {
                 "type": "base64",
-                "media_type": _guess_media_type(image_bytes),
+                "media_type": "image/jpeg",
                 "data": b64,
             },
         },
@@ -467,13 +493,19 @@ def analyze_meal_image(image_bytes, meal_name="", meal_quantity="normal", meal_t
 # subtracting the leftover (after) from the full plate (before).
 
 def _image_block(raw):
-    """Wrap raw image bytes into an Anthropic vision content block."""
+    """Normalise image bytes to JPEG and wrap into an Anthropic vision block.
+
+    Raises ValueError with a friendly reason when the bytes are not decodable.
+    """
+    jpeg_bytes, err = _to_jpeg_bytes(raw)
+    if err:
+        raise ValueError(err)
     return {
         "type": "image",
         "source": {
             "type": "base64",
-            "media_type": _guess_media_type(raw),
-            "data": base64.b64encode(raw).decode("ascii"),
+            "media_type": "image/jpeg",
+            "data": base64.b64encode(jpeg_bytes).decode("ascii"),
         },
     }
 
@@ -521,8 +553,8 @@ def analyze_meal_images(before_images, after_images=None, meal_name="", meal_qua
             blocks.append(_image_block(b))
         for b in after_images:
             blocks.append(_image_block(b))
-    except Exception:
-        return {"ok": False, "error": "图片编码失败，请换一张图重试。"}
+    except Exception as e:
+        return {"ok": False, "error": f"图片转换失败：{e}"}
 
     base, key, model = _load_vision_config()
     if not (base and key):
