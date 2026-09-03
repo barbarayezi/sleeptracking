@@ -147,6 +147,18 @@
                 <div id="daily-report-output" class="daily-report-output hidden"></div>
             </section>
 
+            <!-- SECTION: RESEARCH DASHBOARD -->
+            <section class="card research-dashboard-section">
+                <h2>🔬 科研级数据看板</h2>
+                <p class="section-hint">
+                    按「原始数据 → 特征指标 → 综合评分 → 结论建议」的计算逻辑系统化展示，
+                    用数据流图、关联矩阵和科研级指标卡帮助理解数据与结论之间的因果链。
+                </p>
+                <div id="research-dashboard" class="research-dashboard">
+                    <p class="report-placeholder">加载中…</p>
+                </div>
+            </section>
+
             <!-- SECTION: SLEEP TIMELINE -->
             <section class="card timeline-section">
                 <h2>📊 睡眠时间线</h2>
@@ -776,10 +788,11 @@
     <script src="/static/timeline.js?v=16"></script>
     <script src="/static/reports.js?v=10"></script>
     <script src="/static/healthOverview.js?v=16"></script>
+    <script src="/static/researchDashboard.js?v=1"></script>
     <script src="/static/hero.js?v=16"></script>
     <script src="/static/agent.js?v=1"></script>
     <script src="/static/dailyReport.js?v=1"></script>
-    <script src="/static/app.js?v=11"></script>
+    <script src="/static/app.js?v=12"></script>
     <script>
         (function () {
             var btn = document.getElementById('btn-quick-record');

@@ -12,6 +12,7 @@ const App = {
     report: null,
     health: null,
     dailyReport: null,
+    research: null,
     currentDate: null,
     deferredInstallPrompt: null,
 
@@ -26,6 +27,10 @@ const App = {
         this.report = new ReportManager();
         this.health = new HealthOverview();
         this.dailyReport = new DailyReportManager({
+            onDateChange: (dateStr) => this.setDate(dateStr)
+        });
+        this.research = new ResearchDashboard({
+            range: 30,
             onDateChange: (dateStr) => this.setDate(dateStr)
         });
         const healthRefresh = document.getElementById('btn-health-refresh');
@@ -49,6 +54,7 @@ const App = {
         await this.period.loadDate(this.currentDate);
         await this._refreshTimeline();
         await this.health.load();
+        await this.research.load();
         await this.dailyReport.init(this.currentDate);
 
         // Load Hero 首页概览（昨晚睡眠 + 指标芯片 + 本周/Whoop 总览）
@@ -88,6 +94,7 @@ const App = {
         this.calendar.refresh();
         if (window.HeroOverview) HeroOverview.refresh();
         this.health.refresh();
+        if (this.research) this.research.refresh();
     },
 
     onRecordDeleted(dateStr) {
@@ -95,6 +102,7 @@ const App = {
         this.calendar.refresh();
         if (window.HeroOverview) HeroOverview.refresh();
         this.health.refresh();
+        if (this.research) this.research.refresh();
     },
 
     onPeriodSaved() {
@@ -102,6 +110,7 @@ const App = {
         this.calendar.refresh();
         if (window.HeroOverview) HeroOverview.refresh();
         this.health.refresh();
+        if (this.research) this.research.refresh();
     },
 
     onTimelineClick(dateStr) {
