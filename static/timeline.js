@@ -32,19 +32,19 @@ class Timeline {
         this.BAR_Y_OFFSET = 8;
         this.MEAL_DOT_RADIUS = 4.5;
 
-        // Color mapping
+        // Color mapping（DS 语义色）
         this.colors = {
-            good: '#4ade80',
-            average: '#fbbf24',
-            poor: '#f87171'
+            good: '#16a34a',
+            average: '#d97706',
+            poor: '#dc2626'
         };
 
-        // Meal type colors
+        // Meal type colors（DS 折线数据色：低饱和区分度）
         this.mealColors = {
-            breakfast: '#fbbf24',  // warm yellow
-            lunch: '#4ade80',      // green
-            dinner: '#818cf8',     // indigo
-            snack: '#f472b6'       // pink
+            breakfast: '#d97706',  // amber
+            lunch: '#16a34a',      // green
+            dinner: '#2563eb',     // blue
+            snack: '#dc2626'       // red
         };
 
         // Type-specific alpha
@@ -247,10 +247,10 @@ class Timeline {
         ctx.clearRect(0, 0, containerWidth, totalHeight);
 
         // Draw grid lines & hour labels
-        ctx.fillStyle = '#9d96b3';
+        ctx.fillStyle = '#64748b';
         ctx.font = '11px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
         ctx.textAlign = 'center';
-        ctx.strokeStyle = '#ebe4f7';
+        ctx.strokeStyle = '#e2e8f0';
         ctx.lineWidth = 0.5;
 
         const hourLabels = ['18', '19', '20', '21', '22', '23', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18'];
@@ -278,7 +278,7 @@ class Timeline {
             const weekday = this._weekdayLabel(date);
             const isWeekend = (weekday === '周六' || weekday === '周日');
             // 第一行：周几
-            ctx.fillStyle = isWeekend ? '#fbbf24' : '#94a3b8';
+            ctx.fillStyle = isWeekend ? '#d97706' : '#64748b';
             ctx.font = '11px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
             ctx.fillText(weekday, this.LEFT_MARGIN - 8, y + this.BAR_Y_OFFSET + 6);
             // 第二行：MM-DD
@@ -366,7 +366,7 @@ class Timeline {
         // Duration text
         const durationHours = (wakeOffset - sleepOffset) / 60;
         const typeIndicator = { night: '', nap: '💤', segment: '🔄' }[record.record_type] || '';
-        ctx.fillStyle = '#2a2050';
+        ctx.fillStyle = '#0f172a';
         ctx.textAlign = 'left';
         ctx.font = '11px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
         const hoursText = durationHours.toFixed(1) + 'h' + (typeIndicator ? ' ' + typeIndicator : '');
@@ -452,7 +452,7 @@ class Timeline {
         for (const p of periods) {
             if ((flowRank[p.flow] || 0) > (flowRank[maxFlow] || 0)) maxFlow = p.flow;
         }
-        const color = { none: '#94a3b8', light: '#f9a8d4', normal: '#f472b6', heavy: '#ec4899' }[maxFlow] || '#f472b6';
+        const color = { none: '#94a3b8', light: '#fb7185', normal: '#f43f5e', heavy: '#dc2626' }[maxFlow] || '#f43f5e';
         const x = 16, yDot = rowY + 9;
         ctx.fillStyle = color;
         ctx.globalAlpha = 0.95;
@@ -471,7 +471,7 @@ class Timeline {
 
     _drawOvulationMarker(ctx, rowY) {
         const x = 16, yDot = rowY + 22;
-        ctx.fillStyle = '#818cf8';
+        ctx.fillStyle = '#2563eb';
         ctx.globalAlpha = 0.95;
         ctx.beginPath();
         ctx.arc(x, yDot, 4, 0, Math.PI * 2);
@@ -483,9 +483,9 @@ class Timeline {
 
     _recoveryColor(score) {
         if (score == null) return null;
-        if (score >= 67) return '#4ade80';   // green
-        if (score >= 34) return '#fbbf24';   // yellow
-        return '#f87171';                     // red
+        if (score >= 67) return '#16a34a';   // green
+        if (score >= 34) return '#d97706';   // amber
+        return '#dc2626';                     // red
     }
 
     _drawMetricCluster(ctx, date, rowY, containerWidth) {
@@ -518,7 +518,7 @@ class Timeline {
             ctx.fillStyle = 'rgba(129,140,248,0.25)';
             this._roundRect(ctx, baseX, barY, maxW, 6, 3);
             ctx.fill();
-            ctx.fillStyle = '#818cf8';
+            ctx.fillStyle = '#2563eb';
             this._roundRect(ctx, baseX, barY, w, 6, 3);
             ctx.fill();
             ctx.fillStyle = '#94a3b8';

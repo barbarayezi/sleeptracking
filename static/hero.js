@@ -158,8 +158,8 @@ const HeroOverview = {
     },
 
     _stroke(color) {
-        // 柔色系：score → 柔紫、deep → 柔粉、recovery → 柔绿、steps → 灰紫
-        return { score: '#9c8cf0', deep: '#f0a3c2', recovery: '#87d8b5', steps: '#9ca0b5' }[color] || '#9c8cf0';
+        // DS 语义色：score → 蓝、deep → 绿(深睡)、recovery → 绿、steps → slate
+        return { score: '#2563eb', deep: '#16a34a', recovery: '#2563eb', steps: '#94a3b8' }[color] || '#2563eb';
     },
 
     _renderRing(el, score) {
@@ -169,21 +169,21 @@ const HeroOverview = {
         const col = this._ringColor(score);
         el.innerHTML = `
         <svg viewBox="0 0 ${size} ${size}" role="img" aria-label="睡眠评分 ${score == null ? '暂无' : Math.round(score)}">
-            <circle cx="${cx}" cy="${cy}" r="${rad}" fill="none" stroke="rgba(156, 140, 240, 0.16)" stroke-width="11"/>
+            <circle cx="${cx}" cy="${cy}" r="${rad}" fill="none" stroke="#e2e8f0" stroke-width="11"/>
             <circle cx="${cx}" cy="${cy}" r="${rad}" fill="none" stroke="${col}" stroke-width="11"
                 stroke-linecap="round" stroke-dasharray="${circ.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}"
                 transform="rotate(-90 ${cx} ${cy})" style="transition:stroke-dashoffset .6s ease"/>
-            <text x="${cx}" y="${cy - 2}" text-anchor="middle" fill="#2a2645" font-size="34" font-weight="800">${score == null ? '—' : Math.round(score)}</text>
-            <text x="${cx}" y="${cy + 20}" text-anchor="middle" fill="#635c7a" font-size="12">睡眠评分</text>
+            <text x="${cx}" y="${cy - 2}" text-anchor="middle" fill="#0f172a" font-size="34" font-weight="800">${score == null ? '—' : Math.round(score)}</text>
+            <text x="${cx}" y="${cy + 20}" text-anchor="middle" fill="#64748b" font-size="12">睡眠评分</text>
         </svg>`;
     },
 
     _ringColor(score) {
-        // 柔色系：高分紫，中分粉，低分橘红
-        if (score == null) return '#8e88a3';
-        if (score >= 75) return '#9c8cf0';
-        if (score >= 50) return '#f0a3c2';
-        return '#f3a884';
+        // DS 语义色：≥75 蓝(良好)、≥50 黄(一般)、<50 红(较差)
+        if (score == null) return '#cbd5e1';
+        if (score >= 75) return '#2563eb';
+        if (score >= 50) return '#d97706';
+        return '#dc2626';
     },
 
     _renderWeek(el, sleeps) {

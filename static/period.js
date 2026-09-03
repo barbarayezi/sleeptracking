@@ -68,7 +68,7 @@ class PeriodManager {
         if (emptyEl) emptyEl.style.display = 'none';
 
         const flowLabels = { none: '无', light: '量少', normal: '量中', heavy: '量多' };
-        const flowColors = { none: '#94a3b8', light: '#f9a8d4', normal: '#f472b6', heavy: '#ec4899' };
+        const flowColors = { none: '#94a3b8', light: '#fb7185', normal: '#f43f5e', heavy: '#dc2626' };
         const symptomNames = {
             cramps: '痛经', headache: '头痛', bloating: '腹胀',
             breast_tender: '胸胀', mood_swings: '情绪波动',

@@ -12,7 +12,7 @@
  *   .refresh()                          // re-fetch data & redraw
  */
 
-const QUALITY_COLORS = { good: '#4ade80', average: '#fbbf24', poor: '#f87171' };
+const QUALITY_COLORS = { good: '#16a34a', average: '#d97706', poor: '#dc2626' };
 const QUALITY_RANK = { good: 1, average: 2, poor: 3 };
 
 /** Pick a tier key for a numeric device sleep score (0-100). */

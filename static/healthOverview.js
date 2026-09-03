@@ -74,43 +74,43 @@ class HealthOverview {
         const coreMetrics = [
             { key: 'device_score', label: '睡眠分', sub: '手环评分', unit: '', min: 0, max: 100,
               higher: true, goodAt: 80, badAt: 50,
-              color: '#60a5fa', colorRgba: 'rgba(96,165,250,',
+              color: '#2563eb', colorRgba: 'rgba(37,99,235,',
               explain: 'Whoop/手环睡眠质量评分，0–100，越高越好' },
             { key: 'recovery_score', label: '恢复分', sub: 'Whoop Recovery', unit: '', min: 0, max: 100,
               higher: true, goodAt: 70, badAt: 40,
-              color: '#4ade80', colorRgba: 'rgba(74,222,128,',
+              color: '#16a34a', colorRgba: 'rgba(22,163,74,',
               explain: '身体恢复程度，综合 HRV、静息心率、休息状态；>70 良好，<40 偏低' },
             { key: 'meal_health_score', label: '饮食健康分', sub: '日均餐食评分', unit: '/10', min: 0, max: 10,
               higher: true, goodAt: 7, badAt: 4,
-              color: '#f59e0b', colorRgba: 'rgba(245,158,11,',
+              color: '#d97706', colorRgba: 'rgba(217,119,6,',
               explain: '每日饮食健康评分（0–10），基于营养均衡与食物质量' },
         ];
 
-        // ── Tier 2: Physiological Metrics ──
+        // ── Tier 2: Physiological Metrics（高区分度数据色板，白底可读） ──
         const physioMetrics = [
             { key: 'strain', label: 'Strain', sub: '训练负荷', unit: '', min: 0, max: 21,
               higher: null,
-              color: '#818cf8', colorRgba: 'rgba(129,140,248,',
+              color: '#6366f1', colorRgba: 'rgba(99,102,241,',
               explain: '当日训练/压力负荷。<10 休息日，10–14 中等，>14 高负荷' },
             { key: 'hrv', label: 'HRV', sub: '心率变异性', unit: 'ms', min: null, max: null,
               higher: true,
-              color: '#2dd4bf', colorRgba: 'rgba(45,212,191,',
+              color: '#0891b2', colorRgba: 'rgba(8,145,178,',
               explain: '心率变异性(ms)，越高代表自主神经恢复越好、压力越低' },
             { key: 'resting_heart_rate', label: '静息心率', sub: 'RHR', unit: 'bpm', min: null, max: null,
               higher: false, goodAt: 60, badAt: 75,
-              color: '#fb923c', colorRgba: 'rgba(251,146,60,',
+              color: '#f97316', colorRgba: 'rgba(249,115,22,',
               explain: '静息心率(bpm)，越低通常代表心肺功能越好' },
             { key: 'spo2_percentage', label: '血氧', sub: 'SpO₂', unit: '%', min: 90, max: 100,
               higher: true, goodAt: 96, badAt: 92,
-              color: '#38bdf8', colorRgba: 'rgba(56,189,248,',
+              color: '#2563eb', colorRgba: 'rgba(37,99,235,',
               explain: '血氧饱和度。正常 ≥96%，<92% 需注意' },
             { key: 'skin_temp_celsius', label: '皮温', sub: '皮肤温度', unit: '°C', min: null, max: null,
               higher: null,
-              color: '#f472b6', colorRgba: 'rgba(244,114,182,',
+              color: '#ec4899', colorRgba: 'rgba(236,72,153,',
               explain: '相对自身基线的皮肤温度波动；升高常伴随炎症或经期' },
             { key: 'steps', label: '步数', sub: '活动量', unit: '', min: 0, max: null,
               higher: true, goodAt: 8000, badAt: 3000,
-              color: '#a78bfa', colorRgba: 'rgba(167,139,250,',
+              color: '#7c3aed', colorRgba: 'rgba(124,58,237,',
               explain: '日行步数。8k–12k 为推荐区间' },
         ];
 
@@ -238,10 +238,10 @@ class HealthOverview {
                 const pct = eAvg !== 0 ? (diff / eAvg * 100) : 0;
                 if (diff > 0.5) {
                     trendEl.innerHTML = `<span class="ho2-trend ho2-trend--up">↑ ${pct.toFixed(0)}%</span>`;
-                    trendEl.style.color = m.higher !== false ? '#4ade80' : '#f87171';
+                    trendEl.style.color = m.higher !== false ? '#16a34a' : '#dc2626';
                 } else if (diff < -0.5) {
                     trendEl.innerHTML = `<span class="ho2-trend ho2-trend--down">↓ ${Math.abs(pct).toFixed(0)}%</span>`;
-                    trendEl.style.color = m.higher === false ? '#4ade80' : '#f87171';
+                    trendEl.style.color = m.higher === false ? '#16a34a' : '#dc2626';
                 } else {
                     trendEl.innerHTML = `<span class="ho2-trend ho2-trend--flat">→ 持平</span>`;
                     trendEl.style.color = '#94a3b8';
@@ -376,9 +376,9 @@ class HealthOverview {
         }
         if (m.badAt != null && m.badAt >= lo && m.badAt <= hi) {
             const by = yOfMain(m.badAt);
-            ctx.fillStyle = 'rgba(248,113,113,0.07)';
+            ctx.fillStyle = 'rgba(220,38,38,0.07)';
             ctx.fillRect(ml, by, chartW, mainBot - by);
-            ctx.strokeStyle = 'rgba(248,113,113,0.25)';
+            ctx.strokeStyle = 'rgba(220,38,38,0.25)';
             ctx.lineWidth = 1;
             ctx.setLineDash([4, 4]);
             ctx.beginPath();
@@ -389,7 +389,7 @@ class HealthOverview {
             // Only label this line if good-zone label didn't claim the right edge
             const goodLabeled = m.goodAt != null && m.goodAt >= lo && m.goodAt <= hi;
             if (!goodLabeled) {
-                ctx.fillStyle = 'rgba(248,113,113,0.65)';
+                ctx.fillStyle = 'rgba(220,38,38,0.65)';
                 ctx.font = '9px -apple-system, sans-serif';
                 ctx.textAlign = 'right';
                 const lbl = (m.higher === false ? '良好区 ≤' : '警戒区 <') + this._fmt(m.badAt);
@@ -402,7 +402,7 @@ class HealthOverview {
             if (p.period) {
                 const x0 = xOf(Math.max(0, p.i - 0.5));
                 const x1 = xOf(Math.min(Ntotal - 1, p.i + 0.5));
-                ctx.fillStyle = 'rgba(244,114,182,0.10)';
+                ctx.fillStyle = 'rgba(220,38,38,0.08)';
                 ctx.fillRect(x0, mainTop, x1 - x0, mainChartH);
             }
         }
@@ -551,7 +551,7 @@ class HealthOverview {
                 // Current point ring will be redrawn later (after both panels)
             }
             if (isOutlier) {
-                ctx.fillStyle = '#f59e0b';
+                ctx.fillStyle = '#d97706';
                 ctx.font = 'bold 9px -apple-system, sans-serif';
                 ctx.textAlign = 'center';
                 ctx.fillText('⚠', px, py - 7);
@@ -733,7 +733,7 @@ class HealthOverview {
                 const up = slope > 0;
                 const color = Math.abs(slope) < 1e-6
                     ? '#94a3b8'
-                    : (m.higher === false ? (up ? '#f87171' : '#4ade80') : (up ? '#4ade80' : '#f87171'));
+                    : (m.higher === false ? (up ? '#dc2626' : '#16a34a') : (up ? '#16a34a' : '#dc2626'));
                 const arrow = Math.abs(slope) < 1e-6 ? '→' : (up ? '↑' : '↓');
                 html += `<span class="ho2-stat" style="color:${color}">${arrow} 趋势 ${this._fmt(Math.abs(slope * 7))}/周 · R²=${r2.toFixed(2)}</span>`;
             } else {
@@ -750,8 +750,8 @@ class HealthOverview {
                 const lastFmt = m.key === 'meal_health_score'
                     ? last.y.toFixed(1) : Math.round(last.y).toString();
                 const pctColor = zLast >= 0
-                    ? (m.higher === false ? '#f87171' : '#4ade80')
-                    : (m.higher === false ? '#4ade80' : '#f87171');
+                    ? (m.higher === false ? '#dc2626' : '#16a34a')
+                    : (m.higher === false ? '#16a34a' : '#dc2626');
                 html += `<span class="ho2-stat" style="color:${pctColor};font-weight:700">当前 ${lastFmt} · 击败 ${percentile.toFixed(0)}% 历史 · Z=${zLast.toFixed(2)}</span>`;
             }
             statsEl.innerHTML = html;
@@ -822,7 +822,7 @@ class HealthOverview {
         // Period shading
         for (const p of days.map((d, i) => ({ i, period: !!d.is_period }))) {
             if (p.period) {
-                ctx.fillStyle = 'rgba(244,114,182,0.10)';
+                ctx.fillStyle = 'rgba(220,38,38,0.08)';
                 const cw = cW / Math.max(n, 1);
                 ctx.fillRect(xOf(p.i) - cw / 2, 0, cw, cssH);
             }
@@ -896,7 +896,7 @@ class HealthOverview {
         const q = (p) => s[Math.max(0, Math.min(s.length - 1, Math.floor(s.length * p)))] || 0;
         const p25 = q(0.25), p75 = q(0.75);
         const enough = s.length >= 5;
-        const toneColor = { good: '#22c55e', neutral: '#64748b', bad: '#f59e0b' };
+        const toneColor = { good: '#22c55e', neutral: '#64748b', bad: '#d97706' };
 
         if (m.higher === true) {
             const hi = enough ? p75 : (m.goodAt != null ? m.goodAt : Infinity);
