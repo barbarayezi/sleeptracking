@@ -669,6 +669,20 @@ def _build_morning_block(morning):
     return chr(10).join(lines)
 
 
+def _build_history_block(history):
+    """Render prior conversation turns for the chat prompt.
+
+    Returns a readable transcript, or a short note when there is none yet.
+    """
+    if not history:
+        return "（这是用户的第一句追问，之前没有来回对话）"
+    lines = []
+    for turn in history:
+        speaker = "用户" if turn.get("role") == "user" else "教练"
+        lines.append(f"{speaker}：{turn.get('content', '').strip()}")
+    return chr(10).join(lines)
+
+
 _CHAT_BRIEF_PROMPT = """你是用户的健康教练。此前你已经根据用户的昨日饮食和今晨身体指标给出了一段「昨日汇总」。现在用户对这段总结有话想说，请基于原始数据和用户的反馈，继续用中文口语化、简短地回复（3-6 句）。
 
 【昨日饮食（{yesterday}）】
@@ -680,7 +694,10 @@ _CHAT_BRIEF_PROMPT = """你是用户的健康教练。此前你已经根据用�
 【你之前的「昨日汇总」】
 {previous_brief}
 
-【用户的原话】
+【你与用户此前的对话（按时间顺序，早的在前）】
+{history_block}
+
+【用户这一轮的原话】
 {user_message}
 
 回复要求：
@@ -691,8 +708,13 @@ _CHAT_BRIEF_PROMPT = """你是用户的健康教练。此前你已经根据用�
 """
 
 
-def chat_brief(yesterday, today, meal_summary, morning, previous_brief, user_message):
+def chat_brief(yesterday, today, meal_summary, morning, previous_brief, user_message, history=None):
     """Continue the cross-day brief as a conversation.
+
+    Args:
+        history: optional list of prior turns, each {"role": "user"/"assistant",
+                 "content": str}. Lets the model keep multi-turn context instead
+                 of only ever seeing the original summary + the latest message.
 
     Returns the SAME ok-shape as daily_brief:
         {"ok": True, "data": {"brief": str}} or {"ok": False, "error": str}
@@ -701,11 +723,13 @@ def chat_brief(yesterday, today, meal_summary, morning, previous_brief, user_mes
     if not (base and key):
         return {"ok": False, "error": "未配置 LLM。请设置 LLM_BASE_URL / LLM_API_KEY 环境变量。"}
 
+    history_block = _build_history_block(history)
     prompt = _CHAT_BRIEF_PROMPT.format(
         yesterday=yesterday, today=today,
         diet_block=_build_diet_block(meal_summary),
         morning_block=_build_morning_block(morning),
         previous_brief=(previous_brief or "").strip()[:1200],
+        history_block=history_block,
         user_message=(user_message or "").strip()[:500],
     )
 

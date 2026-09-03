@@ -396,6 +396,13 @@ class MealManager {
         const text = input.value.trim();
         if (!text) return;
 
+        // Capture the conversation so far (everything before this new turn)
+        // so the server can give the model full multi-turn context.
+        const history = this._briefMessages.map((m) => ({
+            role: m.role === 'user' ? 'user' : 'assistant',
+            content: m.text,
+        }));
+
         this._briefMessages.push({ role: 'user', text });
         input.value = '';
         input.disabled = true;
@@ -405,7 +412,7 @@ class MealManager {
         }
         this._renderBriefResult(this._briefData);
         const messagesEl = this.briefEl.querySelector('#brief-chat-messages');
-        if (messagesEl) messagesEl.scrollTop = messagesEl.scrollHeight;
+        if (messagesEl) messagesEl.scrollHeight;
 
         try {
             const resp = await fetch('/api/daily-brief/chat', {
@@ -415,6 +422,7 @@ class MealManager {
                     date: this._briefData.date,
                     previous_brief: (this._briefData.brief || ''),
                     user_message: text,
+                    history,
                 }),
             });
             const data = await resp.json();

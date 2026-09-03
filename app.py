@@ -593,6 +593,20 @@ def daily_brief_chat():
     user_message = (body.get('user_message') or '').strip()
     previous_brief = (body.get('previous_brief') or '').strip()
 
+    # Multi-turn conversation history (list of {role, content}). Sanitized
+    # defensively because it comes straight from the client.
+    raw_history = body.get('history')
+    history = []
+    if isinstance(raw_history, list):
+        for turn in raw_history:
+            if not isinstance(turn, dict):
+                continue
+            role = turn.get('role')
+            content = (turn.get('content') or '').strip()
+            if role in ('user', 'assistant') and content:
+                history.append({'role': role, 'content': content[:500]})
+    history = history[-8:]  # cap context window
+
     if not user_message:
         return jsonify({'error': 'user_message 不能为空'}), 400
     if not previous_brief:
@@ -616,7 +630,8 @@ def daily_brief_chat():
 
     try:
         result = nutrition.chat_brief(
-            yesterday, date, meal_summary, morning, previous_brief, user_message
+            yesterday, date, meal_summary, morning, previous_brief, user_message,
+            history=history,
         )
     except Exception as e:
         return jsonify({'error': f'生成回复失败：{e}'}), 500
