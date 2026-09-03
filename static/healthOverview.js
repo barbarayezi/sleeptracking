@@ -322,15 +322,19 @@ class HealthOverview {
             zLast = zFor(last.y);
         }
 
-        // ── Y-axis range (shared by both panels, anchored to data extent + CI) ──
+        // ── Y-axis range: anchor to DATA only (small pad) + soft clamp to m.min/m.max.
+        //     Fixes prior "0–100 metrics got a −10…+110 axis just because
+        //     m.min/m.max were wide" bug. ──
         let dataLo = Math.min(mn, ciLo, whiskerLo);
         let dataHi = Math.max(mx, ciHi, whiskerHi);
         if (dataHi - dataLo < 1e-6) { dataHi = dataLo + 1; }
-        let lo = m.min != null ? Math.min(m.min, dataLo) : dataLo;
-        let hi = m.max != null ? Math.max(m.max, dataHi) : dataHi;
-        if (hi - lo < 1e-6) { hi += 1; lo -= 1; }
-        const padY = (hi - lo) * 0.10;
-        lo -= padY; hi += padY;
+        const range = dataHi - dataLo;
+        let lo = dataLo - range * 0.10 - 1;
+        let hi = dataHi + range * 0.10 + 1;
+        // Soft clamp to m.min/m.max only when data lies OUTSIDE that bound.
+        if (m.min != null) lo = Math.max(m.min, Math.min(lo, dataLo));
+        if (m.max != null) hi = Math.min(m.max, Math.max(hi, dataHi));
+        if (hi - lo < 1e-6) { hi = lo + 1; }
 
         // ── Layout (CSS pixels within canvas) ──
         const ml = m.key === 'meal_health_score' ? 36 : 44;  // left margin (y labels)
@@ -530,7 +534,8 @@ class HealthOverview {
             ctx.stroke();
             ctx.setLineDash([]);
 
-            // Label box — clamped to stay inside chart on both horizontal edges & vertically
+            // Label box — anchored to the BOTTOM of the panel (so it can never
+            // collide with the 30d MA label which is anchored to the top).
             const txt = `线性 OLS · R²=${r2.toFixed(2)} · β=${this._fmt(slope * 7)}/周`;
             ctx.font = '9px -apple-system, "PingFang SC", sans-serif';
             ctx.textAlign = 'right';
@@ -539,8 +544,8 @@ class HealthOverview {
             const desiredRight = ml + chartW - 4;
             const right = Math.max(ml + labelW, desiredRight);
             const left  = right - labelW;
-            const desiredBy = t1 - 5;
-            const by = Math.max(mainTop + 12, Math.min(mainBot - 2, desiredBy));
+            // 65% down the panel (or 6px above mainBot — whichever is bigger)
+            const by = Math.max(mainTop + mainChartH * 0.65, mainBot - 6);
             ctx.fillStyle = 'rgba(255,255,255,0.92)';
             ctx.strokeStyle = 'rgba(100,116,139,0.55)';
             ctx.lineWidth = 0.5;
@@ -550,9 +555,9 @@ class HealthOverview {
             ctx.fillText(txt, right - 4, by);
         }
 
-        // ── Missing-day gap markers ──
+        // ── Missing-day gap markers (short tick at top edge only) ──
         if (Nmiss > 0) {
-            ctx.strokeStyle = 'rgba(148,163,184,0.55)';
+            ctx.strokeStyle = 'rgba(148,163,184,0.45)';
             ctx.lineWidth = 1;
             ctx.setLineDash([2, 2]);
             for (const p of fullPts) {
@@ -560,7 +565,7 @@ class HealthOverview {
                     const x = xOf(p.i);
                     ctx.beginPath();
                     ctx.moveTo(x, mainTop + 2);
-                    ctx.lineTo(x, mainTop + mainChartH * 0.18);
+                    ctx.lineTo(x, mainTop + mainChartH * 0.10);
                     ctx.stroke();
                 }
             }
@@ -592,9 +597,9 @@ class HealthOverview {
             }
             if (isOutlier) {
                 ctx.fillStyle = '#d97706';
-                ctx.font = 'bold 9px -apple-system, sans-serif';
+                ctx.font = 'bold 8px -apple-system, sans-serif';
                 ctx.textAlign = 'center';
-                ctx.fillText('⚠', px, py - 7);
+                ctx.fillText('⚠', px, py - 6);
             }
         }
 
@@ -797,8 +802,9 @@ class HealthOverview {
             statsEl.innerHTML = html;
         }
 
-        // Multi-scale moving averages (14d + 30d); 7d SMA already drawn above
-        const drawMA = (k, color, dash, label) => {
+        // Single follow-up moving average (7d is already drawn earlier; only add
+        // a 30d trend so the panel doesn't drown in lines).
+        const drawMA = (k, color, dash, label, dyOffset = 0) => {
             if (N < k) return null;
             const out = [];
             for (let i = 0; i < pts.length; i++) {
@@ -818,7 +824,7 @@ class HealthOverview {
             });
             ctx.stroke();
             ctx.setLineDash([]);
-            // Endpoint label
+            // Endpoint label, stacked vertically to dodge the OLS label box
             const last_ = out[out.length - 1];
             const lx = xOf(last_.x), ly = yOfMain(last_.y);
             ctx.font = 'bold 9px -apple-system, "PingFang SC", sans-serif';
@@ -826,8 +832,8 @@ class HealthOverview {
             const tag = label + ' ' + this._fmt(last_.y);
             const tw = ctx.measureText(tag).width;
             const tx = Math.min(ml + chartW - tw - 4, lx + 6);
-            const ty = Math.max(mainTop + 10, ly - 2);
-            ctx.fillStyle = 'rgba(255,255,255,0.92)';
+            const ty = Math.max(mainTop + 6, Math.min(mainBot - 24, ly + dyOffset));
+            ctx.fillStyle = 'rgba(255,255,255,0.94)';
             const pad = 3;
             ctx.fillRect(tx - pad, ty - 8, tw + pad * 2, 12);
             ctx.strokeStyle = color;
@@ -837,8 +843,9 @@ class HealthOverview {
             ctx.fillText(tag, tx, ty + 2);
             return out;
         };
-        const ma30 = drawMA(30, 'rgba(15, 23, 42, 0.55)',  [6, 4], '30d MA');
-        const ma14 = drawMA(14, 'rgba(100, 116, 139, 0.75)', [3, 3], '14d MA');
+        // Stack: 30d MA label above the OLS line label (12px gap) so neither
+        // box can ever overlap the other.
+        const ma30 = drawMA(30, 'rgba(15, 23, 42, 0.55)', [6, 4], '30d MA', -14);
 
         // Build lookup for hover tooltip (find nearest valid data point by x)
         const hoverLookup = pts.map(p => ({
@@ -890,8 +897,8 @@ class HealthOverview {
             maRows += `<div class="ho2-tip-row"><span class="ho2-tip-label">${m.label}</span><strong>${fmt(v)} ${m.unit || ''}</strong> ${lvl}</div>`;
             maRows += `<div class="ho2-tip-row"><span class="ho2-tip-label">Z-score</span><span>${zTxt}</span></div>`;
             maRows += `<div class="ho2-tip-row"><span class="ho2-tip-label">MA 7d</span><span>${seg(7) ?? '—'}</span></div>`;
-            if (ma14) maRows += `<div class="ho2-tip-row"><span class="ho2-tip-label">MA 14d</span><span>${calcMA(ma14) ? fmt(calcMA(ma14).y) : '—'}</span></div>`;
             if (ma30) maRows += `<div class="ho2-tip-row"><span class="ho2-tip-label">MA 30d</span><span>${calcMA(ma30) ? fmt(calcMA(ma30).y) : '—'}</span></div>`;
+            // (14d MA removed for legibility; 7d is on the panel as solid line)
             if (Math.abs(z) > 2) maRows += `<div class="ho2-tip-outlier">⚠ Z&gt;2 异常</div>`;
             tooltip.innerHTML = maRows;
             // Position: prefer right of cursor; flip if overflows
