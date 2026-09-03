@@ -1,7 +1,7 @@
 {
-  "name": "睡眠追踪器",
-  "short_name": "SleepTracker",
-  "description": "睡眠追踪 + Whoop 手环数据分析",
+  "name": "量化健康",
+  "short_name": "QHealth",
+  "description": "个人量化健康平台：睡眠 / 手环指标(HRV·恢复·心率) / 饮食营养与AI分析 / 经期周期 / 科研级健康报告",
   "start_url": "/",
   "id": "/",
   "scope": "/",

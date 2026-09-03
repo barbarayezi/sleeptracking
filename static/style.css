@@ -640,7 +640,7 @@ body {
     background: var(--gray-100); padding: 3px 10px; border-radius: var(--radius-pill);
     width: fit-content; color: var(--gray-600);
 }
-.hero-label::before { content: '🌙'; font-size: 12px; }
+.hero-label::before { content: '♥'; font-size: 12px; }
 
 .hero-duration {
     font-size: 30px;

@@ -1,5 +1,5 @@
 /**
- * Service Worker — Sleep Tracker PWA
+ * Service Worker — QHealth PWA
  *
  * 策略（针对「代码已更新但浏览器顽固显示旧样式」的缓存陷阱）：
  *  - 静态资源走 network-first，且每次强制向服务器验证（cache:'no-cache'），
@@ -10,7 +10,7 @@
  *    确保用户看到的永远是最新版。
  */
 
-const CACHE_NAME = 'sleep-tracker-v16';   // ← 每次发布改 UI 必须 +1，否则旧缓存不会被清
+const CACHE_NAME = 'qhealth-v17';   // ← 每次发布改 UI 必须 +1，否则旧缓存不会被清
 
 // Install — 直接 skipWaiting，让新 SW 尽快接管
 self.addEventListener('install', (event) => {

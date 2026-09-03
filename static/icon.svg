@@ -7,21 +7,14 @@
       <stop offset="100%" stop-color="#1d4ed8"/>
     </linearGradient>
 
-    <!-- 月亮光晕（冷白蓝调） -->
-    <radialGradient id="moonGlow" cx="50%" cy="50%" r="55%">
-      <stop offset="0%"   stop-color="#ffffff" stop-opacity="0.55"/>
-      <stop offset="70%"  stop-color="#dbeafe" stop-opacity="0.18"/>
-      <stop offset="100%" stop-color="#dbeafe" stop-opacity="0"/>
-    </radialGradient>
-
-    <!-- 月牙主色（暖白，呼应睡眠主题） -->
-    <linearGradient id="moonFill" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%"   stop-color="#fff8e7"/>
-      <stop offset="100%" stop-color="#ffe6b3"/>
+    <!-- 心形白填充（微渐变增加立体感） -->
+    <linearGradient id="heart" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%"   stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#dbeafe"/>
     </linearGradient>
 
     <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%">
-      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feGaussianBlur stdDeviation="1.6" result="blur"/>
       <feMerge>
         <feMergeNode in="blur"/>
         <feMergeNode in="SourceGraphic"/>
@@ -32,17 +25,22 @@
   <!-- App 图标背景：品牌蓝圆角方 -->
   <rect width="100" height="100" rx="22" fill="url(#bg)"/>
 
-  <!-- 月光晕 -->
-  <circle cx="52" cy="47" r="34" fill="url(#moonGlow)"/>
+  <!-- 心形（健康意象核心） -->
+  <path d="M50 78
+           C 44 72, 30 60, 30 47
+           a 13 13 0 0 1 20 -9.5
+           a 13 13 0 0 1 20 9.5
+           C 70 60, 56 72, 50 78 Z"
+        fill="url(#heart)" filter="url(#softGlow)"/>
 
-  <!-- 月牙（暖白渐变） -->
-  <path d="M70 58a26 26 0 1 1-32-36 21 21 0 0 0 32 36Z"
-        fill="url(#moonFill)" filter="url(#softGlow)"/>
+  <!-- 心率折线（白色，横穿心形） -->
+  <polyline
+    points="24,50 37,50 42,41 47,60 51,47 56,50 66,50"
+    fill="none" stroke="#2563eb" stroke-width="4"
+    stroke-linecap="round" stroke-linejoin="round"/>
 
-  <!-- 装饰星点（白色） -->
-  <circle cx="24" cy="30" r="1.6" fill="#ffffff" opacity="0.95"/>
-  <circle cx="80" cy="27" r="1.2" fill="#ffffff" opacity="0.75"/>
-  <circle cx="74" cy="74" r="1.1" fill="#ffffff" opacity="0.85"/>
-  <circle cx="28" cy="70" r="0.9" fill="#ffffff" opacity="0.65"/>
-  <circle cx="58" cy="20" r="0.8" fill="#ffffff" opacity="0.55"/>
+  <!-- 心形右侧点缀粒子（微量） -->
+  <circle cx="24" cy="30" r="1.5" fill="#ffffff" opacity="0.55"/>
+  <circle cx="76" cy="26" r="1.2" fill="#ffffff" opacity="0.45"/>
+  <circle cx="79" cy="76" r="1.0" fill="#ffffff" opacity="0.35"/>
 </svg>
