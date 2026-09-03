@@ -198,8 +198,8 @@ class MealManager {
 
         const originalLabel = this.btnAiImage.textContent;
         this.btnAiImage.disabled = true;
-        this.btnAiImage.textContent = '📷 识别中…';
-        this._showAiMessage('正在识别图片，约需 10–20 秒…', '');
+        this.btnAiImage.textContent = '📷 分析中…';
+        this._showAiMessage('正在分析餐食照片，约需 10–20 秒…', '');
 
         try {
             const fd = new FormData();
@@ -212,7 +212,7 @@ class MealManager {
             const data = await resp.json();
 
             if (!resp.ok) {
-                this._showAiMessage('❌ ' + (data.error || '识别失败'), 'error');
+                this._showAiMessage('❌ ' + (data.error || '照片分析失败'), 'error');
                 return;
             }
             this._applyAiResult(data);
