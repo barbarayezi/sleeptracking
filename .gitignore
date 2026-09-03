@@ -21,3 +21,8 @@ health-agent/
 sleeptracker_launchd.log
 # design drafts (not part of the app)
 design-drafts/
+
+# UI redesign screenshots & one-off deploy scripts (contain plaintext secrets — never commit)
+/debug_error.png
+/redesign_*.png
+/scripts/render_deploy.py
