@@ -455,3 +455,94 @@ def analyze_meal_image(image_bytes, meal_name="", meal_quantity="normal", meal_t
             "suggestion": str(data.get("suggestion", "") or "").strip()[:500],
         },
     }
+
+
+# ── Cross-day daily brief ─────────────────────────────────────────────────
+# Pairs yesterday's diet with this morning's body metrics (weight / water /
+# steps / sleep) and asks the model for a short, causal interpretation.
+
+_DAILY_BRIEF_PROMPT = """你是用户的健康教练，口语化、简短（中文 3-5 句，不要列点堆砌）。
+请把下面两组数据关联起来做一段解读，重点讲「饮食 → 身体反馈」的因果，而不是各说各话。
+
+【昨日饮食（{yesterday}）】
+{diet_block}
+
+【今晨身体指标（{today}）】
+{morning_block}
+
+解读要点：
+1. 体重变化的可能归因（水分/钠/饮食/活动量），不要只笼统说"吃多了"。
+2. 饮水量（目标 7 杯≈1.75L）与活动量是否达标，给一个今天可执行的具体小建议。
+3. 睡眠对食欲/代谢的影响如能关联更好。
+4. 若某组数据缺失，明确说明缺哪一项，不要编造数字。
+"""
+
+
+def daily_brief(yesterday, today, meal_summary, morning):
+    """Generate a cross-day health brief.
+
+    Returns the SAME ok-shape as analyze_meal:
+        {"ok": True, "data": {"brief": str}} or {"ok": False, "error": str}
+
+    Args:
+        yesterday: diet day (YYYY-MM-DD)
+        today: morning-metrics day (YYYY-MM-DD)
+        meal_summary: nutrition.summarize() result (dict) or None
+        morning: dict with keys weight / water_cups / steps / sleep_minutes /
+                 sleep_quality (each may be None when not recorded)
+    """
+    base, key, _ = _load_config()
+    if not (base and key):
+        return {"ok": False, "error": "未配置 LLM。请设置 LLM_BASE_URL / LLM_API_KEY 环境变量。"}
+
+    if meal_summary and meal_summary.get("meal_count"):
+        s = meal_summary
+        diet_block = (
+            f"共 {s['meal_count']} 餐：总热量约 {round(s['kcal'])} kcal，"
+            f"蛋白 {s['protein_g']} g、脂肪 {s['fat_g']} g、碳水 {s['carbs_g']} g"
+            + (f"，平均健康分 {s['avg_score']}/10" if s.get("avg_score") is not None else "")
+            + (f"；三大营养素供能占比 蛋白 {s['protein_pct']}% / 脂肪 {s['fat_pct']}% / 碳水 {s['carbs_pct']}%"
+               if s.get("protein_pct") else "")
+        )
+    else:
+        diet_block = "（昨日未记录任何饮食）"
+
+    lines = []
+    if morning.get("weight") is not None:
+        lines.append(f"- 体重：{morning['weight']} kg")
+    else:
+        lines.append("- 体重：未记录")
+    if morning.get("water_cups") is not None:
+        lines.append(f"- 饮水量：{morning['water_cups']} 杯")
+    else:
+        lines.append("- 饮水量：未记录")
+    if morning.get("steps") is not None:
+        lines.append(f"- 步数：{morning['steps']} 步")
+    else:
+        lines.append("- 步数：未记录")
+    if morning.get("sleep_minutes") is not None:
+        sm = morning["sleep_minutes"]
+        hrs, mins = divmod(sm, 60)
+        sleep_txt = f"{hrs} 小时 {mins} 分"
+        if morning.get("sleep_quality"):
+            sleep_txt += f"，质量 {morning['sleep_quality']}"
+        lines.append(f"- 睡眠：{sleep_txt}")
+    else:
+        lines.append("- 睡眠：未记录")
+    morning_block = chr(10).join(lines)
+
+    prompt = _DAILY_BRIEF_PROMPT.format(
+        yesterday=yesterday, today=today,
+        diet_block=diet_block, morning_block=morning_block,
+    )
+
+    try:
+        raw = _call_model(prompt, max_tokens=1500)
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+    text = _collect_text(raw)
+    if not text:
+        return {"ok": False, "error": "模型没有返回文本内容，请重试。"}
+
+    return {"ok": True, "data": {"brief": text}}

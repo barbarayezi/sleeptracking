@@ -451,6 +451,87 @@ def meal_nutrition_summary():
 
 
 # ──────────────────────────────────────────────
+#  Cross-day daily brief (yesterday diet + this morning metrics)
+# ──────────────────────────────────────────────
+
+def _today_local():
+    """Server-local today as YYYY-MM-DD (fallback only; the UI passes its own)."""
+    from datetime import date as _d
+    return _d.today().isoformat()
+
+
+def _sleep_minutes(rec):
+    """Minutes between sleep_time and wake_time, or None when unavailable."""
+    st = rec.get('sleep_time')
+    wt = rec.get('wake_time')
+    if not st or not wt:
+        return None
+    try:
+        from datetime import datetime as _dt
+        a = _dt.fromisoformat(st)
+        b = _dt.fromisoformat(wt)
+        return max(0, int((b - a).total_seconds() // 60))
+    except Exception:
+        return None
+
+
+def _extract_morning(date_str):
+    """Pull this-morning body metrics from the sleep_records for `date_str`."""
+    records = models.get_all_records(date=date_str)
+    if not records:
+        return {'weight': None, 'water_cups': None, 'steps': None,
+                'sleep_minutes': None, 'sleep_quality': None}
+    # Weight / water / steps live on the night record (per schema v4).
+    night = next((r for r in records if r.get('record_type') == 'night'), records[0])
+    return {
+        'weight': night.get('weight'),
+        'water_cups': night.get('water_cups'),
+        'steps': night.get('steps'),
+        'sleep_minutes': _sleep_minutes(night),
+        'sleep_quality': night.get('sleep_quality'),
+    }
+
+
+@app.route('/api/daily-brief', methods=['GET'])
+def daily_brief():
+    """Cross-day health brief: yesterday's diet paired with this morning's
+    body metrics (weight / water / steps / sleep), interpreted by the LLM.
+    """
+    date = request.args.get('date') or _today_local()
+    from datetime import date as _d, timedelta as _td
+    try:
+        d0 = _d.fromisoformat(date)
+    except ValueError:
+        return jsonify({'error': 'date 参数格式应为 YYYY-MM-DD'}), 400
+
+    yesterday = (d0 - _td(days=1)).isoformat()
+
+    try:
+        meals = meal_models.get_all_meals(date=yesterday)
+    except Exception as e:
+        return jsonify({'error': f'读取饮食记录失败：{e}'}), 500
+
+    meal_summary = nutrition.summarize(meals)
+    morning = _extract_morning(date)
+
+    try:
+        result = nutrition.daily_brief(yesterday, date, meal_summary, morning)
+    except Exception as e:
+        return jsonify({'error': f'生成简报失败：{e}'}), 500
+
+    if not result.get('ok'):
+        return jsonify({'error': result.get('error', '生成失败')}), 502
+
+    return jsonify({
+        'date': date,
+        'diet_date': yesterday,
+        'meal_summary': meal_summary,
+        'morning': morning,
+        'brief': result['data']['brief'],
+    })
+
+
+# ──────────────────────────────────────────────
 #  Period / Menstrual Cycle Tracking
 # ──────────────────────────────────────────────
 

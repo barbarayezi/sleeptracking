@@ -36,6 +36,10 @@ class MealManager {
         this.btnImageClear = document.getElementById('btn-meal-image-clear');
         this._selectedImageFile = null;
 
+        // ── Daily brief (cross-day) ──
+        this.btnBrief = document.getElementById('btn-meal-brief');
+        this.briefEl = document.getElementById('meal-brief-result');
+
         this._selectedDate = this._todayStr();
         this._mealsForDate = [];     // All meals for current date
         this._editingMealId = null;  // ID being edited, null = new record
@@ -97,6 +101,11 @@ class MealManager {
         }
         if (this.btnImageClear) {
             this.btnImageClear.addEventListener('click', () => this._clearImagePreview());
+        }
+
+        // Daily brief (cross-day)
+        if (this.btnBrief) {
+            this.btnBrief.addEventListener('click', () => this._generateDailyBrief());
         }
 
         // Auto-set default time when meal type changes
@@ -246,6 +255,45 @@ class MealManager {
         if (this.imageInput) this.imageInput.value = '';
         if (this.imageThumb) this.imageThumb.src = '';
         if (this.imagePreviewEl) this.imagePreviewEl.classList.add('hidden');
+    }
+
+    /** Generate the cross-day daily brief (yesterday diet + this morning metrics). */
+    async _generateDailyBrief() {
+        if (!this.btnBrief || !this.briefEl) return;
+        const date = this._selectedDate || this._todayStr();
+        const original = this.btnBrief.textContent;
+        this.btnBrief.disabled = true;
+        this.btnBrief.textContent = '🤖 生成中…';
+        this.briefEl.classList.add('hidden');
+        try {
+            const resp = await fetch(`/api/daily-brief?date=${encodeURIComponent(date)}`);
+            const data = await resp.json();
+            if (!resp.ok) {
+                this.briefEl.innerHTML = `<div class="brief-error">❌ ${this._escapeHtml(data.error || '生成失败')}</div>`;
+                this.briefEl.classList.remove('hidden');
+                return;
+            }
+            const brief = (data.brief || '').trim();
+            const diet = data.meal_summary;
+            const m = data.morning || {};
+            const chips = [];
+            if (diet && diet.meal_count) chips.push(`昨日 ${diet.meal_count} 餐 · ${Math.round(diet.kcal)} kcal`);
+            if (m.weight != null) chips.push(`体重 ${m.weight} kg`);
+            if (m.water_cups != null) chips.push(`饮水 ${m.water_cups} 杯`);
+            if (m.steps != null) chips.push(`步数 ${m.steps}`);
+            if (m.sleep_minutes != null) chips.push(`睡眠 ${Math.floor(m.sleep_minutes / 60)}h${m.sleep_minutes % 60}m`);
+            const chipHtml = chips.length
+                ? `<div class="brief-chips">${chips.map(c => `<span class="brief-chip">${this._escapeHtml(c)}</span>`).join('')}</div>`
+                : '';
+            this.briefEl.innerHTML = `${chipHtml}<div class="brief-text">${this._escapeHtml(brief).replace(/\n/g, '<br>')}</div>`;
+            this.briefEl.classList.remove('hidden');
+        } catch (err) {
+            this.briefEl.innerHTML = `<div class="brief-error">❌ 网络错误：${this._escapeHtml(err.message)}</div>`;
+            this.briefEl.classList.remove('hidden');
+        } finally {
+            this.btnBrief.disabled = false;
+            this.btnBrief.textContent = original;
+        }
     }
 
     /** Write an estimation into the form inputs + result panel. */

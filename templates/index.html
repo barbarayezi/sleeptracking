@@ -157,7 +157,7 @@
             <!-- SECTION: HEALTH OVERVIEW DASHBOARD -->
             <section class="card health-overview-section">
                 <h2>❤️ 健康总览</h2>
-                <p class="section-hint">Whoop 恢复分 / Strain / HRV / 静息心率 / 血氧 / 皮温，与苹果健康步数、睡眠质量并列对比；粉色竖带为经期。</p>
+                <p class="section-hint">核心三分（睡眠分 / 恢复分 / 饮食健康分）+ 生理时序（Strain / HRV / RHR / 血氧 / 皮温 / 步数），含 7 日均线、±1SD 置信带、线性趋势与统计摘要。粉色竖带为经期。</p>
                 <div class="report-controls">
                     <div id="health-range" class="calendar-toggle">
                         <button class="toggle-btn" data-days="7">7天</button>
@@ -396,6 +396,15 @@
 
                 <!-- Daily nutrition summary (v11) -->
                 <div id="meal-day-summary" class="meal-day-summary hidden"></div>
+
+                <!-- Cross-day daily brief: yesterday diet + this morning metrics -->
+                <div class="meal-brief-block">
+                    <div class="meal-brief-head">
+                        <span class="form-label">每日简报 <span class="label-hint">（昨日饮食 + 今晨体重/饮水/步数/睡眠）</span></span>
+                        <button type="button" id="btn-meal-brief" class="btn btn-ai">🤖 生成每日简报</button>
+                    </div>
+                    <div id="meal-brief-result" class="meal-brief-result hidden"></div>
+                </div>
 
                 <!-- Meal list for current date -->
                 <div id="meals-list" class="records-list">
@@ -727,7 +736,7 @@
     </footer>
 
     <script src="/static/form.js?v=10"></script>
-    <script src="/static/meal.js?v=10"></script>
+    <script src="/static/meal.js?v=11"></script>
     <script src="/static/period.js?v=10"></script>
     <script src="/static/calendar.js?v=10"></script>
     <script src="/static/timeline.js?v=10"></script>

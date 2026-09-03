@@ -1857,6 +1857,215 @@ body {
     color: var(--accent);
 }
 
+/* ═════════════════════════════════════════════════════
+   Health Overview v2 — Research-grade charts
+   ═════════════════════════════════════════════════════ */
+
+/* ── Tier 1: Core Score Trio ─────────────────── */
+.ho2-core-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 16px;
+}
+@media (max-width: 768px) {
+    .ho2-core-row { grid-template-columns: 1fr; }
+}
+
+.ho2-core-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.ho2-core__head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 8px;
+}
+
+.ho2-core__label {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: 0.02em;
+}
+
+.ho2-core__sub {
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    margin-top: 2px;
+    font-weight: 500;
+}
+
+.ho2-core__score-wrap {
+    display: flex;
+    align-items: baseline;
+    gap: 3px;
+    text-align: right;
+}
+
+.ho2-core__score {
+    font-size: 2rem;
+    font-weight: 800;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+}
+
+.ho2-core__unit {
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    font-weight: 500;
+}
+
+.ho2-core__trend {
+    margin-left: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.ho2-trend {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 700;
+}
+.ho2-trend--up { background: rgba(74,222,128,0.12); }
+.ho2-trend--down { background: rgba(248,113,113,0.12); }
+.ho2-trend--flat { background: rgba(100,116,139,0.12); }
+
+.ho2-core__body {
+    flex: 1;
+    min-height: 140px;
+    position: relative;
+}
+
+.ho2-core-canvas {
+    display: block;
+    width: 100%;
+    height: 160px;
+}
+
+.ho2-core__stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+}
+
+.ho2-stat {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    font-weight: 500;
+    white-space: nowrap;
+}
+.ho2-stat--dim {
+    opacity: 0.5;
+}
+
+/* ── Section title between tiers ──────────────── */
+.ho2-section-title {
+    margin: 18px 0 10px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding-left: 2px;
+}
+.ho2-section-title span {
+    position: relative;
+    padding-right: 12px;
+}
+.ho2-section-title span::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    right: 0;
+    width: 80px;
+    height: 1px;
+    background: var(--border);
+}
+
+/* ── Tier 2: Physio cards (enhanced) ─────────── */
+.ho2-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 10px;
+}
+
+.ho2-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    overflow: hidden;
+}
+
+.ho2-card__head {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    margin-bottom: 5px;
+    flex-wrap: wrap;
+}
+
+.ho2-card__label {
+    font-size: 0.83rem;
+    font-weight: 700;
+    color: var(--text);
+    cursor: help;
+}
+
+.ho2-card__sub {
+    font-size: 0.68rem;
+    color: var(--text-dim);
+    font-weight: 500;
+    margin-left: 2px;
+}
+
+.ho2-card__val {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+    margin-left: auto;
+}
+
+.ho-badge {
+    font-size: 0.68rem;
+    font-weight: 700;
+    line-height: 1;
+    padding: 2px 7px;
+    border-radius: 999px;
+    border: 1px solid currentColor;
+    font-variant-numeric: tabular-nums;
+}
+
+.ho2-spark {
+    display: block;
+    width: 100%;
+}
+
+.ho2-card__meta {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    margin-top: 5px;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.4;
+}
+
 /* ── Today at a glance (top card) ───────────── */
 .today-overview {
     border-color: var(--accent);
@@ -2683,4 +2892,45 @@ body {
 .meal-card__ai {
     font-size: 0.85rem;
     cursor: help;
+}
+
+
+/* ── Daily brief (cross-day) ── */
+.meal-brief-block {
+    margin-top: 12px;
+}
+.meal-brief-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.meal-brief-result {
+    margin-top: 10px;
+    padding: 14px 16px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+}
+.brief-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 10px;
+}
+.brief-chip {
+    font-size: 12px;
+    padding: 3px 9px;
+    background: #eef2ff;
+    color: #4338ca;
+    border-radius: 999px;
+}
+.brief-text {
+    line-height: 1.7;
+    color: #1e293b;
+    white-space: normal;
+}
+.brief-error {
+    color: #dc2626;
 }
