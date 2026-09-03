@@ -70,6 +70,14 @@ def _load_config():
 
     Env vars win, so a deployment can use its own key. Falls back to the
     local Claude Code gateway settings for zero-config development.
+
+    Model resolution order (highest priority first):
+      1. env LLM_MODEL (if set) — operator's explicit pick
+      2. env LLM_MODEL_PRIMARY / LLM_MODEL_FALLBACK (comma-list, tried in order)
+      3. Claude Code gateway ANTHROPIC_MODEL
+      4. Hard-coded _DEFAULT_MODEL_LIST (best-effort fallback to stronger models)
+
+    Returns (base_url, api_key, model).
     """
     base = os.environ.get("LLM_BASE_URL", "").strip()
     key = os.environ.get("LLM_API_KEY", "").strip()
@@ -86,7 +94,26 @@ def _load_config():
             # Missing/invalid file is fine — the caller reports "not configured".
             pass
 
+    # Multi-model fallback list — first non-empty wins.
+    if not model:
+        env_primary = os.environ.get("LLM_MODEL_PRIMARY", "").strip()
+        env_fallback = os.environ.get("LLM_MODEL_FALLBACK", "").strip()
+        for cand in [env_primary, env_fallback, *_DEFAULT_MODEL_LIST]:
+            if cand:
+                model = cand
+                break
+
     return base, key, model
+
+
+_DEFAULT_MODEL_LIST = [
+    # Stronger tier (try in order if LLM_MODEL env is empty)
+    "deepseek-v3.2-chat",       # 性价比强
+    "deepseek-v4-pro",
+    "gpt-4o-mini",
+    "qwen-max",
+    "claude-3-5-sonnet",
+]
 
 
 def is_configured():
@@ -607,8 +634,9 @@ def analyze_meal_images(before_images, after_images=None, meal_name="", meal_qua
     }
 
 
-_DAILY_BRIEF_PROMPT = """你是用户的健康教练，口语化、简短（中文 3-5 句，不要列点堆砌）。
-请把下面两组数据关联起来做一段解读，重点讲「饮食 → 身体反馈」的因果，而不是各说各话。
+_DAILY_BRIEF_PROMPT = """你是用户长期跟踪的私人健康教练 + 营养师 + 体能顾问。中文、口语化、有温度、有专业度。
+
+请用「5–8 句」自然段（不要 bullet 堆砌）回应，引述数据时用具体数字（不要写"较高/较低"这种笼统词）。重点讲「昨日饮食 → 今晨身体反馈 → 7 天趋势」的因果链，结尾给一个今天就能做的具体小行动。
 
 【昨日饮食（{yesterday}）】
 {diet_block}
@@ -616,15 +644,24 @@ _DAILY_BRIEF_PROMPT = """你是用户的健康教练，口语化、简短（中�
 【今晨身体指标（{today}）】
 {morning_block}
 
-解读要点：
-1. 体重变化的可能归因（水分/钠/饮食/活动量），不要只笼统说"吃多了"。
-2. 饮水量（目标 7 杯≈1.75L）与活动量是否达标，给一个今天可执行的具体小建议。
-3. 睡眠对食欲/代谢的影响如能关联更好。
-4. 若某组数据缺失，明确说明缺哪一项，不要编造数字。
+【过去 7 天趋势（饮食 + 身体）】
+{trends_block}
+
+【用户基础信息（可能为空，未填则跳过）】
+{profile_block}
+
+解读要求：
+1. 体重变化 → 关联昨日钠 / 碳水 / 饮水量 / 步数，给出可能归因（不要只说"吃多了"）。
+2. 营养三大素比例（蛋白/脂肪/碳水）是否合理（健康成年人大致 15-25% / 20-35% / 45-60%）。
+3. 饮水量与活动量是否达标，结合步数判断；目标 7 杯≈1.75L。
+4. 睡眠时长/质量对今日状态的可能影响。
+5. 若数据缺失，明确说明缺哪一项，不要编造。
+6. 7 天趋势若显示体重上升/下降/营养不均衡，要点名指出趋势方向。
+7. 结尾给 1 个今天可执行的具体行动（具体到几杯水/多少步/哪种食物）。
 """
 
 
-def daily_brief(yesterday, today, meal_summary, morning):
+def daily_brief(yesterday, today, meal_summary, morning, trends=None, profile=None):
     """Generate a cross-day health brief.
 
     Returns the SAME ok-shape as analyze_meal:
@@ -636,6 +673,8 @@ def daily_brief(yesterday, today, meal_summary, morning):
         meal_summary: nutrition.summarize() result (dict) or None
         morning: dict with keys weight / water_cups / steps / sleep_minutes /
                  sleep_quality (each may be None when not recorded)
+        trends: optional 7-day rolling summary dict (from app._compute_7d_trends)
+        profile: optional user profile dict (age/sex/height/goal/activity)
     """
     base, key, _ = _load_config()
     if not (base and key):
@@ -645,10 +684,12 @@ def daily_brief(yesterday, today, meal_summary, morning):
         yesterday=yesterday, today=today,
         diet_block=_build_diet_block(meal_summary),
         morning_block=_build_morning_block(morning),
+        trends_block=_build_trends_block(trends or {}),
+        profile_block=_build_profile_block(profile or {}),
     )
 
     try:
-        raw = _call_model(prompt, max_tokens=1500)
+        raw = _call_model(prompt, max_tokens=2000)
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
@@ -711,11 +752,76 @@ def _build_history_block(history):
     lines = []
     for turn in history:
         speaker = "用户" if turn.get("role") == "user" else "教练"
-        lines.append(f"{speaker}：{turn.get('content', '').strip()}")
+        content = (turn.get("content") or "").strip()
+        if content:
+            lines.append(f"{speaker}：{content[:600]}")
     return chr(10).join(lines)
 
 
-_CHAT_BRIEF_PROMPT = """你是用户的健康教练。此前你已经根据用户的昨日饮食和今晨身体指标给出了一段「昨日汇总」。现在用户对这段总结有话想说，请基于原始数据和用户的反馈，继续用中文口语化、简短地回复（3-6 句）。
+def _build_trends_block(trends):
+    """Render the 7-day rolling-trend dict for the prompt.
+
+    Empty dict → a short note. Each field: mean / min / max / n / delta / trend.
+    """
+    if not trends:
+        return "（近 7 天数据不足，未提供趋势）"
+    label_map = {
+        'weight': '体重 (kg)',
+        'water_cups': '饮水量 (杯)',
+        'steps': '步数',
+        'sleep_minutes': '睡眠 (分钟)',
+    }
+    arrow = {'up': '↑', 'down': '↓', 'flat': '→'}
+    lines = []
+    for k, v in trends.items():
+        label = label_map.get(k, k)
+        lines.append(
+            f"- {label}: 7d 均值 {v['mean']}，区间 [{v['min']}, {v['max']}]，"
+            f"较 7d 前{'升' if v['delta'] > 0 else '降' if v['delta'] < 0 else '平'}{abs(v['delta'])} "
+            f"（n={v['n']}，方向 {arrow.get(v['trend'], v['trend'])}）"
+        )
+    return chr(10).join(lines)
+
+
+def _build_profile_block(profile):
+    """Render user profile for the prompt (only non-empty fields shown)."""
+    if not profile:
+        return "（未提供）"
+    label_map = {
+        'age': '年龄',
+        'sex': '性别',
+        'height_cm': '身高 (cm)',
+        'goal': '目标',
+        'activity_level': '活动量',
+    }
+    goal_zh = {
+        'lose_fat': '减脂', 'maintain': '维持', 'gain_muscle': '增肌',
+    }
+    activity_zh = {
+        'sedentary': '久坐', 'light': '轻度', 'moderate': '中度', 'active': '高强度',
+    }
+    lines = []
+    for k, v in profile.items():
+        if v in (None, '', 0):
+            continue
+        if k == 'goal' and v in goal_zh:
+            v = goal_zh[v]
+        elif k == 'activity_level' and v in activity_zh:
+            v = activity_zh[v]
+        lines.append(f"- {label_map.get(k, k)}：{v}")
+    return chr(10).join(lines) if lines else "（未提供）"
+
+
+_CHAT_BRIEF_PROMPT = """你是用户的私人健康教练 + 营养师。用户对之前给到的「昨日汇总」有反馈、追问或质疑，你需要继续回应。
+
+要求：
+- 用 5–10 句自然段回应（不要 bullet 堆砌、不要刻意短）
+- 引述数据用具体数字（不要写"较高/较低"这种笼统词）
+- 用户反馈可能是质疑 / 补充 / 求建议 / 分享感受，先读懂用户意图再回应
+- 回复必须基于下面的原始数据，**不能编造未记录的数字**；若数据有矛盾或缺失，友好指出并建议用户去修改对应记录后再重新生成
+- 关联 7 天趋势（体重、饮水量、步数、营养得分）做纵向洞察——这是关键差异化价值
+- 若用户问"今天该怎么吃 / 怎么练 / 怎么调整"，给 1 个今天就能做的具体行动（具体到几杯水 / 多少步 / 哪种食物 / 几点睡）
+- 保持口语化、有温度
 
 【昨日饮食（{yesterday}）】
 {diet_block}
@@ -723,7 +829,13 @@ _CHAT_BRIEF_PROMPT = """你是用户的健康教练。此前你已经根据用�
 【今晨身体指标（{today}）】
 {morning_block}
 
-【你之前的「昨日汇总」】
+【过去 7 天趋势】
+{trends_block}
+
+【用户基础信息（可能为空，未填则跳过）】
+{profile_block}
+
+【你此前的「昨日汇总」（语境上下文）】
 {previous_brief}
 
 【你与用户此前的对话（按时间顺序，早的在前）】
@@ -731,22 +843,19 @@ _CHAT_BRIEF_PROMPT = """你是用户的健康教练。此前你已经根据用�
 
 【用户这一轮的原话】
 {user_message}
-
-回复要求：
-1. 先理解用户想表达的意思（可能是质疑、补充、求建议、分享感受），不要机械重复之前的总结。
-2. 回复必须基于上面的原始数据；如果用户提到某个数据，你可以引用，但不要编造未记录的数据。
-3. 保持口语化、有温度；如果是追问建议，给一个今天就能做的小行动。
-4. 若用户说"昨天其实没吃这个"或数据明显有误，友好地提示用户去修改对应餐食/指标记录，修改后再重新生成「昨日汇总」。
 """
 
 
-def chat_brief(yesterday, today, meal_summary, morning, previous_brief, user_message, history=None):
+def chat_brief(yesterday, today, meal_summary, morning, previous_brief, user_message,
+               history=None, trends=None, profile=None):
     """Continue the cross-day brief as a conversation.
 
     Args:
         history: optional list of prior turns, each {"role": "user"/"assistant",
                  "content": str}. Lets the model keep multi-turn context instead
                  of only ever seeing the original summary + the latest message.
+        trends: optional 7-day rolling summary dict (from app._compute_7d_trends)
+        profile: optional user profile dict (age/sex/height/goal/activity)
 
     Returns the SAME ok-shape as daily_brief:
         {"ok": True, "data": {"brief": str}} or {"ok": False, "error": str}
@@ -760,13 +869,15 @@ def chat_brief(yesterday, today, meal_summary, morning, previous_brief, user_mes
         yesterday=yesterday, today=today,
         diet_block=_build_diet_block(meal_summary),
         morning_block=_build_morning_block(morning),
-        previous_brief=(previous_brief or "").strip()[:1200],
+        trends_block=_build_trends_block(trends or {}),
+        profile_block=_build_profile_block(profile or {}),
+        previous_brief=(previous_brief or "").strip()[:1500],
         history_block=history_block,
-        user_message=(user_message or "").strip()[:500],
+        user_message=(user_message or "").strip()[:2000],
     )
 
     try:
-        raw = _call_model(prompt, max_tokens=1200)
+        raw = _call_model(prompt, max_tokens=2000)
     except Exception as e:
         return {"ok": False, "error": str(e)}
 

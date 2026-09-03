@@ -541,6 +541,82 @@ def _extract_morning(date_str):
     }
 
 
+def _compute_7d_trends(date_str):
+    """7-day rolling summary for body metrics — gives the LLM real
+    longitudinal context (not just a single point in time).
+
+    Returns a dict like:
+        {'weight': {'mean': 66.3, 'min': 65.7, 'max': 66.9, 'n': 6, 'delta_kg': -0.5,
+                    'trend': 'down'},
+         'water_cups': {...},
+         'steps': {...},
+         'sleep_minutes': {...}}
+    """
+    from datetime import date as _d, timedelta as _td
+    try:
+        d0 = _d.fromisoformat(date_str)
+    except ValueError:
+        return {}
+    since = (d0 - _td(days=6)).isoformat()
+
+    rows = models.get_all_records(from_date=since, to_date=date_str) or []
+    by_field = {'weight': [], 'water_cups': [], 'steps': [], 'sleep_minutes': []}
+    for r in rows:
+        if r.get('record_type') != 'night':
+            continue
+        if r.get('weight') is not None:
+            by_field['weight'].append((r['record_date'], float(r['weight'])))
+        if r.get('water_cups') is not None:
+            by_field['water_cups'].append((r['record_date'], int(r['water_cups'])))
+        if r.get('steps') is not None:
+            by_field['steps'].append((r['record_date'], int(r['steps'])))
+        sm = _sleep_minutes(r)
+        if sm:
+            by_field['sleep_minutes'].append((r['record_date'], sm))
+
+    out = {}
+    for k, pts in by_field.items():
+        if len(pts) < 2:
+            continue
+        pts.sort(key=lambda x: x[0])
+        vals = [v for _, v in pts]
+        first, last = vals[0], vals[-1]
+        delta = last - first
+        # crude trend label: |delta|/n > 5% of mean → "up"/"down"
+        mean = sum(vals) / len(vals)
+        ratio = (abs(delta) / mean) if mean else 0
+        if ratio < 0.05:
+            trend = 'flat'
+        elif delta > 0:
+            trend = 'up'
+        else:
+            trend = 'down'
+        out[k] = {
+            'mean': round(mean, 2),
+            'min': round(min(vals), 2),
+            'max': round(max(vals), 2),
+            'n': len(vals),
+            'delta': round(delta, 2),
+            'trend': trend,
+        }
+    return out
+
+
+def _profile_defaults():
+    """Minimal user profile for the LLM context.
+
+    Reads from env vars if set, else falls back to neutral defaults. Kept
+    in-process (not in DB) because we don't have a profile schema yet.
+    """
+    return {
+        'age': int(os.environ.get('USER_AGE', '0') or 0) or None,
+        'sex': os.environ.get('USER_SEX') or None,
+        'height_cm': float(os.environ.get('USER_HEIGHT_CM', '0') or 0) or None,
+        'goal': os.environ.get('USER_GOAL') or None,         # 'lose_fat' | 'maintain' | 'gain_muscle'
+        'activity_level': os.environ.get('USER_ACTIVITY') or None,  # 'sedentary' | 'light' | 'moderate' | 'active'
+    }
+
+
 @app.route('/api/daily-brief', methods=['GET'])
 def daily_brief():
     """Cross-day health brief: yesterday's diet paired with this morning's
@@ -562,9 +638,12 @@ def daily_brief():
 
     meal_summary = nutrition.summarize(meals)
     morning = _extract_morning(date)
+    trends = _compute_7d_trends(date)
+    profile = _profile_defaults()
 
     try:
-        result = nutrition.daily_brief(yesterday, date, meal_summary, morning)
+        result = nutrition.daily_brief(yesterday, date, meal_summary, morning,
+                                      trends=trends, profile=profile)
     except Exception as e:
         return jsonify({'error': f'生成简报失败：{e}'}), 500
 
@@ -580,6 +659,25 @@ def daily_brief():
     })
 
 
+@app.route('/api/daily-brief/chat', methods=['GET'])
+def daily_brief_chat_list():
+    """Return the persisted chat history for a given brief date.
+
+    Frontend uses this to restore the conversation after a page refresh or
+    device switch. Newest messages last; the 'brief' field is the most
+    recent first turn's assistant reply (i.e. the original summary) so
+    'previous_brief' can be reconstructed on the client.
+    """
+    date = (request.args.get('date') or _today_local()).strip()
+    rows = get_connection().execute(
+        "SELECT id, role, content, created_at FROM brief_chat_messages "
+        "WHERE brief_date = ? ORDER BY id ASC",
+        (date,)
+    ).fetchall()
+    history = [{'id': r[0], 'role': r[1], 'content': r[2], 'created_at': r[3]} for r in rows]
+    return jsonify({'date': date, 'history': history})
+
+
 @app.route('/api/daily-brief/chat', methods=['POST'])
 def daily_brief_chat():
     """Continue the cross-day brief as a conversation.
@@ -587,25 +685,15 @@ def daily_brief_chat():
     The client sends the current date, the previously generated brief, and
     the user's follow-up message. The server re-fetches the underlying data
     so the reply is always grounded in the latest records.
+
+    Persistence (v17+): every turn is stored in `brief_chat_messages` so
+    the thread survives page reloads. The previous N turns are loaded from
+    the database and passed to the model as conversation history.
     """
     body = request.get_json(silent=True) or {}
     date = body.get('date') or _today_local()
     user_message = (body.get('user_message') or '').strip()
     previous_brief = (body.get('previous_brief') or '').strip()
-
-    # Multi-turn conversation history (list of {role, content}). Sanitized
-    # defensively because it comes straight from the client.
-    raw_history = body.get('history')
-    history = []
-    if isinstance(raw_history, list):
-        for turn in raw_history:
-            if not isinstance(turn, dict):
-                continue
-            role = turn.get('role')
-            content = (turn.get('content') or '').strip()
-            if role in ('user', 'assistant') and content:
-                history.append({'role': role, 'content': content[:500]})
-    history = history[-8:]  # cap context window
 
     if not user_message:
         return jsonify({'error': 'user_message 不能为空'}), 400
@@ -620,6 +708,39 @@ def daily_brief_chat():
 
     yesterday = (d0 - _td(days=1)).isoformat()
 
+    # ── Load history from DB (v17+ persistence) ──
+    # Prefer DB-stored history; fall back to client-supplied list if DB empty
+    # (e.g. first message right after the brief was just generated).
+    conn = get_connection()
+    db_rows = conn.execute(
+        "SELECT role, content FROM brief_chat_messages WHERE brief_date = ? ORDER BY id ASC",
+        (date,)
+    ).fetchall()
+    history = [{'role': r[0], 'content': r[1]} for r in db_rows]
+    if not history:
+        raw_history = body.get('history')
+        if isinstance(raw_history, list):
+            for turn in raw_history:
+                if not isinstance(turn, dict):
+                    continue
+                role = turn.get('role')
+                content = (turn.get('content') or '').strip()
+                if role in ('user', 'assistant') and content:
+                    history.append({'role': role, 'content': content[:2000]})
+    history = history[-20:]  # wider context window now that we have DB
+
+    # ── Persist the new user turn before the model runs (so even a 5xx mid-flight
+    #    leaves a recoverable trail). Wrap in a savepoint so a DB blip
+    #    doesn't fail the whole endpoint.
+    try:
+        conn.execute(
+            "INSERT INTO brief_chat_messages (brief_date, role, content) VALUES (?, ?, ?)",
+            (date, 'user', user_message[:4000]),
+        )
+        conn.commit()
+    except Exception as e:
+        print(f"[brief_chat] failed to persist user turn: {e}")
+
     try:
         meals = meal_models.get_all_meals(date=yesterday)
     except Exception as e:
@@ -627,11 +748,16 @@ def daily_brief_chat():
 
     meal_summary = nutrition.summarize(meals)
     morning = _extract_morning(date)
+    # 7-day rolling trend block — gives the model real longitudinal context
+    trends = _compute_7d_trends(date)
+    profile = _profile_defaults()
 
     try:
         result = nutrition.chat_brief(
             yesterday, date, meal_summary, morning, previous_brief, user_message,
             history=history,
+            trends=trends,
+            profile=profile,
         )
     except Exception as e:
         return jsonify({'error': f'生成回复失败：{e}'}), 500
@@ -639,10 +765,30 @@ def daily_brief_chat():
     if not result.get('ok'):
         return jsonify({'error': result.get('error', '生成失败')}), 502
 
+    reply_text = result['data']['brief']
+
+    # ── Persist the assistant reply (best-effort) ──
+    try:
+        conn.execute(
+            "INSERT INTO brief_chat_messages (brief_date, role, content) VALUES (?, ?, ?)",
+            (date, 'assistant', reply_text[:4000]),
+        )
+        conn.commit()
+    except Exception as e:
+        print(f"[brief_chat] failed to persist assistant turn: {e}")
+
+    # Re-read full history so the client doesn't have to merge optimistically
+    full_rows = conn.execute(
+        "SELECT id, role, content, created_at FROM brief_chat_messages WHERE brief_date = ? ORDER BY id ASC",
+        (date,),
+    ).fetchall()
+    full_history = [{'id': r[0], 'role': r[1], 'content': r[2], 'created_at': r[3]} for r in full_rows]
+
     return jsonify({
         'date': date,
         'diet_date': yesterday,
-        'reply': result['data']['brief'],
+        'reply': reply_text,
+        'history': full_history,
     })
 
 

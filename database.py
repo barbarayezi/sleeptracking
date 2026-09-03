@@ -871,6 +871,22 @@ def init_db():
         ON health_metrics(metric_date, metric_type)
     """)
 
+    # Daily-brief chat history (v17) — persist every turn so a refresh /
+    # device-switch doesn't wipe the conversation.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS brief_chat_messages (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            brief_date      DATE NOT NULL,           -- the 'date' this brief is about (YYYY-MM-DD)
+            role            TEXT NOT NULL,           -- 'user' | 'assistant'
+            content         TEXT NOT NULL,
+            created_at      TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_brief_chat_date
+        ON brief_chat_messages(brief_date, id)
+    """)
+
     # Now run pending migrations (ALTER TABLE for older schemas)
     _migrate(conn)
 
