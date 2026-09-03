@@ -111,13 +111,28 @@ class MealManager {
     /**
      * Ask the backend to estimate nutrition from the meal's text description.
      * Fills the inputs but does NOT save — the user reviews/edits first.
+     *
+     * If the user has already selected a meal photo, route the request through
+     * the vision path instead of asking for text.
      */
     async _analyzeMeal() {
         const name = (document.getElementById('meal-name').value || '').trim();
         const content = (document.getElementById('meal-content').value || '').trim();
 
+        // Vision path takes priority when a photo is present.
+        if (this._selectedImageFile) {
+            this._showAiMessage('检测到已上传照片，将使用照片进行 AI 分析…', '');
+            this.btnAi.disabled = true;
+            try {
+                await this._analyzeMealImage();
+            } finally {
+                this.btnAi.disabled = false;
+            }
+            return;
+        }
+
         if (!name && !content) {
-            this._showAiMessage('请先填写「餐食名称」或「详细内容」，AI 需要知道吃了什么。', 'error');
+            this._showAiMessage('请先填写「餐食名称」或「详细内容」，AI 需要知道吃了什么；或上传餐食照片直接识别。', 'error');
             return;
         }
 

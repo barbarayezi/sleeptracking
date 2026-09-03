@@ -21,3 +21,17 @@ services:
         sync: false      # set in Render dashboard
       - key: WHOOP_REDIRECT_URI
         value: "https://sleep-tracker.onrender.com/api/whoop/callback"
+      # LLM gateway for AI meal estimation (text + vision).
+      # Get values from your Claude Code gateway config or Aliyun Bailian console.
+      - key: LLM_BASE_URL
+        sync: false
+      - key: LLM_API_KEY
+        sync: false
+      - key: LLM_MODEL
+        sync: false
+      - key: LLM_VISION_BASE_URL
+        sync: false
+      - key: LLM_VISION_API_KEY
+        sync: false
+      - key: LLM_VISION_MODEL
+        value: "qwen-vl-max"
