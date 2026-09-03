@@ -31,23 +31,24 @@
     --mint:      #16a34a;  --mint-soft:    #dcfce7;
     --sky:       #0891b2;  --sky-soft:     #cffafe;
 
-    /* 中性灰阶（slate，同 ds.css） */
+    /* 中性灰阶（slate，同 ds.css —— gray-200 深一档让分隔线/边框更清晰） */
     --gray-900: #0f172a; --gray-800:#1e293b; --gray-700:#334155;
     --gray-600: #475569; --gray-500:#64748b; --gray-400:#94a3b8;
-    --gray-300: #cbd5e1; --gray-200:#e2e8f0; --gray-100:#f1f5f9;
+    --gray-300: #cbd5e1; --gray-200:#d5dbe5; --gray-100:#f1f5f9;
     --gray-50:  #f8fafc;
 
-    /* 背景 / 文字（由灰阶派生，兼容旧变量名） */
-    --bg:           var(--gray-50);
-    --bg-soft:      var(--gray-100);
+    /* 背景 / 文字（在 DS slate 基础上适度下压：不过白、不过亮，边界清晰）
+       --bg 用独立中性灰（非 gray-50），让白卡浮起且整体不发白 */
+    --bg:           #eef0f5;    /* 页面底：中浅灰（不再近白） */
+    --bg-soft:      #e4e7ee;    /* 次级底 */
     --bg-card:      #ffffff;
     --bg-card-hover:#f8fafc;
-    --bg-tint:      var(--gray-50);
-    --text:         var(--gray-900);
-    --text-muted:   var(--gray-600);
-    --text-dim:     var(--gray-400);
-    --border:       var(--gray-200);
-    --border-strong:var(--gray-300);
+    --bg-tint:      #f2f4f8;    /* 卡内浅底 */
+    --text:         #161f37;    /* 主文字：深蓝灰（对比明确） */
+    --text-muted:   #455066;    /* 次文字 */
+    --text-dim:     #64748b;    /* 弱文字（从 gray-400 提一档，保证不糊） */
+    --border:       #ccd3df;    /* 卡片边界：清晰可见 */
+    --border-strong:#aab5c6;
 
     /* 渐变占位 → 纯色（DS 无渐变，纯色背景更规范） */
     --grad-primary: #2563eb;
@@ -665,25 +666,25 @@ body {
 .hero-ring { width: 120px; height: 120px; flex-shrink: 0; }
 .hero-ring svg { width: 100%; height: 100%; display: block; }
 
-/* ── Metric chips（ds-card ds-stat：纯白卡 + 极淡边，无装饰条） ── */
-.metric-chips { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
+/* ── Metric chips（白卡 + 清晰灰边，无装饰条；文字深但非纯黑） ── */
+.metric-chips { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
 .metric-chip {
     background: #ffffff;
-    border: 1px solid #f1f5f9;
-    border-radius: 14px;
+    border: 1px solid #ccd3df;
+    border-radius: 12px;
     padding: 12px 14px 8px;
     display: flex;
     flex-direction: column;
     gap: 2px;
-    min-height: 72px;
+    min-height: 74px;
     transition: border-color var(--transition);
     position: relative;
     overflow: hidden;
 }
-.metric-chip:hover { border-color: var(--gray-300); }
+.metric-chip:hover { border-color: #aab5c6; }
 .metric-chip__label {
     font-size: 11px;
-    color: var(--gray-400);
+    color: var(--gray-500);
     text-transform: uppercase;
     letter-spacing: .06em;
     font-weight: 600;
@@ -691,7 +692,7 @@ body {
 .metric-chip__value {
     font-size: 22px;
     font-weight: 700;
-    color: var(--gray-700);
+    color: var(--gray-800);
     font-variant-numeric: tabular-nums;
     line-height: 1.2;
     letter-spacing: -.01em;
@@ -701,12 +702,12 @@ body {
     height: 18px;
     margin-top: 4px;
     display: block;
-    opacity: 0.55;
+    opacity: 0.6;
 }
 .metric-chip--skeleton {
     align-items: center;
     justify-content: center;
-    color: var(--gray-400);
+    color: var(--gray-500);
     font-size: 13px;
 }
 
