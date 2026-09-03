@@ -737,23 +737,12 @@
 
             <section class="card ai-agent-section">
                 <h2>🤖 健康数据分析师</h2>
-                <p class="section-hint">用自然语言随时分析你的睡眠 / Whoop 恢复 / 苹果健康 / 饮食数据。下方即内嵌的 AI 助手（需 Agent 服务运行在 5188 端口）。</p>
-                <div class="ai-agent-frame-wrap">
-                    <div id="ai-agent-placeholder" class="ai-agent-placeholder">
-                        <div class="ai-agent-loading">⏳ 正在加载 AI 助手…</div>
-                        <p class="ai-agent-tip">若长时间无响应，请确认 Agent 服务已启动：<br>
-                        <code>cd health-agent &amp;&amp; npm run dev</code><br>
-                        并访问 <a href="http://localhost:5188" target="_blank" rel="noopener">http://localhost:5188</a> 自检。</p>
-                    </div>
-                    <!-- iframe 由 app.js 懒加载，src 指向 Agent 应用 -->
-                    <iframe
-                        id="ai-agent-frame"
-                        class="ai-agent-frame hidden"
-                        title="健康数据分析师"
-                        loading="lazy"
-                        allow="clipboard-write"
-                        referrerpolicy="no-referrer"></iframe>
+                <p class="section-hint">用自然语言随时分析你的睡眠 / Whoop 恢复 / 苹果健康 / 饮食数据。先生成今日的跨日分析，再针对它追问。</p>
+                <div class="ai-agent-actions">
+                    <button type="button" id="btn-agent-generate" class="btn btn-ai">🤖 生成今日分析</button>
+                    <span id="agent-status" class="agent-status"></span>
                 </div>
+                <div id="agent-result" class="ai-agent-result hidden"></div>
             </section>
         </div>
 
@@ -771,6 +760,7 @@
     <script src="/static/reports.js?v=10"></script>
     <script src="/static/healthOverview.js?v=16"></script>
     <script src="/static/hero.js?v=16"></script>
+    <script src="/static/agent.js?v=1"></script>
     <script src="/static/app.js?v=10"></script>
     <script>
         (function () {

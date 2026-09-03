@@ -1022,15 +1022,13 @@ body {
 .whoop-metric strong { font-size: 13px; font-weight: 700; color: var(--gray-900); font-variant-numeric: tabular-nums; }
 
 /* ── AI Agent frame ── */
-.ai-agent-frame-wrap { position: relative; width: 100%; margin-top: 10px; }
-.ai-agent-frame { width: 100%; height: 78vh; min-height: 520px; max-height: 900px; border: 1px solid var(--gray-200); border-radius: var(--radius); background: #fff; }
-.ai-agent-placeholder { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; min-height: 320px; padding: 32px 16px; text-align: center; color: var(--gray-500); border: 1px dashed var(--gray-300); border-radius: var(--radius); background: var(--gray-50); }
-.ai-agent-loading { font-size: 15px; font-weight: 600; color: var(--gray-700); display: inline-flex; align-items: center; gap: 10px; }
-.ai-agent-loading::before { content: ''; width: 14px; height: 14px; border: 2px solid var(--gray-200); border-top-color: var(--primary); border-radius: 50%; animation: spinner .7s linear infinite; }
-@keyframes spinner { to { transform: rotate(360deg); } }
-.ai-agent-tip { font-size: 13px; line-height: 1.7; }
-.ai-agent-tip code { display: inline-block; margin: 4px 0; padding: 3px 10px; background: var(--gray-100); border-radius: var(--radius-sm); font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--primary); }
-.ai-agent-tip a { color: var(--primary); font-weight: 600; }
+.ai-agent-actions { display: flex; align-items: center; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+.agent-status { font-size: 13px; color: var(--gray-500); }
+.agent-status.error { color: var(--danger); }
+.ai-agent-result { margin-top: 14px; padding: 14px 16px; background: var(--gray-50); border: 1px solid var(--gray-200); border-radius: var(--radius); }
+.agent-suggest { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.agent-suggest-chip { font-size: 12px; padding: 5px 12px; border: 1px solid var(--primary); color: var(--primary); background: #fff; border-radius: var(--radius-pill); cursor: pointer; transition: .15s; }
+.agent-suggest-chip:hover { background: var(--primary-soft); }
 
 /* ── Meal nutrition ── */
 .meal-day-summary { background: var(--gray-50); border: 1px solid var(--gray-200); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 14px; }
@@ -1087,8 +1085,8 @@ body {
 .meal-image-input { display: none !important; }
 
 /* ── Meal brief ── */
-.meal-brief-block { margin-top: 10px; }
-.meal-brief-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.meal-brief-block { margin-top: 10px; margin-bottom: 16px; }
+.meal-brief-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; padding-bottom: 4px; }
 .meal-brief-result { margin-top: 10px; padding: 14px 16px; background: var(--gray-50); border: 1px solid var(--gray-200); border-radius: var(--radius); }
 .brief-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
 .brief-chip { font-size: 12px; padding: 2px 10px; background: var(--primary-soft); color: var(--primary); border-radius: var(--radius-pill); font-weight: 600; }
