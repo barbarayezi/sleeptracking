@@ -251,14 +251,14 @@ class HealthOverview {
             }
         }
 
-        // ── Canvas sizing: 2 panels stacked ──
+        // ── Canvas sizing: 2 panels stacked (TALLER for research-grade) ──
         const dpr = window.devicePixelRatio || 1;
         const rect = canvas.parentElement.getBoundingClientRect();
-        const cssW = Math.max(200, Math.round(rect.width));
-        const MAIN_PX = 200;             // main time-series panel height
-        const GAP = 8;
-        const BOX_PX = N >= 3 ? 76 : 24; // box plot panel
-        const PAD_BOT = 14;              // bottom padding for axis text
+        const cssW = Math.max(280, Math.round(rect.width));
+        const MAIN_PX = 260;             // main time-series panel height（↑ 科研级加高）
+        const GAP = 10;
+        const BOX_PX = N >= 3 ? 92 : 24; // box plot panel
+        const PAD_BOT = 18;              // bottom padding for axis text
         const cssH = MAIN_PX + GAP + BOX_PX + PAD_BOT;
         canvas.width = cssW * dpr;
         canvas.height = cssH * dpr;
@@ -329,18 +329,18 @@ class HealthOverview {
         let lo = m.min != null ? Math.min(m.min, dataLo) : dataLo;
         let hi = m.max != null ? Math.max(m.max, dataHi) : dataHi;
         if (hi - lo < 1e-6) { hi += 1; lo -= 1; }
-        const padY = (hi - lo) * 0.08;
+        const padY = (hi - lo) * 0.10;
         lo -= padY; hi += padY;
 
         // ── Layout (CSS pixels within canvas) ──
-        const ml = m.key === 'meal_health_score' ? 30 : 38;  // left margin (y labels)
-        const mr = 12;
+        const ml = m.key === 'meal_health_score' ? 36 : 44;  // left margin (y labels)
+        const mr = 16;
         const chartW = cssW - ml - mr;
-        const mainTop = 8;
-        const mainBot = MAIN_PX - 22;       // leave room for x-axis date labels
+        const mainTop = 10;
+        const mainBot = MAIN_PX - 26;       // leave room for x-axis date labels
         const mainChartH = mainBot - mainTop;
-        const boxTop = MAIN_PX + GAP;       // = 208
-        const boxBot = MAIN_PX + GAP + BOX_PX - 4;   // bottom padding for axis text
+        const boxTop = MAIN_PX + GAP;
+        const boxBot = MAIN_PX + GAP + BOX_PX - 6;
         const boxChartH = boxBot - boxTop;
 
         const xOf = (i) => (Ntotal <= 1
@@ -355,44 +355,84 @@ class HealthOverview {
          *  PANEL 1 — TIME SERIES
          * ════════════════════════════════════════════════════════════ */
 
-        // Reference zones (good / bad thresholds), only on main panel
+        // Research-grade threshold zones (full coverage, not just lines)
+        // higher=true: 红 low / 黄 mid / 绿 high
+        // higher=false: 绿 low / 黄 mid / 红 high
+        if (m.goodAt != null && m.badAt != null) {
+            const gA = Math.max(m.goodAt, m.min != null ? m.min : -Infinity);
+            const bA = Math.min(m.badAt, m.max != null ? m.max : Infinity);
+            if (m.higher !== false) {
+                // higher-is-better:  low band (red), mid (amber), high band (green)
+                if (bA > lo && bA < hi) {
+                    ctx.fillStyle = 'rgba(220,38,38,0.06)';
+                    ctx.fillRect(ml, m.max != null ? yOfMain(Math.min(m.max, hi)) : mainTop, chartW, mainBot - (m.max != null ? yOfMain(Math.min(m.max, hi)) : mainTop));
+                    ctx.fillStyle = 'rgba(220,38,38,0.06)';
+                    ctx.fillRect(ml, Math.min(yOfMain(bA), mainBot), chartW, mainBot - Math.min(yOfMain(bA), mainBot));
+                }
+                if (gA > lo && gA < hi) {
+                    ctx.fillStyle = 'rgba(22,163,74,0.06)';
+                    ctx.fillRect(ml, mainTop, chartW, yOfMain(gA) - mainTop);
+                }
+                if (m.badAt < m.goodAt) {
+                    // mid band amber
+                    const top = yOfMain(m.goodAt);
+                    const bot = yOfMain(m.badAt);
+                    if (top > mainTop && bot < mainBot) {
+                        ctx.fillStyle = 'rgba(217,119,6,0.06)';
+                        ctx.fillRect(ml, top, chartW, bot - top);
+                    }
+                }
+            } else {
+                // lower-is-better: low (green), mid (amber), high (red)
+                if (gA > lo && gA < hi) {
+                    ctx.fillStyle = 'rgba(22,163,74,0.06)';
+                    ctx.fillRect(ml, mainTop, chartW, yOfMain(gA) - mainTop);
+                }
+                if (bA > lo && bA < hi) {
+                    ctx.fillStyle = 'rgba(217,119,6,0.06)';
+                    ctx.fillRect(ml, Math.min(yOfMain(gA), mainBot), chartW, yOfMain(bA) - Math.min(yOfMain(gA), mainBot));
+                }
+                if (m.max != null) {
+                    ctx.fillStyle = 'rgba(220,38,38,0.06)';
+                    ctx.fillRect(ml, yOfMain(m.max), chartW, mainBot - yOfMain(m.max));
+                }
+            }
+        }
+
+        // Reference threshold lines + labels
         if (m.goodAt != null && m.goodAt >= lo && m.goodAt <= hi) {
             const gy = yOfMain(m.goodAt);
-            ctx.fillStyle = m.colorRgba + '0.09)';
-            ctx.fillRect(ml, mainTop, chartW, gy - mainTop);
-            ctx.strokeStyle = m.colorRgba + '0.30)';
+            ctx.strokeStyle = '#16a34a';
             ctx.lineWidth = 1;
-            ctx.setLineDash([4, 4]);
+            ctx.setLineDash([3, 3]);
             ctx.beginPath();
             ctx.moveTo(ml, gy);
             ctx.lineTo(ml + chartW, gy);
             ctx.stroke();
             ctx.setLineDash([]);
-            ctx.fillStyle = m.colorRgba + '0.60)';
-            ctx.font = '9px -apple-system, sans-serif';
+            ctx.fillStyle = '#16a34a';
+            ctx.font = 'bold 9px -apple-system, "PingFang SC", sans-serif';
             ctx.textAlign = 'right';
-            const lbl = (m.higher === false ? '偏高分界 ≥' : '优选区 ≥') + this._fmt(m.goodAt);
+            const lbl = (m.higher === false ? '↓ 良 ≤' : '↑ 优 ≥') + this._fmt(m.goodAt);
             ctx.fillText(lbl, ml + chartW - 3, gy - 3);
         }
         if (m.badAt != null && m.badAt >= lo && m.badAt <= hi) {
             const by = yOfMain(m.badAt);
-            ctx.fillStyle = 'rgba(220,38,38,0.07)';
-            ctx.fillRect(ml, by, chartW, mainBot - by);
-            ctx.strokeStyle = 'rgba(220,38,38,0.25)';
+            ctx.strokeStyle = '#dc2626';
             ctx.lineWidth = 1;
-            ctx.setLineDash([4, 4]);
+            ctx.setLineDash([3, 3]);
             ctx.beginPath();
             ctx.moveTo(ml, by);
             ctx.lineTo(ml + chartW, by);
             ctx.stroke();
             ctx.setLineDash([]);
-            // Only label this line if good-zone label didn't claim the right edge
-            const goodLabeled = m.goodAt != null && m.goodAt >= lo && m.goodAt <= hi;
-            if (!goodLabeled) {
-                ctx.fillStyle = 'rgba(220,38,38,0.65)';
-                ctx.font = '9px -apple-system, sans-serif';
+            // Avoid double-label if both lines are very close
+            const bothLines = m.goodAt != null && Math.abs(yOfMain(m.goodAt) - by) < 12;
+            if (!bothLines) {
+                ctx.fillStyle = '#dc2626';
+                ctx.font = 'bold 9px -apple-system, "PingFang SC", sans-serif';
                 ctx.textAlign = 'right';
-                const lbl = (m.higher === false ? '良好区 ≤' : '警戒区 <') + this._fmt(m.badAt);
+                const lbl = (m.higher === false ? '↑ 警 >' : '↓ 警 <') + this._fmt(m.badAt);
                 ctx.fillText(lbl, ml + chartW - 3, by + 10);
             }
         }
@@ -756,6 +796,115 @@ class HealthOverview {
             }
             statsEl.innerHTML = html;
         }
+
+        // Multi-scale moving averages (14d + 30d); 7d SMA already drawn above
+        const drawMA = (k, color, dash, label) => {
+            if (N < k) return null;
+            const out = [];
+            for (let i = 0; i < pts.length; i++) {
+                const start = Math.max(0, i - k + 1);
+                const win = vals.slice(start, i + 1);
+                const mu = win.reduce((a, b) => a + b, 0) / win.length;
+                out.push({ x: pts[i].i, y: mu });
+            }
+            if (out.length < 2) return null;
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash(dash);
+            ctx.beginPath();
+            out.forEach((p, idx) => {
+                const px = xOf(p.x), py = yOfMain(p.y);
+                if (idx === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+            });
+            ctx.stroke();
+            ctx.setLineDash([]);
+            // Endpoint label
+            const last_ = out[out.length - 1];
+            const lx = xOf(last_.x), ly = yOfMain(last_.y);
+            ctx.font = 'bold 9px -apple-system, "PingFang SC", sans-serif';
+            ctx.textAlign = 'left';
+            const tag = label + ' ' + this._fmt(last_.y);
+            const tw = ctx.measureText(tag).width;
+            const tx = Math.min(ml + chartW - tw - 4, lx + 6);
+            const ty = Math.max(mainTop + 10, ly - 2);
+            ctx.fillStyle = 'rgba(255,255,255,0.92)';
+            const pad = 3;
+            ctx.fillRect(tx - pad, ty - 8, tw + pad * 2, 12);
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 0.6;
+            ctx.strokeRect(tx - pad, ty - 8, tw + pad * 2, 12);
+            ctx.fillStyle = color;
+            ctx.fillText(tag, tx, ty + 2);
+            return out;
+        };
+        const ma30 = drawMA(30, 'rgba(15, 23, 42, 0.55)',  [6, 4], '30d MA');
+        const ma14 = drawMA(14, 'rgba(100, 116, 139, 0.75)', [3, 3], '14d MA');
+
+        // Build lookup for hover tooltip (find nearest valid data point by x)
+        const hoverLookup = pts.map(p => ({
+            i: p.i, x: xOf(p.i), y: p.y, date: p.date,
+            period: !!p.period, missing: false,
+        }));
+
+        // ── Hover tooltip (research-grade: shows raw value + MA + Z-score + zone) ──
+        const tooltip = document.createElement('div');
+        tooltip.className = 'ho2-tooltip';
+        const body = canvas.parentElement;
+        body.style.position = 'relative';
+        body.appendChild(tooltip);
+        const prevTip = body.querySelector('.ho2-tooltip');
+        if (prevTip && prevTip !== tooltip) prevTip.remove();
+
+        canvas.addEventListener('mousemove', (ev) => {
+            const rect = canvas.getBoundingClientRect();
+            const mx = ev.clientX - rect.left;
+            const my = ev.clientY - rect.top;
+            // Only react if mouse is within main panel area
+            if (my < mainTop || my > mainBot) { tooltip.style.opacity = '0'; return; }
+            // Find nearest point by x
+            let nearest = null, bestDx = Infinity;
+            for (const p of hoverLookup) {
+                const dx = Math.abs(p.x - mx);
+                if (dx < bestDx) { bestDx = dx; nearest = p; }
+            }
+            if (!nearest || bestDx > 28) { tooltip.style.opacity = '0'; return; }
+            const v = nearest.y;
+            const z = zFor(v);
+            const zTxt = (z >= 0 ? '+' : '') + z.toFixed(2);
+            const tag = nearest.period ? ' · 经期' : '';
+            const fmt = (x) => m.key === 'meal_health_score' ? x.toFixed(2) : Math.round(x).toString();
+            const lvl = m.goodAt != null && v >= m.goodAt ? `<span style="color:#86efac">优</span>`
+                       : m.badAt != null && v < m.badAt  ? `<span style="color:#fca5a5">差</span>`
+                       : `<span style="color:#fde68a">中</span>`;
+            let maRows = '';
+            const calcMA = (arr) => arr ? (arr.find(mp => mp.x === nearest.i) || null) : null;
+            const seg = (k) => {
+                const start = Math.max(0, pts.findIndex(p => p.i === nearest.i) - k + 1);
+                const win = vals.slice(start, pts.findIndex(p => p.i === nearest.i) + 1);
+                if (win.length < 1) return null;
+                return fmt(win.reduce((a, b) => a + b, 0) / win.length);
+            };
+            const dStr = String(nearest.date || '');
+            maRows += `<div class="ho2-tip-row"><span class="ho2-tip-label">日期</span><span>${dStr}</span></div>`;
+            maRows += `<div class="ho2-tip-row"><span class="ho2-tip-label">区间</span><span>${pts.findIndex(p => p.i === nearest.i) + 1}/${N} ${tag}</span></div>`;
+            maRows += `<div class="ho2-tip-row"><span class="ho2-tip-label">${m.label}</span><strong>${fmt(v)} ${m.unit || ''}</strong> ${lvl}</div>`;
+            maRows += `<div class="ho2-tip-row"><span class="ho2-tip-label">Z-score</span><span>${zTxt}</span></div>`;
+            maRows += `<div class="ho2-tip-row"><span class="ho2-tip-label">MA 7d</span><span>${seg(7) ?? '—'}</span></div>`;
+            if (ma14) maRows += `<div class="ho2-tip-row"><span class="ho2-tip-label">MA 14d</span><span>${calcMA(ma14) ? fmt(calcMA(ma14).y) : '—'}</span></div>`;
+            if (ma30) maRows += `<div class="ho2-tip-row"><span class="ho2-tip-label">MA 30d</span><span>${calcMA(ma30) ? fmt(calcMA(ma30).y) : '—'}</span></div>`;
+            if (Math.abs(z) > 2) maRows += `<div class="ho2-tip-outlier">⚠ Z&gt;2 异常</div>`;
+            tooltip.innerHTML = maRows;
+            // Position: prefer right of cursor; flip if overflows
+            const tipW = tooltip.offsetWidth || 180;
+            const tipH = tooltip.offsetHeight || 100;
+            let tx = mx + 14, ty = my - tipH - 8;
+            if (tx + tipW > rect.width) tx = mx - tipW - 14;
+            if (ty < 0) ty = my + 14;
+            tooltip.style.left = tx + 'px';
+            tooltip.style.top = ty + 'px';
+            tooltip.style.opacity = '1';
+        });
+        canvas.addEventListener('mouseleave', () => { tooltip.style.opacity = '0'; });
     }
 
     /* ── Tier 2: Physiological Metric (compact) ────────*/

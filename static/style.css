@@ -883,14 +883,25 @@ body {
 .ho-insights li::before { content: ''; position: absolute; left: 0; top: 8px; width: 5px; height: 5px; border-radius: 50%; background: var(--primary); }
 
 /* ── Health Overview V2 ── */
-.ho2-core-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 14px; }
-@media (max-width: 768px) { .ho2-core-row { grid-template-columns: 1fr; } }
+.ho2-core-row {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+@media (min-width: 1100px) {
+    .ho2-core-row.grid-3 {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 16px;
+    }
+}
 
 .ho2-core-card {
     background: var(--bg-card);
     border: 1px solid var(--gray-200);
     border-radius: var(--radius-xl);
-    padding: 16px;
+    padding: 18px 20px;
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -912,11 +923,33 @@ body {
 .ho2-trend--down { background: var(--danger-soft); color: var(--danger); }
 .ho2-trend--flat { background: var(--gray-100); color: var(--gray-600); }
 
-.ho2-core__body { flex: 1; min-height: 200px; position: relative; }
-.ho2-core-canvas { display: block; width: 100%; }
+.ho2-core__body { flex: 1; min-height: 280px; position: relative; }
+.ho2-core-canvas { display: block; width: 100%; cursor: crosshair; }
 .ho2-core__stats { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--gray-200); }
 .ho2-stat { font-size: 12px; color: var(--gray-500); font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
 .ho2-stat--dim { opacity: .5; }
+
+/* ── Hover tooltip for core panels ── */
+.ho2-tooltip {
+    position: absolute;
+    pointer-events: none;
+    background: #0f172a;
+    color: #f5f3ff;
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    line-height: 1.55;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.30);
+    z-index: 50;
+    white-space: nowrap;
+    font-family: var(--font-sans);
+    opacity: 0;
+    transition: opacity 0.1s;
+}
+.ho2-tooltip strong { color: #fff; font-weight: 700; }
+.ho2-tooltip .ho2-tip-row { display: flex; gap: 10px; justify-content: space-between; }
+.ho2-tooltip .ho2-tip-label { color: #cbd5e1; }
+.ho2-tooltip .ho2-tip-outlier { color: #fbbf24; font-weight: 700; }
 
 .ho2-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; padding: 6px 10px; background: var(--gray-50); border: 1px solid var(--gray-200); border-radius: var(--radius-sm); font-size: 12px; color: var(--gray-500); }
 .ho2-legend__item { display: inline-flex; align-items: center; gap: 4px; }
