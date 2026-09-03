@@ -130,6 +130,23 @@
         <div class="category-group" id="group-display">
             <div class="category-banner"><span>📊</span> 图表与展示</div>
 
+            <!-- SECTION: DAILY COMBINED REPORT -->
+            <section class="card daily-report-section">
+                <h2>📋 每日综合报告</h2>
+                <p class="section-hint">把当天睡眠摘要与 AI 分析结论合并保存，随时通过日期跳转回看。</p>
+                <div class="daily-report-controls">
+                    <button type="button" id="btn-daily-report-generate" class="btn btn-ai">🤖 生成/刷新当日报告</button>
+                    <span id="daily-report-status" class="daily-report-status"></span>
+                    <div class="daily-report-date-jump">
+                        <label for="daily-report-date-select">查看历史：</label>
+                        <select id="daily-report-date-select">
+                            <option value="">选择日期…</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="daily-report-output" class="daily-report-output hidden"></div>
+            </section>
+
             <!-- SECTION: SLEEP TIMELINE -->
             <section class="card timeline-section">
                 <h2>📊 睡眠时间线</h2>
@@ -761,7 +778,8 @@
     <script src="/static/healthOverview.js?v=16"></script>
     <script src="/static/hero.js?v=16"></script>
     <script src="/static/agent.js?v=1"></script>
-    <script src="/static/app.js?v=10"></script>
+    <script src="/static/dailyReport.js?v=1"></script>
+    <script src="/static/app.js?v=11"></script>
     <script>
         (function () {
             var btn = document.getElementById('btn-quick-record');

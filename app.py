@@ -17,6 +17,7 @@ import models as models
 import meal_models as meal_models
 import nutrition as nutrition
 import period_models as period_models
+import daily_report_models as daily_report_models
 import time
 import socket
 
@@ -790,6 +791,176 @@ def daily_brief_chat():
         'reply': reply_text,
         'history': full_history,
     })
+
+
+# ──────────────────────────────────────────────
+#  Daily Combined Report (sleep + AI brief)
+# ──────────────────────────────────────────────
+
+
+def _compute_daily_sleep_summary(date_str):
+    """Return a structured sleep summary for a single date."""
+    from datetime import datetime, timedelta
+    records = models.get_records_by_date(date_str)
+    summary = {
+        'date': date_str,
+        'total_records': 0,
+        'total_hours': 0.0,
+        'total_minutes': 0,
+        'quality_breakdown': {'good': 0, 'average': 0, 'poor': 0},
+        'classification_breakdown': {'early': 0, 'late': 0},
+        'type_breakdown': {'night': 0, 'nap': 0, 'segment': 0},
+        'problem_frequency': {},
+        'records': [],
+    }
+    if not records:
+        return summary
+
+    total_minutes = 0
+    problem_counter = {}
+    for r in records:
+        sleep_dt = datetime.fromisoformat(r['sleep_time'])
+        wake_dt = datetime.fromisoformat(r['wake_time'])
+        if wake_dt <= sleep_dt:
+            wake_dt += timedelta(days=1)
+        duration_minutes = int((wake_dt - sleep_dt).total_seconds() / 60)
+        total_minutes += duration_minutes
+
+        quality = r.get('sleep_quality')
+        if quality in summary['quality_breakdown']:
+            summary['quality_breakdown'][quality] += 1
+        classification = r.get('classification')
+        if classification in summary['classification_breakdown']:
+            summary['classification_breakdown'][classification] += 1
+        record_type = r.get('record_type', 'night')
+        if record_type in summary['type_breakdown']:
+            summary['type_breakdown'][record_type] += 1
+
+        for p in r.get('sleep_problems') or []:
+            problem_counter[p] = problem_counter.get(p, 0) + 1
+
+        summary['records'].append({
+            'type': record_type,
+            'sleep_time': r['sleep_time'],
+            'wake_time': r['wake_time'],
+            'hours': round(duration_minutes / 60.0, 2),
+            'minutes': duration_minutes,
+            'quality': quality,
+            'classification': classification,
+            'problems': r.get('sleep_problems') or [],
+        })
+
+    summary['total_records'] = len(records)
+    summary['total_minutes'] = total_minutes
+    summary['total_hours'] = round(total_minutes / 60.0, 2)
+    summary['problem_frequency'] = problem_counter
+    return summary
+
+
+def _format_combined_daily_report(sleep_summary, ai_brief_text):
+    """Format a human-readable combined report from sleep summary + AI brief."""
+    lines = [f'# {sleep_summary["date"]} 每日综合报告', '']
+    lines.append('## 🌙 睡眠摘要')
+    lines.append(f'- 总睡眠：{sleep_summary["total_hours"]}h（{sleep_summary["total_records"]} 条记录）')
+    q = sleep_summary['quality_breakdown']
+    lines.append(f'- 睡眠质量：良好 {q["good"]} / 一般 {q["average"]} / 较差 {q["poor"]}')
+    c = sleep_summary['classification_breakdown']
+    lines.append(f'- 入睡分类：早睡 {c["early"]} / 晚睡 {c["late"]}')
+    if sleep_summary.get('problem_frequency'):
+        problem_names = {
+            'insomnia': '失眠', 'dreams': '多梦', 'sweats': '多汗',
+            'waking': '频醒', 'early_waking': '早醒'
+        }
+        probs = ' / '.join(
+            f'{problem_names.get(k, k)} {v} 次'
+            for k, v in sleep_summary['problem_frequency'].items()
+        )
+        lines.append(f'- 睡眠问题：{probs}')
+    lines.append('')
+    lines.append('## 🤖 AI 分析结论')
+    lines.append(ai_brief_text)
+    return '\n'.join(lines)
+
+
+@app.route('/api/daily-report', methods=['GET'])
+def get_daily_report():
+    """Return the saved combined report for a specific date."""
+    date = request.args.get('date') or _today_local()
+    try:
+        from datetime import date as _d
+        _d.fromisoformat(date)
+    except ValueError:
+        return jsonify({'error': 'date 参数格式应为 YYYY-MM-DD'}), 400
+
+    report = daily_report_models.get_daily_report(date)
+    if not report:
+        return jsonify({'date': date, 'report': None}), 404
+    return jsonify({'date': date, 'report': report})
+
+
+@app.route('/api/daily-report/dates', methods=['GET'])
+def list_daily_report_dates():
+    """List dates that already have a saved combined report."""
+    limit = request.args.get('limit', 365, type=int)
+    offset = request.args.get('offset', 0, type=int)
+    dates = daily_report_models.list_daily_report_dates(limit=limit, offset=offset)
+    return jsonify({'dates': dates})
+
+
+@app.route('/api/daily-report/generate', methods=['POST'])
+def generate_daily_report():
+    """Generate and persist a combined daily report for the given date.
+
+    Combines:
+      - Sleep summary for the date (from sleep_records)
+      - AI cross-day brief (yesterday diet + this morning metrics)
+    """
+    from datetime import date as _d, timedelta as _td
+    date = request.args.get('date') or _today_local()
+    try:
+        d0 = _d.fromisoformat(date)
+    except ValueError:
+        return jsonify({'error': 'date 参数格式应为 YYYY-MM-DD'}), 400
+
+    yesterday = (d0 - _td(days=1)).isoformat()
+
+    # Sleep summary for the target date
+    try:
+        sleep_summary = _compute_daily_sleep_summary(date)
+    except Exception as e:
+        return jsonify({'error': f'读取睡眠记录失败：{e}'}), 500
+
+    # AI brief: yesterday diet + this morning metrics
+    try:
+        meals = meal_models.get_all_meals(date=yesterday)
+    except Exception as e:
+        return jsonify({'error': f'读取饮食记录失败：{e}'}), 500
+
+    meal_summary = nutrition.summarize(meals)
+    morning = _extract_morning(date)
+    trends = _compute_7d_trends(date)
+    profile = _profile_defaults()
+
+    try:
+        result = nutrition.daily_brief(yesterday, date, meal_summary, morning,
+                                       trends=trends, profile=profile)
+    except Exception as e:
+        return jsonify({'error': f'生成 AI 简报失败：{e}'}), 500
+
+    if not result.get('ok'):
+        return jsonify({'error': result.get('error', '生成失败')}), 502
+
+    ai_brief_text = result['data']['brief']
+    combined_text = _format_combined_daily_report(sleep_summary, ai_brief_text)
+
+    try:
+        report = daily_report_models.save_daily_report(
+            date, sleep_summary, ai_brief_text, combined_text
+        )
+    except Exception as e:
+        return jsonify({'error': f'保存报告失败：{e}'}), 500
+
+    return jsonify({'date': date, 'report': report})
 
 
 # ──────────────────────────────────────────────

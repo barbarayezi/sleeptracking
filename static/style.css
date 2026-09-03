@@ -496,6 +496,19 @@ body {
 .report-output { min-height: 100px; }
 .report-placeholder { color: var(--gray-500); text-align: center; padding: 32px 0; }
 
+/* ── Daily combined report ── */
+.daily-report-controls { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+.daily-report-status { font-size: 13px; color: var(--gray-500); }
+.daily-report-status.error { color: var(--danger); }
+.daily-report-date-jump { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--gray-600); }
+.daily-report-date-jump select { background: var(--bg-card); color: var(--text); border: 1px solid var(--gray-300); border-radius: var(--radius-sm); padding: 5px 12px; font-size: 13px; cursor: pointer; }
+.daily-report-output { min-height: 80px; }
+.daily-report-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+.daily-report-date { font-size: 16px; font-weight: 700; color: var(--gray-900); }
+.daily-report-badge { font-size: 11px; padding: 2px 8px; background: var(--success-soft); color: var(--success); border-radius: var(--radius-pill); font-weight: 600; }
+.daily-report-ai { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--gray-200); }
+.daily-report-ai h4 { font-size: 13px; color: var(--gray-600); margin-bottom: 8px; }
+
 /* ── Report content ── */
 .report-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 14px; margin-bottom: 20px; }
 .stat-card {

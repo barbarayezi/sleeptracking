@@ -11,6 +11,7 @@ const App = {
     calendar: null,
     report: null,
     health: null,
+    dailyReport: null,
     currentDate: null,
     deferredInstallPrompt: null,
 
@@ -24,6 +25,9 @@ const App = {
         this.calendar = new Calendar();
         this.report = new ReportManager();
         this.health = new HealthOverview();
+        this.dailyReport = new DailyReportManager({
+            onDateChange: (dateStr) => this.setDate(dateStr)
+        });
         const healthRefresh = document.getElementById('btn-health-refresh');
         if (healthRefresh) {
             healthRefresh.addEventListener('click', () => this.health.load());
@@ -45,6 +49,7 @@ const App = {
         await this.period.loadDate(this.currentDate);
         await this._refreshTimeline();
         await this.health.load();
+        await this.dailyReport.init(this.currentDate);
 
         // Load Hero 首页概览（昨晚睡眠 + 指标芯片 + 本周/Whoop 总览）
         if (window.HeroOverview) HeroOverview.refresh();
@@ -100,12 +105,7 @@ const App = {
     },
 
     onTimelineClick(dateStr) {
-        this.currentDate = dateStr;
-        this._updateDateLabel();
-        this.form.loadDate(dateStr);
-        this.meal.loadDate(dateStr);
-        this.period.loadDate(dateStr);
-        this.calendar.showDate(dateStr);
+        this.setDate(dateStr);
     },
 
     /* ── Today at a glance ─────────────────── */
@@ -193,31 +193,28 @@ const App = {
 
     _initDateNavigation() {
         document.getElementById('btn-prev-day').addEventListener('click', () => {
-            this.currentDate = this._addDays(this.currentDate, -1);
-            this._updateDateLabel();
-            this.form.loadDate(this.currentDate);
-            this.meal.loadDate(this.currentDate);
-            this.period.loadDate(this.currentDate);
-            this.calendar.showDate(this.currentDate);
+            this.setDate(this._addDays(this.currentDate, -1));
         });
 
         document.getElementById('btn-next-day').addEventListener('click', () => {
-            this.currentDate = this._addDays(this.currentDate, 1);
-            this._updateDateLabel();
-            this.form.loadDate(this.currentDate);
-            this.meal.loadDate(this.currentDate);
-            this.period.loadDate(this.currentDate);
-            this.calendar.showDate(this.currentDate);
+            this.setDate(this._addDays(this.currentDate, 1));
         });
 
         document.getElementById('btn-today').addEventListener('click', () => {
-            this.currentDate = this._todayStr();
-            this._updateDateLabel();
-            this.form.loadDate(this.currentDate);
-            this.meal.loadDate(this.currentDate);
-            this.period.loadDate(this.currentDate);
-            this.calendar.showDate(this.currentDate);
+            this.setDate(this._todayStr());
         });
+    },
+
+    /** Central date switcher: update all date-bound modules together. */
+    setDate(dateStr) {
+        if (!dateStr || dateStr === this.currentDate) return;
+        this.currentDate = dateStr;
+        this._updateDateLabel();
+        this.form.loadDate(dateStr);
+        this.meal.loadDate(dateStr);
+        this.period.loadDate(dateStr);
+        this.calendar.showDate(dateStr);
+        if (this.dailyReport) this.dailyReport.loadDate(dateStr);
     },
 
     _updateDateLabel() {

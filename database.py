@@ -887,6 +887,24 @@ def init_db():
         ON brief_chat_messages(brief_date, id)
     """)
 
+    # Daily combined report (v19): sleep summary + AI brief, persisted per date
+    # so users can jump back to any day's report without regenerating.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS daily_reports (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            report_date         DATE NOT NULL UNIQUE,
+            sleep_summary_json  TEXT NOT NULL,
+            ai_brief_text       TEXT NOT NULL,
+            combined_text       TEXT,
+            created_at          TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+            updated_at          TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_daily_reports_date
+        ON daily_reports(report_date)
+    """)
+
     # Now run pending migrations (ALTER TABLE for older schemas)
     _migrate(conn)
 
