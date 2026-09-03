@@ -197,7 +197,7 @@ class HealthOverview {
 
         // Score display
         if (scoreEl) {
-            scoreEl.textContent = last ? (m.key === 'meal_health_score' ? last[m.key].toFixed(1) : Math.round(last[m.key])) : '—';
+            scoreEl.textContent = last ? (m.key === 'meal_health_score' ? last.y.toFixed(1) : Math.round(last.y)) : '—';
         }
 
         // Trend arrow

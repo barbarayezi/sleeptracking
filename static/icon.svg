@@ -1,15 +1,25 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
   <defs>
+    <!-- 背景渐变：紫 → 粉（呼应主视觉） -->
     <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#16110E"/>
-      <stop offset="45%" stop-color="#2A2018"/>
-      <stop offset="100%" stop-color="#3B2D22"/>
+      <stop offset="0%"   stop-color="#a385ff"/>
+      <stop offset="55%"  stop-color="#7c5cff"/>
+      <stop offset="100%" stop-color="#ff5ca7"/>
     </linearGradient>
-    <radialGradient id="moonGlow" cx="50%" cy="45%" r="55%">
-      <stop offset="0%" stop-color="#FFD699" stop-opacity="0.55"/>
-      <stop offset="70%" stop-color="#F2A65A" stop-opacity="0.15"/>
-      <stop offset="100%" stop-color="#F2A65A" stop-opacity="0"/>
+
+    <!-- 月亮光晕（暖白粉） -->
+    <radialGradient id="moonGlow" cx="50%" cy="50%" r="55%">
+      <stop offset="0%"   stop-color="#ffffff" stop-opacity="0.55"/>
+      <stop offset="70%"  stop-color="#ffe9d6" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#ffe9d6" stop-opacity="0"/>
     </radialGradient>
+
+    <!-- 月牙主色（亮黄白） -->
+    <linearGradient id="moonFill" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%"   stop-color="#fff8e7"/>
+      <stop offset="100%" stop-color="#ffd699"/>
+    </linearGradient>
+
     <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%">
       <feGaussianBlur stdDeviation="2" result="blur"/>
       <feMerge>
@@ -19,20 +29,20 @@
     </filter>
   </defs>
 
-  <!-- App icon background -->
+  <!-- App 图标背景：紫粉渐变圆角方 -->
   <rect width="100" height="100" rx="22" fill="url(#bg)"/>
 
-  <!-- Moon glow -->
-  <circle cx="52" cy="47" r="30" fill="url(#moonGlow)"/>
+  <!-- 月光晕 -->
+  <circle cx="52" cy="47" r="34" fill="url(#moonGlow)"/>
 
-  <!-- Crescent moon -->
+  <!-- 月牙（亮黄白渐变） -->
   <path d="M70 58a26 26 0 1 1-32-36 21 21 0 0 0 32 36Z"
-        fill="#FFCC80" filter="url(#softGlow)"/>
+        fill="url(#moonFill)" filter="url(#softGlow)"/>
 
-  <!-- Stars -->
-  <circle cx="24" cy="30" r="1.6" fill="#FFF5D6" opacity="0.9"/>
-  <circle cx="80" cy="27" r="1.2" fill="#FFF5D6" opacity="0.65"/>
-  <circle cx="74" cy="74" r="1.1" fill="#FFF5D6" opacity="0.75"/>
-  <circle cx="28" cy="70" r="0.9" fill="#FFF5D6" opacity="0.55"/>
-  <circle cx="58" cy="20" r="0.8" fill="#FFF5D6" opacity="0.5"/>
+  <!-- 装饰星点（白色，更亮） -->
+  <circle cx="24" cy="30" r="1.6" fill="#ffffff" opacity="0.95"/>
+  <circle cx="80" cy="27" r="1.2" fill="#ffffff" opacity="0.75"/>
+  <circle cx="74" cy="74" r="1.1" fill="#ffffff" opacity="0.85"/>
+  <circle cx="28" cy="70" r="0.9" fill="#ffffff" opacity="0.65"/>
+  <circle cx="58" cy="20" r="0.8" fill="#ffffff" opacity="0.55"/>
 </svg>

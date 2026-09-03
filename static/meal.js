@@ -28,9 +28,9 @@ class MealManager {
         this._aiItems = [];          // Item breakdown awaiting save
         this._aiAnalyzedAt = null;   // Timestamp of the accepted estimate
 
-        // ── Image recognition (multi-image, v11+) ──
-        this.btnAiImage = document.getElementById('btn-meal-ai-image');
-        this.imageInput = document.getElementById('meal-image-input');
+        // ── Image recognition (two-channel: before / after meal) ──
+        this.imageInputBefore = document.getElementById('meal-image-before-input');
+        this.imageInputAfter = document.getElementById('meal-image-after-input');
         this.imageGridEl = document.getElementById('meal-image-grid');
         this.imageHintEl = document.getElementById('meal-image-hint');
         // Each entry: { file, dataUrl, role: 'before' | 'after' }
@@ -94,12 +94,14 @@ class MealManager {
             this.btnAi.addEventListener('click', () => this._analyzeMeal());
         }
 
-        // AI image recognition — the button opens the native file picker
-        if (this.btnAiImage) {
-            this.btnAiImage.addEventListener('click', () => this.imageInput.click());
+        // AI image recognition — two channels: before-meal and after-meal photos.
+        // Using <label for> + visually-hidden inputs so mobile browsers honour
+        // the `multiple` attribute reliably.
+        if (this.imageInputBefore) {
+            this.imageInputBefore.addEventListener('change', (e) => this._onImagesSelected(e, 'before'));
         }
-        if (this.imageInput) {
-            this.imageInput.addEventListener('change', (e) => this._onImagesSelected(e));
+        if (this.imageInputAfter) {
+            this.imageInputAfter.addEventListener('change', (e) => this._onImagesSelected(e, 'after'));
         }
 
         // Daily brief (cross-day)
@@ -181,38 +183,43 @@ class MealManager {
         }
     }
 
-    /** Handle multi-file selection: stage each as a photo (default role: before). */
-    _onImagesSelected(e) {
+    /** Handle multi-file selection for a given channel (before / after). */
+    _onImagesSelected(e, role) {
         const files = Array.from((e.target.files || []));
         if (!files.length) return;
 
         const bad = files.filter(f => !f.type.startsWith('image/'));
         if (bad.length) {
             this._showAiMessage('请选择图片文件。', 'error');
-            this.imageInput.value = '';
+            e.target.value = '';
             return;
         }
         const oversized = files.filter(f => f.size > 10 * 1024 * 1024);
         if (oversized.length) {
             this._showAiMessage('图片过大（上限 10MB）。', 'error');
-            this.imageInput.value = '';
+            e.target.value = '';
             return;
         }
 
-        // Stage each new file; default role is "before", user can flip to "after".
+        // Stage each new file with the channel's role; read thumbnails async.
+        let pending = files.length;
         files.forEach(file => {
-            const item = { file, role: 'before', dataUrl: '' };
+            const item = { file, role, dataUrl: '' };
             const reader = new FileReader();
             reader.onload = (ev) => {
                 item.dataUrl = ev.target.result;
-                this._renderImageGrid();
+                pending -= 1;
+                if (pending === 0) this._renderImageGrid();
+            };
+            reader.onerror = () => {
+                pending -= 1;
+                if (pending === 0) this._renderImageGrid();
             };
             reader.readAsDataURL(file);
             this._imageFiles.push(item);
         });
-        this.imageInput.value = '';  // allow re-selecting to append more
+        e.target.value = '';  // allow re-selecting to append more
         this._renderImageGrid();
-        this._analyzeMealImages();
     }
 
     /** Render the staged photos as a grid with before/after toggle + remove. */
@@ -269,9 +276,6 @@ class MealManager {
         const qtyRadio = this.form.querySelector('input[name="meal_quantity"]:checked');
         const name = (document.getElementById('meal-name').value || '').trim();
 
-        const originalLabel = this.btnAiImage.textContent;
-        this.btnAiImage.disabled = true;
-        this.btnAiImage.textContent = '📷 分析中…';
         const mode = after.length ? '前后对比' : '仅餐前';
         this._showAiMessage(`正在分析餐食照片（${mode}），约需 15–30 秒…`, '');
 
@@ -294,16 +298,14 @@ class MealManager {
             this._showAiMessage('✅ 已根据图片填入，可手动修改后再保存。', 'success');
         } catch (err) {
             this._showAiMessage('❌ 网络错误：' + err.message, 'error');
-        } finally {
-            this.btnAiImage.disabled = false;
-            this.btnAiImage.textContent = originalLabel;
         }
     }
 
     /** Remove all staged images and hide the grid. */
     _clearImagePreview() {
         this._imageFiles = [];
-        if (this.imageInput) this.imageInput.value = '';
+        if (this.imageInputBefore) this.imageInputBefore.value = '';
+        if (this.imageInputAfter) this.imageInputAfter.value = '';
         this._renderImageGrid();
     }
 

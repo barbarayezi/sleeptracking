@@ -6,12 +6,12 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="睡眠追踪">
-    <meta name="theme-color" content="#2A2018">
+    <meta name="theme-color" content="#7c5cff">
     <link rel="manifest" href="/static/manifest.json">
     <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="/static/icon.svg">
     <title>睡眠追踪器 — Sleep Tracker</title>
-    <link rel="stylesheet" href="/static/style.css?v=13">
+    <link rel="stylesheet" href="/static/style.css?v=14">
 </head>
 <body>
 
@@ -526,14 +526,20 @@
                         <div class="meal-nutrition-head">
                             <span class="form-label">营养分析 <span class="label-hint">（选填）</span></span>
                             <button type="button" id="btn-meal-ai" class="btn btn-ai">🤖 AI 估算</button>
-                            <button type="button" id="btn-meal-ai-image" class="btn btn-ai">📷 上传餐食照片（可多选·餐前/餐后）</button>
-                            <input type="file" id="meal-image-input" accept="image/*" multiple hidden>
+                        </div>
+
+                        <!-- Two-channel image upload: before vs after meal -->
+                        <div class="meal-image-actions">
+                            <label for="meal-image-before-input" class="btn btn-ai">📷 上传餐前照片（可多选）</label>
+                            <input type="file" id="meal-image-before-input" class="meal-image-input" accept="image/*" multiple>
+                            <label for="meal-image-after-input" class="btn btn-ai btn-ai-secondary">📷 上传餐后照片（可选·可多选）</label>
+                            <input type="file" id="meal-image-after-input" class="meal-image-input" accept="image/*" multiple>
                         </div>
 
                         <!-- Multi-image preview (shown after selecting photos) -->
                         <div id="meal-image-grid" class="meal-image-grid hidden"></div>
                         <div id="meal-image-hint" class="meal-image-hint hidden">
-                            每张照片可标记为「餐前 / 餐后」；只传餐前也能识别整餐。AI 将自动对比前后估算实际摄入量。
+                            已上传的照片会按「餐前 / 餐后」分组；可点照片上的标签切换分组。确认后点击「🤖 AI 估算」进行分析。
                         </div>
 
                         <div class="nutrition-inputs">
@@ -753,7 +759,7 @@
     </footer>
 
     <script src="/static/form.js?v=10"></script>
-    <script src="/static/meal.js?v=13"></script>
+    <script src="/static/meal.js?v=14"></script>
     <script src="/static/period.js?v=10"></script>
     <script src="/static/calendar.js?v=10"></script>
     <script src="/static/timeline.js?v=10"></script>
