@@ -247,10 +247,10 @@ class Timeline {
         ctx.clearRect(0, 0, containerWidth, totalHeight);
 
         // Draw grid lines & hour labels
-        ctx.fillStyle = '#94a3b8';
+        ctx.fillStyle = '#9d96b3';
         ctx.font = '11px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
         ctx.textAlign = 'center';
-        ctx.strokeStyle = '#334155';
+        ctx.strokeStyle = '#ebe4f7';
         ctx.lineWidth = 0.5;
 
         const hourLabels = ['18', '19', '20', '21', '22', '23', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18'];
@@ -366,7 +366,7 @@ class Timeline {
         // Duration text
         const durationHours = (wakeOffset - sleepOffset) / 60;
         const typeIndicator = { night: '', nap: '💤', segment: '🔄' }[record.record_type] || '';
-        ctx.fillStyle = '#e2e8f0';
+        ctx.fillStyle = '#2a2050';
         ctx.textAlign = 'left';
         ctx.font = '11px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
         const hoursText = durationHours.toFixed(1) + 'h' + (typeIndicator ? ' ' + typeIndicator : '');

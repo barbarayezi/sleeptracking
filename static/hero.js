@@ -158,7 +158,8 @@ const HeroOverview = {
     },
 
     _stroke(color) {
-        return { score: '#F2A65A', deep: '#ED8A6B', recovery: '#8FD3A8', steps: '#C2B09A' }[color] || '#F2A65A';
+        // 紫粉主色系：score → 紫、deep → 粉、recovery → 绿、steps → 灰紫
+        return { score: '#7c5cff', deep: '#ff5ca7', recovery: '#5cd9a8', steps: '#9d96b3' }[color] || '#7c5cff';
     },
 
     _renderRing(el, score) {
@@ -168,20 +169,21 @@ const HeroOverview = {
         const col = this._ringColor(score);
         el.innerHTML = `
         <svg viewBox="0 0 ${size} ${size}" role="img" aria-label="睡眠评分 ${score == null ? '暂无' : Math.round(score)}">
-            <circle cx="${cx}" cy="${cy}" r="${rad}" fill="none" stroke="rgba(247,238,221,0.12)" stroke-width="11"/>
+            <circle cx="${cx}" cy="${cy}" r="${rad}" fill="none" stroke="rgba(124,92,255,0.10)" stroke-width="11"/>
             <circle cx="${cx}" cy="${cy}" r="${rad}" fill="none" stroke="${col}" stroke-width="11"
                 stroke-linecap="round" stroke-dasharray="${circ.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}"
                 transform="rotate(-90 ${cx} ${cy})" style="transition:stroke-dashoffset .6s ease"/>
-            <text x="${cx}" y="${cy - 2}" text-anchor="middle" fill="#F7EEDD" font-size="34" font-weight="700">${score == null ? '—' : Math.round(score)}</text>
-            <text x="${cx}" y="${cy + 20}" text-anchor="middle" fill="#C2B09A" font-size="12">睡眠评分</text>
+            <text x="${cx}" y="${cy - 2}" text-anchor="middle" fill="#2a2050" font-size="34" font-weight="800">${score == null ? '—' : Math.round(score)}</text>
+            <text x="${cx}" y="${cy + 20}" text-anchor="middle" fill="#6b6480" font-size="12">睡眠评分</text>
         </svg>`;
     },
 
     _ringColor(score) {
-        if (score == null) return '#8E7E68';
-        if (score >= 75) return '#ED8A6B';
-        if (score >= 50) return '#E6B85C';
-        return '#CC6152';
+        // 紫粉主色系：高分紫，中分粉，低分橘红
+        if (score == null) return '#9d96b3';
+        if (score >= 75) return '#7c5cff';
+        if (score >= 50) return '#ff5ca7';
+        return '#ff8c5c';
     },
 
     _renderWeek(el, sleeps) {
