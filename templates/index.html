@@ -11,7 +11,7 @@
     <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="/static/icon.svg">
     <title>睡眠追踪器 — Sleep Tracker</title>
-    <link rel="stylesheet" href="/static/style.css?v=12">
+    <link rel="stylesheet" href="/static/style.css?v=13">
 </head>
 <body>
 
@@ -99,30 +99,28 @@
                 </div>
             </div>
 
+            <!-- ── 合并卡下半场：恢复分算法拆解（方案 C） ── -->
+            <div class="algo-block">
+                <div class="algo-head">
+                    <span class="algo-title">恢复分是怎么算出来的</span>
+                    <span class="algo-hint">整夜体征 vs 个人 28 天基线 · 权重为方向示意</span>
+                    <span class="algo-legend">
+                        <span><i class="algo-lg-bad"></i>拖累</span>
+                        <span><i class="algo-lg-mild"></i>轻微拖累</span>
+                        <span><i class="algo-lg-good"></i>助力</span>
+                        <span><i class="algo-lg-line"></i>基线（近 28 天均值）</span>
+                    </span>
+                </div>
+                <div id="algo-body">
+                    <div class="algo-empty">加载中…</div>
+                </div>
+            </div>
+
             <div class="hero-actions">
                 <button id="btn-export" class="btn btn-secondary" type="button">⬇️ 导出备份</button>
                 <button id="btn-import" class="btn btn-secondary" type="button">⬆️ 导入恢复</button>
                 <input type="file" id="import-file" accept="application/json" class="hidden">
                 <span id="backup-msg" class="form-message"></span>
-            </div>
-        </section>
-
-        <!-- ═══════════════════════════════════════ -->
-        <!--  ALGO · 恢复分算法解读（依据设计稿 v2 落地） -->
-        <!-- ═══════════════════════════════════════ -->
-        <section class="card algo-card" id="algo-card">
-            <div class="algo-head">
-                <span class="algo-title">恢复分是怎么算出来的</span>
-                <span class="algo-hint">整夜体征 vs 个人 28 天基线 · 权重为方向示意</span>
-                <span class="algo-legend">
-                    <span><i class="algo-lg-bad"></i>拖累</span>
-                    <span><i class="algo-lg-mild"></i>轻微拖累</span>
-                    <span><i class="algo-lg-good"></i>助力</span>
-                    <span><i class="algo-lg-line"></i>基线（近 28 天均值）</span>
-                </span>
-            </div>
-            <div id="algo-body">
-                <div class="algo-empty">加载中…</div>
             </div>
         </section>
 
@@ -419,8 +417,8 @@
                 <!-- Cross-day daily brief: yesterday diet + this morning metrics -->
                 <div class="meal-brief-block">
                     <div class="meal-brief-head">
-                        <span class="form-label">每日简报 <span class="label-hint">（昨日饮食 + 今晨体重/饮水/步数/睡眠）</span></span>
-                        <button type="button" id="btn-meal-brief" class="btn btn-ai">🤖 生成每日简报</button>
+                        <span class="form-label">昨日汇总 <span class="label-hint">（昨日饮食 + 今晨体重/饮水/步数/睡眠）</span></span>
+                        <button type="button" id="btn-meal-brief" class="btn btn-ai">🤖 生成昨日汇总</button>
                     </div>
                     <div id="meal-brief-result" class="meal-brief-result hidden"></div>
                 </div>
@@ -528,14 +526,14 @@
                         <div class="meal-nutrition-head">
                             <span class="form-label">营养分析 <span class="label-hint">（选填）</span></span>
                             <button type="button" id="btn-meal-ai" class="btn btn-ai">🤖 AI 估算</button>
-                            <button type="button" id="btn-meal-ai-image" class="btn btn-ai">📷 上传餐食照片</button>
-                            <input type="file" id="meal-image-input" accept="image/*" hidden>
+                            <button type="button" id="btn-meal-ai-image" class="btn btn-ai">📷 上传餐食照片（可多选·餐前/餐后）</button>
+                            <input type="file" id="meal-image-input" accept="image/*" multiple hidden>
                         </div>
 
-                        <!-- Image preview (shown after selecting a photo) -->
-                        <div id="meal-image-preview" class="meal-image-preview hidden">
-                            <img id="meal-image-thumb" class="meal-image-thumb" alt="餐食预览">
-                            <button type="button" id="btn-meal-image-clear" class="meal-image-clear" title="移除图片">×</button>
+                        <!-- Multi-image preview (shown after selecting photos) -->
+                        <div id="meal-image-grid" class="meal-image-grid hidden"></div>
+                        <div id="meal-image-hint" class="meal-image-hint hidden">
+                            每张照片可标记为「餐前 / 餐后」；只传餐前也能识别整餐。AI 将自动对比前后估算实际摄入量。
                         </div>
 
                         <div class="nutrition-inputs">
@@ -755,7 +753,7 @@
     </footer>
 
     <script src="/static/form.js?v=10"></script>
-    <script src="/static/meal.js?v=11"></script>
+    <script src="/static/meal.js?v=12"></script>
     <script src="/static/period.js?v=10"></script>
     <script src="/static/calendar.js?v=10"></script>
     <script src="/static/timeline.js?v=10"></script>

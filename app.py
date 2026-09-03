@@ -429,6 +429,55 @@ def meal_analyze_image():
     return jsonify(result['data'])
 
 
+@app.route('/api/meals/analyze-images', methods=['POST'])
+def meal_analyze_images():
+    """Estimate nutrition from before/after meal photos (multipart/form-data).
+
+    Accepts multiple 'before' files and optional multiple 'after' files.
+    Read-only, mirrors /api/meals/analyze: returns an estimate for review
+    before persisting. Also tolerates a single 'image' field (single-photo
+    path) for backwards compatibility.
+    """
+    before = [
+        f.read() for f in request.files.getlist('before')
+        if f and f.filename
+    ]
+    after = [
+        f.read() for f in request.files.getlist('after')
+        if f and f.filename
+    ]
+    if not before and not after:
+        single = request.files.get('image')
+        if single and single.filename:
+            before = [single.read()]
+
+    before = [b for b in before if b and len(b) <= 10 * 1024 * 1024]
+    after = [b for b in after if b and len(b) <= 10 * 1024 * 1024]
+    if not before and not after:
+        return jsonify({'error': '未收到图片文件'}), 400
+
+    meal_type = request.form.get('meal_type', '')
+    if meal_type and meal_type not in ('breakfast', 'lunch', 'dinner', 'snack'):
+        return jsonify({'error': 'meal_type 取值无效'}), 400
+
+    try:
+        result = nutrition.analyze_meal_images(
+            before, after,
+            meal_name=request.form.get('meal_name', ''),
+            meal_quantity=request.form.get('meal_quantity') or 'normal',
+            meal_type=meal_type,
+        )
+    except Exception as e:
+        # Defensive backstop: nutrition.analyze_meal_images is meant to never
+        # raise, but if anything escapes we return a friendly 502.
+        return jsonify({'error': f'图片分析失败：{e}'}), 502
+
+    if not result.get('ok'):
+        return jsonify({'error': result.get('error', '图片分析失败')}), 502
+
+    return jsonify(result['data'])
+
+
 @app.route('/api/meals/nutrition/summary', methods=['GET'])
 def meal_nutrition_summary():
     """Aggregate nutrition totals over a date range (or a single date).
@@ -528,6 +577,57 @@ def daily_brief():
         'meal_summary': meal_summary,
         'morning': morning,
         'brief': result['data']['brief'],
+    })
+
+
+@app.route('/api/daily-brief/chat', methods=['POST'])
+def daily_brief_chat():
+    """Continue the cross-day brief as a conversation.
+
+    The client sends the current date, the previously generated brief, and
+    the user's follow-up message. The server re-fetches the underlying data
+    so the reply is always grounded in the latest records.
+    """
+    body = request.get_json(silent=True) or {}
+    date = body.get('date') or _today_local()
+    user_message = (body.get('user_message') or '').strip()
+    previous_brief = (body.get('previous_brief') or '').strip()
+
+    if not user_message:
+        return jsonify({'error': 'user_message 不能为空'}), 400
+    if not previous_brief:
+        return jsonify({'error': '请先生成昨日汇总，再开始对话。'}), 400
+
+    from datetime import date as _d, timedelta as _td
+    try:
+        d0 = _d.fromisoformat(date)
+    except ValueError:
+        return jsonify({'error': 'date 参数格式应为 YYYY-MM-DD'}), 400
+
+    yesterday = (d0 - _td(days=1)).isoformat()
+
+    try:
+        meals = meal_models.get_all_meals(date=yesterday)
+    except Exception as e:
+        return jsonify({'error': f'读取饮食记录失败：{e}'}), 500
+
+    meal_summary = nutrition.summarize(meals)
+    morning = _extract_morning(date)
+
+    try:
+        result = nutrition.chat_brief(
+            yesterday, date, meal_summary, morning, previous_brief, user_message
+        )
+    except Exception as e:
+        return jsonify({'error': f'生成回复失败：{e}'}), 500
+
+    if not result.get('ok'):
+        return jsonify({'error': result.get('error', '生成失败')}), 502
+
+    return jsonify({
+        'date': date,
+        'diet_date': yesterday,
+        'reply': result['data']['brief'],
     })
 
 

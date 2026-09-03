@@ -28,17 +28,19 @@ class MealManager {
         this._aiItems = [];          // Item breakdown awaiting save
         this._aiAnalyzedAt = null;   // Timestamp of the accepted estimate
 
-        // ── Image recognition (v11) ──
+        // ── Image recognition (multi-image, v11+) ──
         this.btnAiImage = document.getElementById('btn-meal-ai-image');
         this.imageInput = document.getElementById('meal-image-input');
-        this.imagePreviewEl = document.getElementById('meal-image-preview');
-        this.imageThumb = document.getElementById('meal-image-thumb');
-        this.btnImageClear = document.getElementById('btn-meal-image-clear');
-        this._selectedImageFile = null;
+        this.imageGridEl = document.getElementById('meal-image-grid');
+        this.imageHintEl = document.getElementById('meal-image-hint');
+        // Each entry: { file, dataUrl, role: 'before' | 'after' }
+        this._imageFiles = [];
 
         // ── Daily brief (cross-day) ──
         this.btnBrief = document.getElementById('btn-meal-brief');
         this.briefEl = document.getElementById('meal-brief-result');
+        this._briefData = null;      // Last generated brief payload
+        this._briefMessages = [];    // Conversation history in the brief card
 
         this._selectedDate = this._todayStr();
         this._mealsForDate = [];     // All meals for current date
@@ -97,10 +99,7 @@ class MealManager {
             this.btnAiImage.addEventListener('click', () => this.imageInput.click());
         }
         if (this.imageInput) {
-            this.imageInput.addEventListener('change', (e) => this._onImageSelected(e));
-        }
-        if (this.btnImageClear) {
-            this.btnImageClear.addEventListener('click', () => this._clearImagePreview());
+            this.imageInput.addEventListener('change', (e) => this._onImagesSelected(e));
         }
 
         // Daily brief (cross-day)
@@ -129,11 +128,11 @@ class MealManager {
         const content = (document.getElementById('meal-content').value || '').trim();
 
         // Vision path takes priority when a photo is present.
-        if (this._selectedImageFile) {
+        if (this._imageFiles.length) {
             this._showAiMessage('检测到已上传照片，将使用照片进行 AI 分析…', '');
             this.btnAi.disabled = true;
             try {
-                await this._analyzeMealImage();
+                await this._analyzeMealImages();
             } finally {
                 this.btnAi.disabled = false;
             }
@@ -182,39 +181,89 @@ class MealManager {
         }
     }
 
-    /** Handle file selection: preview locally, then call the image endpoint. */
-    _onImageSelected(e) {
-        const file = e.target.files && e.target.files[0];
-        if (!file) return;
-        if (!file.type.startsWith('image/')) {
-            this._showAiMessage('请选择图片文件。', 'error');
-            return;
-        }
-        if (file.size > 10 * 1024 * 1024) {
-            this._showAiMessage('图片过大（上限 10MB）。', 'error');
-            return;
-        }
-        this._selectedImageFile = file;
+    /** Handle multi-file selection: stage each as a photo (default role: before). */
+    _onImagesSelected(e) {
+        const files = Array.from((e.target.files || []));
+        if (!files.length) return;
 
-        // Local preview thumbnail (no upload yet).
-        if (this.imageThumb && this.imagePreviewEl) {
+        const bad = files.filter(f => !f.type.startsWith('image/'));
+        if (bad.length) {
+            this._showAiMessage('请选择图片文件。', 'error');
+            this.imageInput.value = '';
+            return;
+        }
+        const oversized = files.filter(f => f.size > 10 * 1024 * 1024);
+        if (oversized.length) {
+            this._showAiMessage('图片过大（上限 10MB）。', 'error');
+            this.imageInput.value = '';
+            return;
+        }
+
+        // Stage each new file; default role is "before", user can flip to "after".
+        files.forEach(file => {
+            const item = { file, role: 'before', dataUrl: '' };
             const reader = new FileReader();
             reader.onload = (ev) => {
-                this.imageThumb.src = ev.target.result;
-                this.imagePreviewEl.classList.remove('hidden');
+                item.dataUrl = ev.target.result;
+                this._renderImageGrid();
             };
             reader.readAsDataURL(file);
+            this._imageFiles.push(item);
+        });
+        this.imageInput.value = '';  // allow re-selecting to append more
+        this._renderImageGrid();
+        this._analyzeMealImages();
+    }
+
+    /** Render the staged photos as a grid with before/after toggle + remove. */
+    _renderImageGrid() {
+        if (!this.imageGridEl) return;
+        if (!this._imageFiles.length) {
+            this.imageGridEl.classList.add('hidden');
+            this.imageGridEl.innerHTML = '';
+            if (this.imageHintEl) this.imageHintEl.classList.add('hidden');
+            return;
         }
-        this._analyzeMealImage();
+        this.imageGridEl.classList.remove('hidden');
+        if (this.imageHintEl) this.imageHintEl.classList.remove('hidden');
+
+        this.imageGridEl.innerHTML = this._imageFiles.map((item, idx) => `
+            <div class="meal-img-cell" data-idx="${idx}">
+                <img class="meal-img-thumb" src="${item.dataUrl}" alt="餐食照片">
+                <div class="meal-img-role">
+                    <button type="button" class="role-btn ${item.role === 'before' ? 'active' : ''}" data-idx="${idx}" data-role="before">餐前</button>
+                    <button type="button" class="role-btn ${item.role === 'after' ? 'active' : ''}" data-idx="${idx}" data-role="after">餐后</button>
+                </div>
+                <button type="button" class="meal-img-remove" data-idx="${idx}" title="移除">×</button>
+            </div>`).join('');
+
+        this.imageGridEl.querySelectorAll('.role-btn').forEach(btn => {
+            btn.addEventListener('click', (ev) => {
+                const idx = parseInt(ev.currentTarget.dataset.idx, 10);
+                const role = ev.currentTarget.dataset.role;
+                if (this._imageFiles[idx]) {
+                    this._imageFiles[idx].role = role;
+                    this._renderImageGrid();
+                }
+            });
+        });
+        this.imageGridEl.querySelectorAll('.meal-img-remove').forEach(btn => {
+            btn.addEventListener('click', (ev) => {
+                const idx = parseInt(ev.currentTarget.dataset.idx, 10);
+                this._imageFiles.splice(idx, 1);
+                this._renderImageGrid();
+            });
+        });
     }
 
     /**
-     * Ask the backend to estimate nutrition from a meal photo.
+     * Ask the backend to estimate nutrition from staged before/after photos.
      * Reuses the same fill-in logic as the text path (_applyAiResult).
      */
-    async _analyzeMealImage() {
-        const file = this._selectedImageFile;
-        if (!file) return;
+    async _analyzeMealImages() {
+        const before = this._imageFiles.filter(i => i.role === 'before').map(i => i.file);
+        const after = this._imageFiles.filter(i => i.role === 'after').map(i => i.file);
+        if (!before.length && !after.length) return;
 
         const typeRadio = this.form.querySelector('input[name="meal_type"]:checked');
         const qtyRadio = this.form.querySelector('input[name="meal_quantity"]:checked');
@@ -223,16 +272,18 @@ class MealManager {
         const originalLabel = this.btnAiImage.textContent;
         this.btnAiImage.disabled = true;
         this.btnAiImage.textContent = '📷 分析中…';
-        this._showAiMessage('正在分析餐食照片，约需 10–20 秒…', '');
+        const mode = after.length ? '前后对比' : '仅餐前';
+        this._showAiMessage(`正在分析餐食照片（${mode}），约需 15–30 秒…`, '');
 
         try {
             const fd = new FormData();
-            fd.append('image', file);
+            before.forEach(f => fd.append('before', f));
+            after.forEach(f => fd.append('after', f));
             fd.append('meal_name', name);
             fd.append('meal_type', typeRadio ? typeRadio.value : '');
             fd.append('meal_quantity', qtyRadio ? qtyRadio.value : 'normal');
 
-            const resp = await fetch('/api/meals/analyze-image', { method: 'POST', body: fd });
+            const resp = await fetch('/api/meals/analyze-images', { method: 'POST', body: fd });
             const data = await resp.json();
 
             if (!resp.ok) {
@@ -249,12 +300,11 @@ class MealManager {
         }
     }
 
-    /** Remove the selected image and hide the preview. */
+    /** Remove all staged images and hide the grid. */
     _clearImagePreview() {
-        this._selectedImageFile = null;
+        this._imageFiles = [];
         if (this.imageInput) this.imageInput.value = '';
-        if (this.imageThumb) this.imageThumb.src = '';
-        if (this.imagePreviewEl) this.imagePreviewEl.classList.add('hidden');
+        this._renderImageGrid();
     }
 
     /** Generate the cross-day daily brief (yesterday diet + this morning metrics). */
@@ -269,30 +319,126 @@ class MealManager {
             const resp = await fetch(`/api/daily-brief?date=${encodeURIComponent(date)}`);
             const data = await resp.json();
             if (!resp.ok) {
-                this.briefEl.innerHTML = `<div class="brief-error">❌ ${this._escapeHtml(data.error || '生成失败')}</div>`;
-                this.briefEl.classList.remove('hidden');
+                this._briefMessages = [];
+                this._renderBriefResult({ error: data.error || '生成失败' });
                 return;
             }
-            const brief = (data.brief || '').trim();
-            const diet = data.meal_summary;
-            const m = data.morning || {};
-            const chips = [];
-            if (diet && diet.meal_count) chips.push(`昨日 ${diet.meal_count} 餐 · ${Math.round(diet.kcal)} kcal`);
-            if (m.weight != null) chips.push(`体重 ${m.weight} kg`);
-            if (m.water_cups != null) chips.push(`饮水 ${m.water_cups} 杯`);
-            if (m.steps != null) chips.push(`步数 ${m.steps}`);
-            if (m.sleep_minutes != null) chips.push(`睡眠 ${Math.floor(m.sleep_minutes / 60)}h${m.sleep_minutes % 60}m`);
-            const chipHtml = chips.length
-                ? `<div class="brief-chips">${chips.map(c => `<span class="brief-chip">${this._escapeHtml(c)}</span>`).join('')}</div>`
-                : '';
-            this.briefEl.innerHTML = `${chipHtml}<div class="brief-text">${this._escapeHtml(brief).replace(/\n/g, '<br>')}</div>`;
-            this.briefEl.classList.remove('hidden');
+            this._briefData = data;
+            this._briefMessages = [{ role: 'ai', text: (data.brief || '').trim() }];
+            this._renderBriefResult(data);
         } catch (err) {
-            this.briefEl.innerHTML = `<div class="brief-error">❌ 网络错误：${this._escapeHtml(err.message)}</div>`;
-            this.briefEl.classList.remove('hidden');
+            this._briefMessages = [];
+            this._renderBriefResult({ error: `网络错误：${err.message}` });
         } finally {
             this.btnBrief.disabled = false;
             this.btnBrief.textContent = original;
+        }
+    }
+
+    /** Render the brief card, including any follow-up conversation. */
+    _renderBriefResult(data) {
+        if (!this.briefEl) return;
+        if (data && data.error) {
+            this.briefEl.innerHTML = `<div class="brief-error">❌ ${this._escapeHtml(data.error)}</div>`;
+            this.briefEl.classList.remove('hidden');
+            return;
+        }
+
+        const diet = data.meal_summary || {};
+        const m = data.morning || {};
+        const chips = [];
+        if (diet && diet.meal_count) chips.push(`昨日 ${diet.meal_count} 餐 · ${Math.round(diet.kcal)} kcal`);
+        if (m.weight != null) chips.push(`体重 ${m.weight} kg`);
+        if (m.water_cups != null) chips.push(`饮水 ${m.water_cups} 杯`);
+        if (m.steps != null) chips.push(`步数 ${m.steps}`);
+        if (m.sleep_minutes != null) chips.push(`睡眠 ${Math.floor(m.sleep_minutes / 60)}h${m.sleep_minutes % 60}m`);
+        const chipHtml = chips.length
+            ? `<div class="brief-chips">${chips.map(c => `<span class="brief-chip">${this._escapeHtml(c)}</span>`).join('')}</div>`
+            : '';
+
+        const messagesHtml = (this._briefMessages || []).map(msg => {
+            const cls = msg.role === 'user' ? 'brief-msg brief-msg--user' : 'brief-msg brief-msg--ai';
+            const icon = msg.role === 'user' ? '🧑' : '🤖';
+            return `<div class="${cls}"><span class="brief-msg__icon">${icon}</span><div class="brief-msg__bubble">${this._escapeHtml(msg.text).replace(/\n/g, '<br>')}</div></div>`;
+        }).join('');
+
+        this.briefEl.innerHTML = `
+            ${chipHtml}
+            <div class="brief-chat" id="brief-chat-messages">${messagesHtml}</div>
+            <div class="brief-input-row">
+                <input type="text" id="brief-chat-input" class="brief-chat-input" placeholder="对这份总结有疑问或补充？直接说…" autocomplete="off">
+                <button type="button" id="btn-brief-send" class="btn btn-ai">发送</button>
+            </div>
+            <div class="brief-input-hint">按 Enter 发送，AI 会基于昨日饮食和今晨指标继续回复</div>
+        `;
+        this.briefEl.classList.remove('hidden');
+
+        const input = this.briefEl.querySelector('#brief-chat-input');
+        const sendBtn = this.briefEl.querySelector('#btn-brief-send');
+        if (input && sendBtn) {
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    this._sendBriefChat();
+                }
+            });
+            sendBtn.addEventListener('click', () => this._sendBriefChat());
+            input.focus();
+        }
+    }
+
+    /** Send a follow-up message in the brief conversation. */
+    async _sendBriefChat() {
+        if (!this.briefEl || !this._briefData) return;
+        const input = this.briefEl.querySelector('#brief-chat-input');
+        const sendBtn = this.briefEl.querySelector('#btn-brief-send');
+        if (!input) return;
+        const text = input.value.trim();
+        if (!text) return;
+
+        this._briefMessages.push({ role: 'user', text });
+        input.value = '';
+        input.disabled = true;
+        if (sendBtn) {
+            sendBtn.disabled = true;
+            sendBtn.textContent = '回复中…';
+        }
+        this._renderBriefResult(this._briefData);
+        const messagesEl = this.briefEl.querySelector('#brief-chat-messages');
+        if (messagesEl) messagesEl.scrollTop = messagesEl.scrollHeight;
+
+        try {
+            const resp = await fetch('/api/daily-brief/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    date: this._briefData.date,
+                    previous_brief: (this._briefData.brief || ''),
+                    user_message: text,
+                }),
+            });
+            const data = await resp.json();
+            if (!resp.ok) {
+                this._briefMessages.push({ role: 'ai', text: `❌ ${data.error || '回复失败'}` });
+            } else {
+                this._briefMessages.push({ role: 'ai', text: (data.reply || '').trim() });
+            }
+        } catch (err) {
+            this._briefMessages.push({ role: 'ai', text: `❌ 网络错误：${err.message}` });
+        } finally {
+            this._renderBriefResult(this._briefData);
+            const newInput = this.briefEl.querySelector('#brief-chat-input');
+            if (newInput) {
+                newInput.disabled = false;
+                newInput.focus();
+            }
+            const newSendBtn = this.briefEl.querySelector('#btn-brief-send');
+            if (newSendBtn) {
+                newSendBtn.disabled = false;
+                newSendBtn.textContent = '发送';
+            }
+            const msgEl = this.briefEl.querySelector('#brief-chat-messages');
+            if (msgEl) msgEl.scrollTop = msgEl.scrollHeight;
         }
     }
 

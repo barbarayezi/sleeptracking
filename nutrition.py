@@ -461,6 +461,120 @@ def analyze_meal_image(image_bytes, meal_name="", meal_quantity="normal", meal_t
 # Pairs yesterday's diet with this morning's body metrics (weight / water /
 # steps / sleep) and asks the model for a short, causal interpretation.
 
+# ── Multi-image before/after estimation ───────────────────────────────────
+# Supports N "before" photos + M "after" photos, where the after set is
+# optional. The model sees every photo and estimates ACTUAL intake by
+# subtracting the leftover (after) from the full plate (before).
+
+def _image_block(raw):
+    """Wrap raw image bytes into an Anthropic vision content block."""
+    return {
+        "type": "image",
+        "source": {
+            "type": "base64",
+            "media_type": _guess_media_type(raw),
+            "data": base64.b64encode(raw).decode("ascii"),
+        },
+    }
+
+
+_MULTI_IMAGE_PROMPT_TEMPLATE = """你是资深营养分析师。下面是同一餐的餐食照片，用于估算「实际摄入量」。
+
+餐次：{meal_type}
+用户备注名称：{meal_name}（可辅助判断，但必须以图片实际内容为准）
+食量提示：{quantity_hint}
+
+图片编号说明：
+- 餐前照片：{before_range}（用餐开始前的完整餐食，全部菜品都在）
+- 餐后照片：{after_range}（用餐结束后的剩余状态；若标注为「无」表示未提供）
+
+要求：
+1. 先从餐前照片识别全部菜品：名称、估算餐前重量(克)、餐前热量(kcal)、蛋白质(g)、脂肪(g)、碳水(g)。无法精确判断的按食堂/家常常规分量合理估算。
+2. 若提供了餐后照片：从餐后照片识别每道菜的剩余重量，计算「实际摄入重量 = 餐前重量 - 剩余重量」，营养按实际摄入比例折算。在 meal_content 中明确写出「餐前约 X kcal，餐后剩余约 Y kcal，实际摄入约 Z kcal」。
+3. 若未提供餐后照片：按整餐（全部吃完）估算，并在 meal_content 开头注明「仅提供餐前照片，按整餐估算，实际摄入可能偏高」。
+4. 额外生成一段自然语言描述写入 meal_content：包含菜品名称、大致分量、烹饪方式；有餐后图时给出前后对比结论。
+5. items 中 weight_g / kcal / protein_g / fat_g / carbs_g 一律表示「实际摄入」（有餐后图时 = 餐前-剩余；仅餐前时 = 餐前重量）；remaining_g 表示餐后剩余重量（仅餐后图存在时填）。
+6. 健康评分 score 取 0-10 整数：重点看蔬菜占比(推荐占餐盘约一半)、荤素搭配、烹饪油盐、精制碳水比例。
+7. pros 写这餐做得好的地方；cons 写明确改进点(要具体、带分量或占比数字)；suggestion 给下次打菜的可执行建议。
+8. 只输出一个 JSON 对象，不要任何解释文字，不要 markdown 代码块，不要用 // 注释。
+
+输出格式（严格遵循，数值用数字不用字符串）：
+{{"meal_content":"白米饭餐前约130g、餐后剩约30g，实际摄入约100g；番茄炒蛋约120g","items":[{{"name":"白米饭","weight_g":100,"kcal":154,"protein_g":3.3,"fat_g":0.3,"carbs_g":34,"remaining_g":30}}],"kcal":620,"protein_g":19.4,"fat_g":30.3,"carbs_g":58.6,"score":8,"pros":"","cons":"","suggestion":""}}"""
+
+
+def analyze_meal_images(before_images, after_images=None, meal_name="", meal_quantity="normal", meal_type=""):
+    """Estimate nutrition from before/after meal photos (multi-image).
+
+    before_images: list[bytes] (required, >=1)
+    after_images:  list[bytes] (optional — may be empty/None)
+    Returns the SAME shape as analyze_meal_image so the route / frontend can
+    treat both paths identically.
+    """
+    before_images = [b for b in (before_images or []) if b]
+    after_images = [b for b in (after_images or []) if b]
+    if not before_images and not after_images:
+        return {"ok": False, "error": "未收到任何图片数据。"}
+
+    blocks = []
+    try:
+        for b in before_images:
+            blocks.append(_image_block(b))
+        for b in after_images:
+            blocks.append(_image_block(b))
+    except Exception:
+        return {"ok": False, "error": "图片编码失败，请换一张图重试。"}
+
+    base, key, model = _load_vision_config()
+    if not (base and key):
+        return {"ok": False, "error": "未配置 LLM 视觉模型（需要网关凭据）。"}
+
+    nb, na = len(before_images), len(after_images)
+    prompt = _MULTI_IMAGE_PROMPT_TEMPLATE.format(
+        meal_type=_TYPE_HINT.get(meal_type, "未指定"),
+        meal_name=meal_name or "（未填写）",
+        quantity_hint=_QUANTITY_HINT.get(meal_quantity, "食量正常"),
+        before_range=f"第 1~{nb} 张" if nb else "（无）",
+        after_range=(f"第 {nb+1}~{nb+na} 张" if (nb and na) else ("（无）" if not na else "全部图片")),
+    )
+
+    content = blocks + [{"type": "text", "text": prompt}]
+    try:
+        raw = _call_model(content, model_override=model, base_override=base,
+                          key_override=key, max_tokens=3000)
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+    text = _collect_text(raw)
+    if not text:
+        return {"ok": False, "error": "模型没有返回文本内容，请重试。"}
+
+    data = _extract_json(text)
+    if not isinstance(data, dict):
+        return {"ok": False, "error": f"模型返回内容不是合法 JSON：{text[:200]}"}
+
+    items = _clean_items(data.get("items"))
+    meal_content = str(data.get("meal_content", "") or "").strip()[:1000]
+    if not meal_content and items:
+        meal_content = "、".join(
+            f"{it['name']}约{it['weight_g']}g" for it in items if it.get('name')
+        )
+    return {
+        "ok": True,
+        "data": {
+            "meal_content": meal_content,
+            "kcal": _num(data.get("kcal"), "kcal", 0),
+            "protein_g": _num(data.get("protein_g"), "protein_g", 0),
+            "fat_g": _num(data.get("fat_g"), "fat_g", 0),
+            "carbs_g": _num(data.get("carbs_g"), "carbs_g", 0),
+            "score": int(_num(data.get("score"), "score", 5) or 5),
+            "items": items,
+            "pros": str(data.get("pros", "") or "").strip()[:500],
+            "cons": str(data.get("cons", "") or "").strip()[:500],
+            "suggestion": str(data.get("suggestion", "") or "").strip()[:500],
+        },
+    }
+
+
 _DAILY_BRIEF_PROMPT = """你是用户的健康教练，口语化、简短（中文 3-5 句，不要列点堆砌）。
 请把下面两组数据关联起来做一段解读，重点讲「饮食 → 身体反馈」的因果，而不是各说各话。
 
@@ -495,18 +609,41 @@ def daily_brief(yesterday, today, meal_summary, morning):
     if not (base and key):
         return {"ok": False, "error": "未配置 LLM。请设置 LLM_BASE_URL / LLM_API_KEY 环境变量。"}
 
+    prompt = _DAILY_BRIEF_PROMPT.format(
+        yesterday=yesterday, today=today,
+        diet_block=_build_diet_block(meal_summary),
+        morning_block=_build_morning_block(morning),
+    )
+
+    try:
+        raw = _call_model(prompt, max_tokens=1500)
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+    text = _collect_text(raw)
+    if not text:
+        return {"ok": False, "error": "模型没有返回文本内容，请重试。"}
+
+    return {"ok": True, "data": {"brief": text}}
+
+
+
+def _build_diet_block(meal_summary):
+    """Textual summary of yesterday's diet for prompts."""
     if meal_summary and meal_summary.get("meal_count"):
         s = meal_summary
-        diet_block = (
+        return (
             f"共 {s['meal_count']} 餐：总热量约 {round(s['kcal'])} kcal，"
             f"蛋白 {s['protein_g']} g、脂肪 {s['fat_g']} g、碳水 {s['carbs_g']} g"
             + (f"，平均健康分 {s['avg_score']}/10" if s.get("avg_score") is not None else "")
             + (f"；三大营养素供能占比 蛋白 {s['protein_pct']}% / 脂肪 {s['fat_pct']}% / 碳水 {s['carbs_pct']}%"
                if s.get("protein_pct") else "")
         )
-    else:
-        diet_block = "（昨日未记录任何饮食）"
+    return "（昨日未记录任何饮食）"
 
+
+def _build_morning_block(morning):
+    """Textual summary of this-morning metrics for prompts."""
     lines = []
     if morning.get("weight") is not None:
         lines.append(f"- 体重：{morning['weight']} kg")
@@ -529,15 +666,51 @@ def daily_brief(yesterday, today, meal_summary, morning):
         lines.append(f"- 睡眠：{sleep_txt}")
     else:
         lines.append("- 睡眠：未记录")
-    morning_block = chr(10).join(lines)
+    return chr(10).join(lines)
 
-    prompt = _DAILY_BRIEF_PROMPT.format(
+
+_CHAT_BRIEF_PROMPT = """你是用户的健康教练。此前你已经根据用户的昨日饮食和今晨身体指标给出了一段「昨日汇总」。现在用户对这段总结有话想说，请基于原始数据和用户的反馈，继续用中文口语化、简短地回复（3-6 句）。
+
+【昨日饮食（{yesterday}）】
+{diet_block}
+
+【今晨身体指标（{today}）】
+{morning_block}
+
+【你之前的「昨日汇总」】
+{previous_brief}
+
+【用户的原话】
+{user_message}
+
+回复要求：
+1. 先理解用户想表达的意思（可能是质疑、补充、求建议、分享感受），不要机械重复之前的总结。
+2. 回复必须基于上面的原始数据；如果用户提到某个数据，你可以引用，但不要编造未记录的数据。
+3. 保持口语化、有温度；如果是追问建议，给一个今天就能做的小行动。
+4. 若用户说"昨天其实没吃这个"或数据明显有误，友好地提示用户去修改对应餐食/指标记录，修改后再重新生成「昨日汇总」。
+"""
+
+
+def chat_brief(yesterday, today, meal_summary, morning, previous_brief, user_message):
+    """Continue the cross-day brief as a conversation.
+
+    Returns the SAME ok-shape as daily_brief:
+        {"ok": True, "data": {"brief": str}} or {"ok": False, "error": str}
+    """
+    base, key, _ = _load_config()
+    if not (base and key):
+        return {"ok": False, "error": "未配置 LLM。请设置 LLM_BASE_URL / LLM_API_KEY 环境变量。"}
+
+    prompt = _CHAT_BRIEF_PROMPT.format(
         yesterday=yesterday, today=today,
-        diet_block=diet_block, morning_block=morning_block,
+        diet_block=_build_diet_block(meal_summary),
+        morning_block=_build_morning_block(morning),
+        previous_brief=(previous_brief or "").strip()[:1200],
+        user_message=(user_message or "").strip()[:500],
     )
 
     try:
-        raw = _call_model(prompt, max_tokens=1500)
+        raw = _call_model(prompt, max_tokens=1200)
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
