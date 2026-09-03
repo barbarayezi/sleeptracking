@@ -345,12 +345,13 @@ _IMAGE_PROMPT_TEMPLATE = """你是资深营养分析师。请仔细识别这张�
 
 要求：
 1. 逐个识别菜品：名称、估算重量(克)、热量(kcal)、蛋白质(g)、脂肪(g)、碳水(g)。无法精确判断的按食堂/家常常规分量合理估算。
-2. 健康评分 score 取 0-10 整数：重点看蔬菜占比(推荐占餐盘约一半)、荤素搭配、烹饪油盐、精制碳水比例。
-3. pros 写这餐做得好的地方；cons 写明确改进点(要具体、带分量或占比数字)；suggestion 给下次打菜的可执行建议。
-4. 只输出一个 JSON 对象，不要任何解释文字，不要 markdown 代码块，不要用 // 注释。
+2. 额外生成一段自然语言描述，写入 meal_content，包含：菜品名称、大致分量、烹饪方式。这段文字会直接展示给用户，作为「吃了什么」的总结。
+3. 健康评分 score 取 0-10 整数：重点看蔬菜占比(推荐占餐盘约一半)、荤素搭配、烹饪油盐、精制碳水比例。
+4. pros 写这餐做得好的地方；cons 写明确改进点(要具体、带分量或占比数字)；suggestion 给下次打菜的可执行建议。
+5. 只输出一个 JSON 对象，不要任何解释文字，不要 markdown 代码块，不要用 // 注释。
 
 输出格式（严格遵循，数值用数字不用字符串）：
-{{"items":[{{"name":"白米饭","weight_g":130,"kcal":200,"protein_g":4.3,"fat_g":0.4,"carbs_g":45}}],"kcal":620,"protein_g":19.4,"fat_g":30.3,"carbs_g":58.6,"score":8,"pros":"","cons":"","suggestion":""}}"""
+{{"meal_content":"白米饭约130g、番茄炒蛋约120g、清炒西兰花约100g、红烧鸡腿约90g","items":[{{"name":"白米饭","weight_g":130,"kcal":200,"protein_g":4.3,"fat_g":0.4,"carbs_g":45}}],"kcal":620,"protein_g":19.4,"fat_g":30.3,"carbs_g":58.6,"score":8,"pros":"","cons":"","suggestion":""}}"""
 
 
 def _load_vision_config():
@@ -432,9 +433,17 @@ def analyze_meal_image(image_bytes, meal_name="", meal_quantity="normal", meal_t
         return {"ok": False, "error": f"模型返回内容不是合法 JSON：{text[:200]}"}
 
     items = _clean_items(data.get("items"))
+    meal_content = str(data.get("meal_content", "") or "").strip()[:1000]
+    if not meal_content and items:
+        # Fallback: build a short description from item names/weights if the
+        # model did not provide the natural-language meal_content field.
+        meal_content = "、".join(
+            f"{it['name']}约{it['weight_g']}g" for it in items if it.get('name')
+        )
     return {
         "ok": True,
         "data": {
+            "meal_content": meal_content,
             "kcal": _num(data.get("kcal"), "kcal", 0),
             "protein_g": _num(data.get("protein_g"), "protein_g", 0),
             "fat_g": _num(data.get("fat_g"), "fat_g", 0),

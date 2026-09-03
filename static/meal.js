@@ -258,6 +258,16 @@ class MealManager {
         if (data.carbs_g != null) this.nutriInputs.carbs.value = data.carbs_g;
         if (data.score != null) this.nutriInputs.score.value = data.score;
 
+        // Vision path also gives us a natural-language description of the meal.
+        // Fill it in only when the detail box is empty, so we never overwrite
+        // something the user already typed.
+        if (data.meal_content) {
+            const contentEl = document.getElementById('meal-content');
+            if (contentEl && !(contentEl.value || '').trim()) {
+                contentEl.value = data.meal_content;
+            }
+        }
+
         // Keep the breakdown so it gets persisted on save.
         this._aiItems = Array.isArray(data.items) ? data.items : [];
         this._aiAnalyzedAt = new Date().toISOString().slice(0, 19).replace('T', ' ');
