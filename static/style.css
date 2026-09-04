@@ -751,13 +751,15 @@ body {
 .hero-left { display: flex; flex-direction: column; gap: 4px; }
 
 .hero-label {
-    font-size: 12px; font-weight: 600; color: var(--gray-400);
+    font-size: 12px; font-weight: 700; color: var(--primary);
     text-transform: uppercase; letter-spacing: .04em;
     display: inline-flex; align-items: center; gap: 6px;
-    background: var(--gray-100); padding: 3px 10px; border-radius: var(--radius-pill);
-    width: fit-content; color: var(--gray-600);
+    background: var(--primary-soft);
+    border: 1px solid color-mix(in srgb, var(--primary) 25%, transparent);
+    padding: 3px 12px; border-radius: var(--radius-pill);
+    width: fit-content;
 }
-.hero-label::before { content: '♥'; font-size: 12px; }
+.hero-label::before { content: '♥'; font-size: 12px; color: var(--primary); }
 
 .hero-duration {
     font-size: 30px;
