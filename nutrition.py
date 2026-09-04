@@ -644,6 +644,9 @@ _DAILY_BRIEF_PROMPT = """你是用户长期跟踪的私人健康教练 + 营养�
 【今晨身体指标（{today}）】
 {morning_block}
 
+【用药情况（{today}）】
+{medication_block}
+
 【过去 7 天趋势（饮食 + 身体）】
 {trends_block}
 
@@ -658,10 +661,12 @@ _DAILY_BRIEF_PROMPT = """你是用户长期跟踪的私人健康教练 + 营养�
 5. 若数据缺失，明确说明缺哪一项，不要编造。
 6. 7 天趋势若显示体重上升/下降/营养不均衡，要点名指出趋势方向。
 7. 结尾给 1 个今天可执行的具体行动（具体到几杯水/多少步/哪种食物）。
+8. 若提供了用药情况：把「连续规律服用抗抑郁/中成药」作为近期恢复趋势的可能相关因素之一来提（注意抗抑郁药通常需 2–4 周起效）；只做相关性观察，绝不建议停药、减量或自行调整；未记录的药不要编造。
 """
 
 
-def daily_brief(yesterday, today, meal_summary, morning, trends=None, profile=None):
+def daily_brief(yesterday, today, meal_summary, morning, trends=None, profile=None,
+                medication=None):
     """Generate a cross-day health brief.
 
     Returns the SAME ok-shape as analyze_meal:
@@ -675,6 +680,8 @@ def daily_brief(yesterday, today, meal_summary, morning, trends=None, profile=No
                  sleep_quality (each may be None when not recorded)
         trends: optional 7-day rolling summary dict (from app._compute_7d_trends)
         profile: optional user profile dict (age/sex/height/goal/activity)
+        medication: optional dict describing the day's pill log, shaped by
+                    app._medication_context(): {summary, streak_days, first_date}
     """
     base, key, _ = _load_config()
     if not (base and key):
@@ -684,6 +691,7 @@ def daily_brief(yesterday, today, meal_summary, morning, trends=None, profile=No
         yesterday=yesterday, today=today,
         diet_block=_build_diet_block(meal_summary),
         morning_block=_build_morning_block(morning),
+        medication_block=_build_medication_block(medication),
         trends_block=_build_trends_block(trends or {}),
         profile_block=_build_profile_block(profile or {}),
     )
@@ -713,6 +721,45 @@ def _build_diet_block(meal_summary):
                if s.get("protein_pct") else "")
         )
     return "（昨日未记录任何饮食）"
+
+
+def _build_medication_block(medication):
+    """Render today's medication log for the prompt.
+
+    `medication` (optional, from app._medication_context) is a dict with:
+        - summary:  medication_models.get_daily_medication_summary() output
+        - streak_days: consecutive antidepressant days ending today
+        - first_date: ISO date the fixed regimen began (may be None)
+    Returns a compact human-readable block; never fabricates entries.
+    """
+    if not medication:
+        return "（无用药记录信息）"
+    summary = medication.get("summary")
+    if not summary or not summary.get("taken_total"):
+        return "（今天尚未记录任何用药）"
+    lines = []
+    s = summary
+    parts = []
+    if s.get("supplement_taken"):
+        parts.append(f"保健类 {s['supplement_taken']} 项")
+    if s.get("antidepressant_taken"):
+        parts.append(f"抗抑郁类 {s['antidepressant_taken']} 项")
+    if s.get("other_taken"):
+        parts.append(f"其他 {s['other_taken']} 项")
+    names = []
+    for slot in ("morning", "noon", "evening", "night"):
+        for n in (s.get("by_slot") or {}).get(slot, []) or []:
+            if n and n not in names:
+                names.append(n)
+    head = "、".join(parts) if parts else f"{s['taken_total']} 项"
+    lines.append(f"- 今日共 {s['taken_total']} 条服药记录：{head}（{'、'.join(names)}）")
+    first = (medication.get("first_date") or "").strip()
+    if first:
+        lines.append(f"- 固定用药方案自 {first} 开始")
+    streak = medication.get("streak_days") or 0
+    if streak >= 1:
+        lines.append(f"- 抗抑郁药已连续服用 {streak} 天（截至今日）")
+    return chr(10).join(lines)
 
 
 def _build_morning_block(morning):
@@ -829,6 +876,9 @@ _CHAT_BRIEF_PROMPT = """你是用户的私人健康教练 + 营养师。用户�
 【今晨身体指标（{today}）】
 {morning_block}
 
+【用药情况（{today}）】
+{medication_block}
+
 【过去 7 天趋势】
 {trends_block}
 
@@ -847,7 +897,7 @@ _CHAT_BRIEF_PROMPT = """你是用户的私人健康教练 + 营养师。用户�
 
 
 def chat_brief(yesterday, today, meal_summary, morning, previous_brief, user_message,
-               history=None, trends=None, profile=None):
+               history=None, trends=None, profile=None, medication=None):
     """Continue the cross-day brief as a conversation.
 
     Args:
@@ -856,6 +906,7 @@ def chat_brief(yesterday, today, meal_summary, morning, previous_brief, user_mes
                  of only ever seeing the original summary + the latest message.
         trends: optional 7-day rolling summary dict (from app._compute_7d_trends)
         profile: optional user profile dict (age/sex/height/goal/activity)
+        medication: optional medication-context dict (same shape as daily_brief)
 
     Returns the SAME ok-shape as daily_brief:
         {"ok": True, "data": {"brief": str}} or {"ok": False, "error": str}
@@ -869,6 +920,7 @@ def chat_brief(yesterday, today, meal_summary, morning, previous_brief, user_mes
         yesterday=yesterday, today=today,
         diet_block=_build_diet_block(meal_summary),
         morning_block=_build_morning_block(morning),
+        medication_block=_build_medication_block(medication),
         trends_block=_build_trends_block(trends or {}),
         profile_block=_build_profile_block(profile or {}),
         previous_brief=(previous_brief or "").strip()[:1500],

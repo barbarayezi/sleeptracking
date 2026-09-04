@@ -619,6 +619,66 @@ def _profile_defaults():
     }
 
 
+def _antidepressant_streak(date_str):
+    """Consecutive days ending at `date_str` with ≥1 antidepressant logged.
+
+    Counts backwards from the given day and stops at the first gap — this is
+    the "连服 X 天" figure we feed the LLM so it can contextualise SSRI /
+    TCM-antidepressant effects against the sleep/recovery trend.
+    """
+    from datetime import date as _d, timedelta as _td
+    try:
+        d0 = _d.fromisoformat(date_str)
+    except ValueError:
+        return 0
+    streak = 0
+    conn = get_connection()
+    try:
+        while True:
+            n = conn.execute(
+                "SELECT COUNT(*) FROM medication_records "
+                "WHERE record_date = ? AND category = 'antidepressant'",
+                (d0.isoformat(),),
+            ).fetchone()[0]
+            if n >= 1:
+                streak += 1
+                d0 -= _td(days=1)
+            else:
+                break
+    finally:
+        conn.close()
+    return streak
+
+
+def _medication_context(date_str):
+    """Roll up today's medication log for the LLM briefs.
+
+    Returns {summary, first_date, streak_days} or an all-empty equivalent.
+    Never raises — a broken med read must not kill the AI brief.
+    """
+    summary = None
+    first_date = None
+    streak_days = 0
+    try:
+        summary = medication_models.get_daily_medication_summary(date_str)
+    except Exception:
+        summary = None
+    try:
+        conn = get_connection()
+        row = conn.execute("SELECT MIN(record_date) FROM medication_records").fetchone()
+        conn.close()
+        if row and row[0]:
+            first_date = row[0]
+            streak_days = _antidepressant_streak(date_str)
+    except Exception:
+        pass
+    return {
+        'summary': summary,
+        'first_date': first_date,
+        'streak_days': streak_days,
+    }
+
+
 @app.route('/api/daily-brief', methods=['GET'])
 def daily_brief():
     """Cross-day health brief: yesterday's diet paired with this morning's
@@ -645,7 +705,8 @@ def daily_brief():
 
     try:
         result = nutrition.daily_brief(yesterday, date, meal_summary, morning,
-                                      trends=trends, profile=profile)
+                                      trends=trends, profile=profile,
+                                      medication=_medication_context(date))
     except Exception as e:
         return jsonify({'error': f'生成简报失败：{e}'}), 500
 
@@ -783,6 +844,7 @@ def daily_brief_chat():
             history=history,
             trends=trends,
             profile=profile,
+            medication=_medication_context(date),
         )
     except Exception as e:
         return jsonify({'error': f'生成回复失败：{e}'}), 500
@@ -967,7 +1029,8 @@ def generate_daily_report():
 
     try:
         result = nutrition.daily_brief(yesterday, date, meal_summary, morning,
-                                       trends=trends, profile=profile)
+                                       trends=trends, profile=profile,
+                                       medication=_medication_context(date))
     except Exception as e:
         return jsonify({'error': f'生成 AI 简报失败：{e}'}), 500
 
@@ -1204,6 +1267,40 @@ def delete_medication(med_id):
     if not deleted:
         return jsonify({'error': 'Medication record not found'}), 404
     return '', 204
+
+
+@app.route('/api/medication-correlation', methods=['GET'])
+def medication_correlation_route():
+    """Medication × health correlation across a window.
+
+    Groups Whoop recovery / RHR / HRV and sleep hours around the first
+    medication day ("before" vs "after") and by daily adherence
+    ("complete" vs "incomplete"). Optional query params:
+        ?from=YYYY-MM-DD   window start (default: 13 days before first pill)
+        ?to=YYYY-MM-DD     window end   (default: today)
+    """
+    from_date = request.args.get('from') or None
+    to_date = request.args.get('to') or None
+
+    def _valid(ds):
+        try:
+            from datetime import date as _d
+            _d.fromisoformat(ds)
+            return True
+        except (TypeError, ValueError):
+            return False
+
+    if from_date and not _valid(from_date):
+        return jsonify({'error': 'from 参数格式应为 YYYY-MM-DD'}), 400
+    if to_date and not _valid(to_date):
+        return jsonify({'error': 'to 参数格式应为 YYYY-MM-DD'}), 400
+
+    try:
+        from health_models import medication_correlation
+        result = medication_correlation(from_date=from_date, to_date=to_date)
+    except Exception as e:
+        return jsonify({'error': f'关联分析失败：{e}'}), 500
+    return jsonify(result)
 
 
 # ──────────────────────────────────────────────

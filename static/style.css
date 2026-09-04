@@ -1013,6 +1013,18 @@ body {
 .ho-insights li { font-size: 13px; color: var(--gray-600); line-height: 1.6; padding-left: 14px; position: relative; }
 .ho-insights li::before { content: ''; position: absolute; left: 0; top: 8px; width: 5px; height: 5px; border-radius: 50%; background: var(--primary); }
 
+/* ── Medication adherence strip (v21+) ── */
+.ho2-med-strip {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px;
+    margin-bottom: 12px; padding: 9px 14px;
+    background: #fdf6ec; border: 1px solid #f2d9ae; border-radius: var(--radius);
+    font-size: 12.5px; color: var(--gray-700); line-height: 1.5;
+}
+.ho2-med-strip__title { font-weight: 700; color: #854f0b; }
+.ho2-med-strip__item { font-variant-numeric: tabular-nums; }
+.ho2-med-warn { color: #b45309; font-weight: 600; }
+.ho2-med-strip .ho2-med-warn:first-of-type { }
+
 /* ── Health Overview V2 ── */
 .ho2-core-row {
     display: grid;

@@ -235,6 +235,22 @@ def get_health_overview(from_date, to_date):
     for p in get_period_days(from_date, to_date):
         period_by_date[p["date"]] = p
 
+    # 5b) Medication records per date (schema v12+) — daily pill log.
+    # Counts by category so the overview can render an adherence strip and
+    # the correlation endpoint can group complete vs incomplete days.
+    medication_by_date = {}
+    for r in conn.execute(
+        "SELECT record_date, category FROM medication_records "
+        "WHERE record_date >= ? AND record_date <= ?",
+        (from_date, to_date),
+    ).fetchall():
+        d = r["record_date"]
+        agg = medication_by_date.setdefault(
+            d, {"supplement": 0, "antidepressant": 0, "other": 0, "total": 0})
+        cat = r["category"] if r["category"] in ("supplement", "antidepressant") else "other"
+        agg[cat] += 1
+        agg["total"] += 1
+
     conn.close()
 
     # Build continuous date range
@@ -300,6 +316,12 @@ def get_health_overview(from_date, to_date):
                     day["meal_health_rating"] = "average"
                 else:
                     day["meal_health_rating"] = "poor"
+        md = medication_by_date.get(d)
+        if md:
+            day["medication_taken_total"] = md["total"]
+            day["medication_supplement"] = md["supplement"]
+            day["medication_antidepressant"] = md["antidepressant"]
+            day["medication_other"] = md["other"]
         days.append(day)
         cur += timedelta(days=1)
 
@@ -382,4 +404,179 @@ def _compute_insights(days):
                 f"（{'饮食越好恢复越强' if r_hi > r_lo else '未观察到明显关联'}）。"
             )
 
+    # Medication completeness vs recovery (only meaningful once the user logs meds)
+    med_days = [d for d in days if d.get("medication_taken_total") is not None]
+    if len(med_days) >= 4:
+        from collections import Counter as _C
+        mode = _C(d["medication_taken_total"] for d in med_days).most_common(1)[0][0]
+        complete = [d for d in med_days if d["medication_taken_total"] >= mode and d.get("recovery_score") is not None]
+        incomplete = [d for d in med_days if d["medication_taken_total"] < mode and d.get("recovery_score") is not None]
+        if len(complete) >= 3 and len(incomplete) >= 1:
+            r_c = sum(d["recovery_score"] for d in complete) / len(complete)
+            r_i = sum(d["recovery_score"] for d in incomplete) / len(incomplete)
+            insights.append(
+                f"服药完整日（每日 {mode} 项）平均恢复 {r_c:.0f}，漏记/缺服日 {r_i:.0f}"
+                f"（{'完整服药日恢复更好' if r_c > r_i else '未观察到与服药的明显关联'}）。"
+            )
+
     return insights
+
+
+# ── Medication × health correlation ──────────────────
+
+
+def _avg(values):
+    """Mean of non-None values, or None when nothing to average."""
+    values = [v for v in values if v is not None]
+    return round(sum(values) / len(values), 1) if values else None
+
+
+def medication_correlation(from_date=None, to_date=None):
+    """Medication vs health correlation across a window.
+
+    Splits the timeline at the FIRST medication record (`era_start`):
+      - "before": days before the user started the fixed daily regimen
+      - "after":  days from `era_start` onward
+
+    Inside the after era, days are grouped into "complete" (daily pill count
+    >= the modal expectation) vs "incomplete" (missing entries), and Whoop
+    recovery / RHR / HRV plus sleep hours are averaged per group. Works on
+    Turso and local SQLite alike (all reads go through get_connection()).
+
+    Returns a dict; {"has_data": False} when no medication record exists yet.
+    """
+    from datetime import date as _d, timedelta as _td
+    from collections import Counter
+
+    today = _d.today().isoformat()
+    to_date = to_date or today
+
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT record_date, category FROM medication_records "
+        "WHERE record_date <= ? ORDER BY record_date ASC",
+        (to_date,),
+    ).fetchall()
+    conn.close()
+    if not rows:
+        return {"has_data": False, "message": "暂无用药记录，无法做前后对比。"}
+
+    era_start = str(rows[0]["record_date"])[:10]
+    if not from_date or from_date > era_start:
+        from_date = (datetime.strptime(era_start, "%Y-%m-%d").date()
+                     - timedelta(days=13)).isoformat()
+
+    # Per-day med rollup (same shape get_health_overview produces).
+    # Normalise legacy dates that carry a 'T00:00:00' suffix.
+    per_day = {}
+    for r in rows:
+        day = str(r["record_date"])[:10]
+        agg = per_day.setdefault(day, {"total": 0, "antidepressant": 0})
+        agg["total"] += 1
+        if r["category"] == "antidepressant":
+            agg["antidepressant"] += 1
+
+    totals = Counter(v["total"] for v in per_day.values())
+    expected = totals.most_common(1)[0][0] if totals else 0
+
+    overview = get_health_overview(from_date, to_date)
+    days = overview["days"]
+
+    def seg_stats(day_list):
+        """Average key metrics over a list of day dicts."""
+        n = len(day_list)
+        rec = _avg([d.get("recovery_score") for d in day_list])
+        rhr = _avg([d.get("resting_heart_rate") for d in day_list])
+        hrv = _avg([d.get("hrv") for d in day_list])
+        sleep = _avg([d.get("sleep_hours") for d in day_list])
+        good = sum(1 for d in day_list if d.get("sleep_quality") == "good")
+        return {
+            "days": n,
+            "recovery_mean": rec,
+            "rhr_mean": rhr,
+            "hrv_mean": hrv,
+            "sleep_hours_mean": sleep,
+            "good_quality_days": good,
+        }
+
+    before = [d for d in days if d["date"] < era_start]
+    after = [d for d in days if d["date"] >= era_start]
+
+    complete_days = []
+    incomplete_days = []
+    for d in after:
+        med_total = (per_day.get(d["date"]) or {}).get("total", 0)
+        if med_total >= expected and expected > 0:
+            complete_days.append(d)
+        else:
+            incomplete_days.append(d)
+
+    # Antidepressant streak ending at `to_date` (any antidepressant logged counts)
+    streak = 0
+    cur = _d.fromisoformat(to_date)
+    while True:
+        day = (per_day.get(cur.isoformat()) or {})
+        if day.get("antidepressant", 0) >= 1:
+            streak += 1
+            cur -= _td(days=1)
+        else:
+            break
+
+    seg_before = seg_stats(before)
+    seg_after = seg_stats(after)
+    seg_complete = seg_stats(complete_days)
+    seg_incomplete = seg_stats(incomplete_days)
+
+    def delta(b, a, key):
+        if b.get(key) is not None and a.get(key) is not None:
+            return round(a[key] - b[key], 1)
+        return None
+
+    # ── Rule-based interpretation (no LLM — endpoint stays fast) ──
+    notes = []
+    if seg_before["days"] >= 3 and seg_after["days"] >= 3:
+        d_r = delta(seg_before, seg_after, "recovery_mean")
+        d_hrv = delta(seg_before, seg_after, "hrv_mean")
+        d_rhr = delta(seg_before, seg_after, "rhr_mean")
+        part = []
+        if d_r is not None:
+            part.append(f"恢复分 {seg_before['recovery_mean']} → {seg_after['recovery_mean']}"
+                        f"（{'+' if d_r >= 0 else ''}{d_r}）")
+        if d_hrv is not None:
+            part.append(f"HRV {seg_before['hrv_mean']} → {seg_after['hrv_mean']}"
+                        f" ms（{'+' if d_hrv >= 0 else ''}{d_hrv}）")
+        if d_rhr is not None:
+            part.append(f"静息心率 {seg_before['rhr_mean']} → {seg_after['rhr_mean']}"
+                        f" bpm（{'+' if d_rhr >= 0 else ''}{d_rhr}）")
+        notes.append(
+            f"用药开始（{era_start}）前后：{('，'.join(part)) if part else '指标样本不足'}。"
+            "这属于相关性观察，不能证明因果——抗抑郁药通常需 2–4 周才显示完整效果。"
+        )
+    if streak >= 3:
+        notes.append(f"截至 {to_date}，抗抑郁药已连续服用 {streak} 天（中间无断档）。")
+    if seg_complete["days"] >= 3 and seg_incomplete["days"] >= 1:
+        r_c = seg_complete["recovery_mean"]
+        r_i = seg_incomplete["recovery_mean"]
+        if r_c is not None and r_i is not None:
+            notes.append(
+                f"服药完整日（每日 {expected} 项，{seg_complete['days']} 天）平均恢复 {r_c}"
+                f"，缺服/漏记日（{seg_incomplete['days']} 天）平均恢复 {r_i}"
+                f"（{'完整日更高' if r_c > r_i else '差异不显著或反向'}）。"
+            )
+
+    return {
+        "has_data": True,
+        "from": from_date,
+        "to": to_date,
+        "era_start": era_start,
+        "expected_per_day": expected,
+        "antidepressant_streak_days": streak,
+        "segments": {
+            "before": seg_before,
+            "after": seg_after,
+            "complete": seg_complete,
+            "incomplete": seg_incomplete,
+        },
+        "incomplete_dates": [d["date"] for d in incomplete_days][-10:],
+        "interpretation": notes,
+    }

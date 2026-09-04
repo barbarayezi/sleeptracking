@@ -116,6 +116,10 @@ class HealthOverview {
 
         let html = '';
 
+        // ════ MEDICATION ADHERENCE STRIP (schema v12+; only when meds logged) ════
+        const medStrip = this._buildMedStrip(days);
+        if (medStrip) html += medStrip;
+
         // ════ TIER 1: CORE SCORE TRIO ════
         html += '<div class="ho2-core-row">';
         for (const m of coreMetrics) {
@@ -189,6 +193,69 @@ class HealthOverview {
         // Draw all charts
         for (const m of coreMetrics) this._drawCoreMetric(m, days);
         for (const m of physioMetrics) this._drawPhysioMetric(m, days);
+    }
+
+    /* ── Medication adherence strip ────────────────────────
+     * A compact single-row card above the core trio. Shown only when the
+     * window contains medication records. Aggregates:
+     *   - regimen start date + expected entries/day (modal daily count)
+     *   - consecutive "complete" days (today ending streak)
+     *   - missing days (logged fewer than expected) listed up to 4 dates
+     * Data comes straight from the day-level medication_* fields that
+     * get_health_overview() now attaches per date.
+     */
+    _buildMedStrip(days) {
+        const medDays = days.filter((d) => (d.medication_taken_total || 0) > 0);
+        if (medDays.length === 0) return '';
+
+        // Modal daily pill count = "expected regimen" (e.g. 5 entries/day)
+        const cnt = {};
+        medDays.forEach((d) => { cnt[d.medication_taken_total] = (cnt[d.medication_taken_total] || 0) + 1; });
+        let mode = 0, modeN = 0;
+        Object.keys(cnt).forEach((k) => {
+            if (cnt[k] > modeN) { modeN = cnt[k]; mode = parseInt(k, 10); }
+        });
+        if (mode < 1) mode = 1;
+
+        const firstDate = medDays[0].date;
+        const lastDate = medDays[medDays.length - 1].date;
+        const lastDay = days[days.length - 1] || {};
+
+        // Consecutive complete days counting back from the window end
+        let streak = 0;
+        for (let i = days.length - 1; i >= 0; i--) {
+            const t = days[i].medication_taken_total || 0;
+            if (t >= mode) { streak += 1; }
+            else { break; }
+        }
+
+        // Missing / under-recorded days inside the med era (log 0..mode-1)
+        const missing = days.filter((d) => d.date >= firstDate && d.date <= lastDate
+            && (d.medication_taken_total || 0) < mode);
+        const missingTxt = missing.length > 0
+            ? ` · <span class="ho2-med-warn">缺服/漏记 ${missing.length} 天`
+              + (missing.length <= 4 ? `（${missing.map((d) => d.date.slice(5).replace('-', '/')).join('、')}）` : '') + '</span>'
+            : '';
+
+        const todayTotal = lastDay.medication_taken_total || 0;
+        const todayTxt = lastDay.date >= firstDate
+            ? ` · 今日（${lastDay.date.slice(5).replace('-', '/')}）${todayTotal}/${mode} 项`
+                + (todayTotal >= mode ? ' ✅' : ' ⚠️')
+            : '';
+
+        // Category mix over the whole era (uniq by name is not available here,
+        // so approximate with record counts per category)
+        let sup = 0, ad = 0;
+        medDays.forEach((d) => { sup += d.medication_supplement || 0; ad += d.medication_antidepressant || 0; });
+
+        return `<div class="ho2-med-strip">
+            <span class="ho2-med-strip__title">💊 用药依从</span>
+            <span class="ho2-med-strip__item">自 ${firstDate} 起每日 ${mode} 项方案</span>
+            <span class="ho2-med-strip__item">覆盖 ${medDays.length} 天</span>
+            <span class="ho2-med-strip__item">连续完整 ${streak} 天</span>
+            <span class="ho2-med-strip__item">窗口内保健 ${sup} 次 · 抗抑郁 ${ad} 次</span>
+            ${missingTxt}${todayTxt}
+        </div>`;
     }
 
     /* ── Tier 1: Core Score Card (research-grade, Nature/NEJM style) ─
