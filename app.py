@@ -651,12 +651,35 @@ def daily_brief():
     if not result.get('ok'):
         return jsonify({'error': result.get('error', '生成失败')}), 502
 
+    brief_text = (result['data']['brief'] or '').strip()
+
+    # Persist the freshly generated brief as the conversation's first turn so
+    # it survives page refresh / device switch / date switch. Skip when this
+    # date already has history (avoid duplicating the original summary).
+    try:
+        conn = get_connection()
+        row = conn.execute(
+            "SELECT COUNT(*) FROM brief_chat_messages "
+            "WHERE brief_date = ? AND role = 'assistant'",
+            (date,)
+        ).fetchone()
+        if brief_text and row and row[0] == 0:
+            conn.execute(
+                "INSERT INTO brief_chat_messages (brief_date, role, content) "
+                "VALUES (?, 'assistant', ?)",
+                (date, brief_text),
+            )
+            conn.commit()
+    except Exception as e:
+        # Persistence must never break the visible brief.
+        print(f"[daily-brief] persist first turn failed: {e}", file=sys.stderr)
+
     return jsonify({
         'date': date,
         'diet_date': yesterday,
         'meal_summary': meal_summary,
         'morning': morning,
-        'brief': result['data']['brief'],
+        'brief': brief_text,
     })
 
 

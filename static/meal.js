@@ -72,6 +72,56 @@ class MealManager {
         }
 
         this._renderMealList();
+
+        // Restore any persisted daily-brief conversation for this date
+        // (no-op when the date has no history).
+        await this._loadBriefHistory(dateStr);
+    }
+
+    /** Restore the persisted brief conversation for a date after refresh /
+     *  date switch. Pulls /chat history first (fast, no LLM); only when the
+     *  date actually has history does it fetch the brief metadata needed to
+     *  render the chips and enable follow-up questions.
+     */
+    async _loadBriefHistory(dateStr) {
+        if (!this.briefEl) return;
+
+        // Clear whatever was on screen for the previous date — otherwise the
+        // chat bubbles from another date would visibly stick around.
+        this._briefData = null;
+        this._briefMessages = [];
+        this.briefEl.innerHTML = '';
+        this.briefEl.classList.add('hidden');
+
+        let chatData;
+        try {
+            const chatResp = await fetch(`/api/daily-brief/chat?date=${encodeURIComponent(dateStr)}`);
+            if (!chatResp.ok) return;   // endpoint said no — nothing to restore
+            chatData = await chatResp.json();
+        } catch (err) {
+            console.warn('[brief_history] load failed:', err);
+            return;
+        }
+
+        const history = Array.isArray(chatData?.history) ? chatData.history : [];
+        if (history.length === 0) return;
+
+        let briefData = null;
+        try {
+            const briefResp = await fetch(`/api/daily-brief?date=${encodeURIComponent(dateStr)}`);
+            if (briefResp.ok) briefData = await briefResp.json();
+        } catch (err) {
+            console.warn('[brief_history] brief metadata failed:', err);
+        }
+        if (!briefData || briefData.error) return;
+
+        // Map DB roles ('user' / 'assistant') to the UI roles ('user' / 'ai').
+        this._briefData = briefData;
+        this._briefMessages = history.map((m) => ({
+            role: m.role === 'user' ? 'user' : 'ai',
+            text: (m.content || '').trim(),
+        }));
+        this._renderBriefResult(briefData);
     }
 
     /* ── Event Wiring ─────────────────────── */
