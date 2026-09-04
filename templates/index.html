@@ -11,7 +11,7 @@
     <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="/static/icon.svg">
     <title>量化健康 — QHealth</title>
-    <link rel="stylesheet" href="/static/style.css?v=18">
+    <link rel="stylesheet" href="/static/style.css?v=19">
 </head>
 <body>
 
@@ -671,6 +671,113 @@
                 </form>
             </section>
 
+            <!-- SECTION: MEDICATION TRACKING -->
+            <section class="card medication-section">
+                <h2>💊 药物记录</h2>
+                <p class="section-hint">
+                    每天早晚保健品 + 抗抑郁药打卡。支持 4 种常用药「一键打卡」，
+                    也可手动添加任何其他补剂 / 处方药。
+                </p>
+
+                <!-- Daily summary chips (保健/抗抑郁打卡数) -->
+                <div id="medication-day-summary" class="medication-day-summary hidden"></div>
+
+                <!-- Quick-fill buttons: 4 commonly used meds -->
+                <div class="medication-quickfill">
+                    <div class="form-label">⚡ 一键打卡常用药</div>
+                    <div class="medication-quick-buttons">
+                        <button type="button" class="btn-quick-med"
+                            data-name="鱼油" data-dosage="2" data-unit="粒" data-category="supplement"
+                            title="早晨服用 2 粒">🐟 鱼油 · 2 粒</button>
+                        <button type="button" class="btn-quick-med"
+                            data-name="健视佳" data-dosage="1" data-unit="粒" data-category="supplement"
+                            title="早晨服用 1 粒">👁️ 健视佳 · 1 粒</button>
+                        <button type="button" class="btn-quick-med"
+                            data-name="草酸艾司西酞普兰口服溶液" data-dosage="1" data-unit="支"
+                            data-category="antidepressant"
+                            title="早晨口服 1 支">💊 草酸艾司西酞普兰 · 1 支</button>
+                        <button type="button" class="btn-quick-med"
+                            data-name="解郁除烦胶囊" data-dosage="3" data-unit="粒" data-category="supplement"
+                            title="早晨服用 3 粒">🌿 解郁除烦胶囊 · 3 粒</button>
+                    </div>
+                    <div class="medication-quickfill-hint">点击即记录当前日期的服药状态（每日早 08:00）。</div>
+                </div>
+
+                <!-- Medication list for current date -->
+                <div id="medications-list" class="records-list">
+                    <p id="medications-empty" class="report-placeholder" style="padding:16px 0;">该日期暂无药物记录，点上方一键打卡或在下方手动添加。</p>
+                </div>
+
+                <form id="medication-form" novalidate>
+
+                    <!-- Time + Date row (the date is read-only / derived from date nav) -->
+                    <div class="form-row form-row-2col">
+                        <div class="form-group">
+                            <label class="form-label" for="medication-time">服用时段</label>
+                            <select id="medication-time" class="form-input" required>
+                                <option value="morning" selected>🌅 早上</option>
+                                <option value="noon">☀️ 中午</option>
+                                <option value="evening">🌇 晚上</option>
+                                <option value="night">🌙 睡前</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="medication-category">类别</label>
+                            <select id="medication-category" class="form-input" required>
+                                <option value="supplement" selected>🍃 保健类</option>
+                                <option value="antidepressant">💊 抗抑郁药</option>
+                                <option value="other">📦 其他</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Medication name -->
+                    <div class="form-row">
+                        <label class="form-label" for="medication-name">药名 / 补剂名</label>
+                        <input type="text" id="medication-name" class="form-input" required
+                            placeholder="如：维生素 D、鱼油、舍曲林...">
+                    </div>
+
+                    <!-- Dosage -->
+                    <div class="form-row">
+                        <label class="form-label">剂量</label>
+                        <div class="health-metrics-row">
+                            <div class="health-metric-item" style="flex:1; min-width:120px;">
+                                <input type="number" id="medication-dosage" class="form-input"
+                                    min="0.1" max="1000" step="0.5" value="1" placeholder="-">
+                            </div>
+                            <div class="health-metric-item" style="flex:1; min-width:120px;">
+                                <select id="medication-unit" class="form-input">
+                                    <option value="粒" selected>粒</option>
+                                    <option value="支">支</option>
+                                    <option value="片">片</option>
+                                    <option value="袋">袋</option>
+                                    <option value="颗">颗</option>
+                                    <option value="滴">滴</option>
+                                    <option value="ml">ml</option>
+                                    <option value="mg">mg</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Notes -->
+                    <div class="form-row">
+                        <label class="form-label" for="medication-notes">备注</label>
+                        <input type="text" id="medication-notes" class="form-input"
+                            placeholder="如：随餐服用、饭后半小时...">
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="form-actions">
+                        <button type="submit" id="btn-medication-save" class="btn btn-primary">💾 保存药物</button>
+                        <button type="button" id="btn-medication-cancel" class="btn btn-secondary hidden">取消编辑</button>
+                        <button type="button" id="btn-medication-delete" class="btn btn-danger hidden">🗑️ 删除</button>
+                        <span id="medication-form-message" class="form-message"></span>
+                    </div>
+                </form>
+            </section>
+
             <!-- SECTION: PERIOD TRACKING -->
             <section class="card period-section">
                 <h2>🌸 经期记录</h2>
@@ -784,6 +891,7 @@
     <script src="/static/form.js?v=16"></script>
     <script src="/static/meal.js?v=16"></script>
     <script src="/static/period.js?v=16"></script>
+    <script src="/static/medication.js?v=1"></script>
     <script src="/static/calendar.js?v=16"></script>
     <script src="/static/timeline.js?v=16"></script>
     <script src="/static/reports.js?v=10"></script>

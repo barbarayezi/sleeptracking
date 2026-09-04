@@ -451,9 +451,10 @@ def _migrate(conn):
                 _set_schema_version(conn, 2)
         else:
             # No table yet — fresh install. init_db() creates the full schema
-            # (including every v11 nutrition column) before calling _migrate(),
-            # so jump straight to the latest version and skip all migrations.
-            _set_schema_version(conn, 11)
+            # (including every medication_records v12 column) before calling
+            # _migrate(), so jump straight to the latest version and skip the
+            # older migrations.
+            _set_schema_version(conn, 12)
 
     # Re-read version after potential v2 migration
     version = _get_schema_version(conn)
@@ -500,8 +501,48 @@ def _migrate(conn):
     if version < 11:
         _migrate_v11(conn)
 
+    # Re-read version after potential v11 migration
+    version = _get_schema_version(conn)
+    if version < 12:
+        _migrate_v12(conn)
 
-def _migrate_v6(conn):
+
+def _migrate_v12(conn):
+    """Migrate from v11 to v12: add medication_records table for daily medication log.
+
+    Tracks name + dosage + category (supplement / antidepressant) per day.
+    Idempotent: CREATE IF NOT EXISTS lets the migration re-run safely on a
+    schema that init_db() already created at v12+.
+    """
+    print("  Running migration v11 -> v12 ...")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS medication_records (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            record_date         DATE NOT NULL,
+            record_time         TEXT NOT NULL DEFAULT '08:00',
+            medication_name     TEXT NOT NULL,
+            dosage              REAL NOT NULL DEFAULT 1,
+            dosage_unit         TEXT NOT NULL DEFAULT '粒'
+                                CHECK(dosage_unit IN ('粒','支','片','ml','mg','滴','袋','颗')),
+            category            TEXT NOT NULL DEFAULT 'supplement'
+                                CHECK(category IN ('supplement','antidepressant','other')),
+            administration_slot TEXT NOT NULL DEFAULT 'morning'
+                                CHECK(administration_slot IN ('morning','noon','evening','night')),
+            notes               TEXT DEFAULT '',
+            created_at          TEXT DEFAULT (datetime('now', 'localtime')),
+            updated_at          TEXT DEFAULT (datetime('now', 'localtime'))
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_medication_records_date
+        ON medication_records(record_date)
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_medication_records_category
+        ON medication_records(category)
+    """)
+    _set_schema_version(conn, 12)
+    print("  Migration v11 -> v12 completed.")
     """Migrate from v5 to v6: add device_score column (smart bracelet score)."""
     print("  Running migration v5 -> v6 ...")
     col_cursor = conn.execute("PRAGMA table_info('sleep_records')")
@@ -903,6 +944,34 @@ def init_db():
     conn.execute("""
         CREATE INDEX IF NOT EXISTS idx_daily_reports_date
         ON daily_reports(report_date)
+    """)
+
+    # Medication records table (v12) — daily medication log (supplements, antidepressants, etc.)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS medication_records (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            record_date         DATE NOT NULL,
+            record_time         TEXT NOT NULL DEFAULT '08:00',
+            medication_name     TEXT NOT NULL,
+            dosage              REAL NOT NULL DEFAULT 1,
+            dosage_unit         TEXT NOT NULL DEFAULT '粒'
+                                CHECK(dosage_unit IN ('粒','支','片','ml','mg','滴','袋','颗')),
+            category            TEXT NOT NULL DEFAULT 'supplement'
+                                CHECK(category IN ('supplement','antidepressant','other')),
+            administration_slot TEXT NOT NULL DEFAULT 'morning'
+                                CHECK(administration_slot IN ('morning','noon','evening','night')),
+            notes               TEXT DEFAULT '',
+            created_at          TEXT DEFAULT (datetime('now', 'localtime')),
+            updated_at          TEXT DEFAULT (datetime('now', 'localtime'))
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_medication_records_date
+        ON medication_records(record_date)
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_medication_records_category
+        ON medication_records(category)
     """)
 
     # Now run pending migrations (ALTER TABLE for older schemas)

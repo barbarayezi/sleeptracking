@@ -7,6 +7,7 @@ const App = {
     form: null,
     meal: null,
     period: null,
+    medication: null,
     timeline: null,
     calendar: null,
     report: null,
@@ -22,6 +23,7 @@ const App = {
         this.form = new FormManager();
         this.meal = new MealManager();
         this.period = new PeriodManager();
+        this.medication = new MedicationManager();
         this.timeline = new Timeline('timeline-canvas', 'timeline-empty');
         this.calendar = new Calendar();
         this.report = new ReportManager();
@@ -52,6 +54,7 @@ const App = {
         await this.form.loadDate(this.currentDate);
         await this.meal.loadDate(this.currentDate);
         await this.period.loadDate(this.currentDate);
+        await this.medication.loadDate(this.currentDate);
         await this._refreshTimeline();
         await this.health.load();
         await this.research.load();
@@ -222,6 +225,7 @@ const App = {
         this.form.loadDate(dateStr);
         this.meal.loadDate(dateStr);
         this.period.loadDate(dateStr);
+        this.medication.loadDate(dateStr);
         this.calendar.showDate(dateStr);
         if (this.dailyReport) this.dailyReport.loadDate(dateStr);
     },

@@ -625,6 +625,103 @@ body {
 .meal-card-grid { display: flex; flex-direction: column; gap: 8px; }
 .daily-record-detail { display: inline-block; padding: 1px 8px; background: var(--gray-100); border-radius: var(--radius-pill); font-size: 12px; color: var(--gray-500); }
 
+/* ── Medication tracking (v12) ── */
+/* Reuses .record-card / .records-list from meal/period modules, only adds
+ * medication-specific accents so a one-tap chip log stays scannable. */
+.medication-day-summary {
+    margin-bottom: 14px;
+    padding: 12px 14px;
+    border: 1px dashed var(--primary);
+    background: var(--primary-softer);
+    border-radius: var(--radius-md);
+}
+
+.med-summary-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.med-summary-chip {
+    display: inline-flex; align-items: center;
+    padding: 4px 12px; border-radius: 999px;
+    font-size: 12px; font-weight: 600;
+    background: var(--gray-100); color: var(--gray-700);
+}
+.med-summary-chip--supplement     { background: var(--success-soft); color: var(--success); }
+.med-summary-chip--antidepressant { background: var(--primary-soft); color: var(--primary); }
+.med-summary-chip--other          { background: var(--gray-100);    color: var(--gray-600); }
+.med-summary-chip--total          { background: var(--bg-tint);     color: var(--gray-900); }
+
+.medication-quickfill { margin: 12px 0 16px; }
+.medication-quickfill > .form-label { margin-bottom: 8px; display: block; }
+.medication-quick-buttons {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 8px;
+}
+.btn-quick-med {
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--bg-card);
+    color: var(--text);
+    font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: .15s;
+    text-align: center;
+    font-family: inherit;
+}
+.btn-quick-med:hover {
+    border-color: var(--primary);
+    background: var(--primary-softer);
+    transform: translateY(-1px);
+}
+.btn-quick-med:active { transform: translateY(0); }
+.btn-quick-med:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+.medication-quickfill-hint {
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.med-slot-head {
+    margin: 14px 0 6px;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--gray-700);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.med-slot-head:first-child { margin-top: 0; }
+
+.medication-card .record-card__body { gap: 8px; flex-wrap: wrap; }
+.medication-card__cat {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+}
+.medication-card__name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--gray-900);
+}
+.medication-card__dose {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 999px;
+    background: var(--primary-soft);
+    color: var(--primary-deep);
+    font-size: 12px;
+    font-weight: 700;
+}
+.medication-card__time {
+    font-size: 12px;
+    color: var(--gray-500);
+}
+.medication-card__notes {
+    font-size: 12px;
+    color: var(--text-muted);
+    flex-basis: 100%;
+    padding-top: 4px;
+}
+
 /* ── Footer ── */
 .app-footer { text-align: center; padding: 20px; color: var(--gray-400); font-size: 12px; }
 

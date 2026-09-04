@@ -18,6 +18,7 @@ import meal_models as meal_models
 import nutrition as nutrition
 import period_models as period_models
 import daily_report_models as daily_report_models
+import medication_models as medication_models
 import time
 import socket
 
@@ -1070,6 +1071,142 @@ def _validate_period_data(data, partial=False):
 
 
 # ──────────────────────────────────────────────
+#  Medication Tracking
+# ──────────────────────────────────────────────
+
+
+# Allowed values mirror the CHECK constraints declared in database.py.
+_MED_DOSAGE_UNITS = {'粒', '支', '片', 'ml', 'mg', '滴', '袋', '颗'}
+_MED_CATEGORIES    = {'supplement', 'antidepressant', 'other'}
+_MED_SLOTS         = {'morning', 'noon', 'evening', 'night'}
+
+# Categories shown to users in Chinese on the form & list.
+_MED_CATEGORY_LABELS = {
+    'supplement':     '保健类',
+    'antidepressant': '抗抑郁药',
+    'other':          '其他',
+}
+
+# Slot labels (Chinese) used by the dashboard summary card.
+_MED_SLOT_LABELS = {
+    'morning': '早上',
+    'noon':    '中午',
+    'evening': '晚上',
+    'night':   '睡前',
+}
+
+
+def _validate_medication_data(data, partial=False):
+    """Validate medication record input. Returns a list of error strings."""
+    errors = []
+
+    if not partial or 'record_date' in data:
+        if not data.get('record_date'):
+            errors.append('请选择日期。')
+    if 'dosage_unit' in data and data['dosage_unit'] not in _MED_DOSAGE_UNITS:
+        errors.append(f'剂量单位必须是：{"/".join(sorted(_MED_DOSAGE_UNITS))}')
+    if 'category' in data and data['category'] not in _MED_CATEGORIES:
+        errors.append('类别取值无效（保健类/抗抑郁药/其他）。')
+    if 'administration_slot' in data and data['administration_slot'] not in _MED_SLOTS:
+        errors.append('时段取值无效。')
+
+    # Always required for create; for partial update skip unless provided.
+    if not partial:
+        if not (data.get('medication_name') or '').strip():
+            errors.append('请填写药名/补剂名。')
+        if 'dosage' in data and data['dosage'] is not None and data['dosage'] != '':
+            try:
+                d = float(data['dosage'])
+                if d <= 0 or d > 1000:
+                    errors.append('剂量必须在 0–1000 之间。')
+            except (ValueError, TypeError):
+                errors.append('剂量必须是数字。')
+
+    return errors
+
+
+@app.route('/api/medications', methods=['GET'])
+def list_medications():
+    """List medication records, optionally filtered by date range or one date."""
+    from_date = request.args.get('from')
+    to_date = request.args.get('to')
+    date = request.args.get('date')
+    records = medication_models.get_all_medications(
+        from_date=from_date, to_date=to_date, date=date
+    )
+    return jsonify(records)
+
+
+@app.route('/api/medications/summary', methods=['GET'])
+def medication_summary():
+    """Aggregate today's medication log for the dashboard.
+
+    Returns the roll-up produced by medication_models.get_daily_medication_summary().
+    Missing date → empty summary (counts are 0, by_slot lists are empty).
+    """
+    from datetime import date as _date_cls
+    date_str = (request.args.get('date') or _date_cls.today().isoformat()).strip()
+    try:
+        _date_cls.fromisoformat(date_str)
+    except ValueError:
+        return jsonify({'error': 'date 参数格式应为 YYYY-MM-DD'}), 400
+    return jsonify({'date': date_str,
+                    'summary': medication_models.get_daily_medication_summary(date_str),
+                    'category_labels': _MED_CATEGORY_LABELS,
+                    'slot_labels': _MED_SLOT_LABELS})
+
+
+@app.route('/api/medications/<int:med_id>', methods=['GET'])
+def get_medication(med_id):
+    """Get a single medication record by ID."""
+    record = medication_models.get_medication_by_id(med_id)
+    if record is None:
+        return jsonify({'error': 'Medication record not found'}), 404
+    return jsonify(record)
+
+
+@app.route('/api/medications', methods=['POST'])
+def create_medication():
+    """Create a new medication record."""
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Request body must be JSON'}), 400
+
+    errors = _validate_medication_data(data)
+    if errors:
+        return jsonify({'error': errors[0]}), 400
+
+    record = medication_models.create_medication(data)
+    return jsonify(record), 201
+
+
+@app.route('/api/medications/<int:med_id>', methods=['PUT'])
+def update_medication(med_id):
+    """Update an existing medication record by ID."""
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Request body must be JSON'}), 400
+
+    errors = _validate_medication_data(data, partial=True)
+    if errors:
+        return jsonify({'error': errors[0]}), 400
+
+    record = medication_models.update_medication_by_id(med_id, data)
+    if record is None:
+        return jsonify({'error': 'Medication record not found'}), 404
+    return jsonify(record)
+
+
+@app.route('/api/medications/<int:med_id>', methods=['DELETE'])
+def delete_medication(med_id):
+    """Delete a medication record by ID."""
+    deleted = medication_models.delete_medication_by_id(med_id)
+    if not deleted:
+        return jsonify({'error': 'Medication record not found'}), 404
+    return '', 204
+
+
+# ──────────────────────────────────────────────
 #  Whoop Integration (OAuth + Sync)
 # ──────────────────────────────────────────────
 
@@ -1732,7 +1869,8 @@ def export_data():
     from database import get_connection
     from datetime import datetime
     TABLES = ['sleep_records', 'meal_records', 'period_records',
-              'whoop_daily_metrics', 'whoop_workouts', 'health_metrics', 'whoop_tokens']
+              'whoop_daily_metrics', 'whoop_workouts', 'health_metrics', 'whoop_tokens',
+              'medication_records']
     conn = get_connection()
     data = {'version': 1, 'exported_at': datetime.now().isoformat(), 'tables': {}}
     try:
@@ -1763,7 +1901,8 @@ def import_data():
         return jsonify({'error': '无效的备份文件'}), 400
 
     TABLES = ['sleep_records', 'meal_records', 'period_records',
-              'whoop_daily_metrics', 'whoop_workouts', 'health_metrics', 'whoop_tokens']
+              'whoop_daily_metrics', 'whoop_workouts', 'health_metrics', 'whoop_tokens',
+              'medication_records']
     summary = {}
     conn = get_connection()
     try:
