@@ -772,68 +772,32 @@ body {
 
 .hero-sub { font-size: 14px; color: var(--gray-500); font-variant-numeric: tabular-nums; }
 
-.hero-pill {
-    display: inline-flex; align-items: center; gap: 6px;
-    align-self: flex-start; height: 24px; padding: 0 10px;
-    border-radius: var(--radius-pill);
-    background: var(--success-soft); color: var(--success);
-    font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums;
+/* ── Hero 主卡指标行：恢复 / 深睡占比（替代原 hero-pill + metric-chips） ── */
+.hero-stats {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    margin-top: 8px;
 }
-.hero-pill-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); }
-.hero-pill[hidden] { display: none; }
+.hero-stat {
+    display: inline-flex; align-items: baseline; gap: 6px;
+    padding: 5px 12px; border-radius: var(--radius-pill);
+    background: var(--gray-50); border: 1px solid var(--gray-200);
+    font-variant-numeric: tabular-nums;
+}
+.hero-stat .hs-label { font-size: 12px; color: var(--gray-500); font-weight: 600; }
+.hero-stat b { font-size: 16px; font-weight: 700; color: var(--gray-800); line-height: 1; }
+.hero-stat small { font-size: 11px; color: var(--gray-500); }
+.hero-stat .hs-unit { font-size: 12px; font-weight: 600; color: var(--gray-500); margin-left: 1px; }
+.hero-stat--good { background: var(--success-soft); border-color: color-mix(in srgb, var(--success) 25%, transparent); }
+.hero-stat--good b, .hero-stat--good small { color: var(--success); }
+.hero-stat--warn { background: var(--warning-soft); border-color: color-mix(in srgb, var(--warning) 25%, transparent); }
+.hero-stat--warn b, .hero-stat--warn small { color: var(--warning); }
+.hero-stat--bad { background: var(--danger-soft); border-color: color-mix(in srgb, var(--danger) 25%, transparent); }
+.hero-stat--bad b, .hero-stat--bad small { color: var(--danger); }
+.hero-stat-sep { color: var(--gray-300); font-size: 14px; }
+.hero-stat-empty { font-size: 13px; color: var(--gray-400); }
 
 .hero-ring { width: 120px; height: 120px; flex-shrink: 0; }
 .hero-ring svg { width: 100%; height: 100%; display: block; }
-
-/* ── Metric chips（白卡 + 清晰灰边，无装饰条；文字深但非纯黑） ── */
-.metric-chips { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 480px)); justify-content: center; gap: 12px; margin-bottom: 16px; }
-.metric-chip {
-    background: #ffffff;
-    border: 1px solid #ccd3df;
-    border-radius: 12px;
-    padding: 12px 14px 8px;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-height: 74px;
-    transition: border-color var(--transition);
-    position: relative;
-    overflow: hidden;
-}
-.metric-chip:hover { border-color: #aab5c6; }
-.metric-chip__label {
-    font-size: 11px;
-    color: var(--gray-500);
-    text-transform: uppercase;
-    letter-spacing: .06em;
-    font-weight: 600;
-}
-.metric-chip__value {
-    font-size: 22px;
-    font-weight: 700;
-    color: var(--gray-800);
-    font-variant-numeric: tabular-nums;
-    line-height: 1.2;
-    letter-spacing: -.01em;
-    display: flex;
-    align-items: baseline;
-    gap: 3px;
-}
-.metric-chip__unit { font-size: 12px; font-weight: 600; color: var(--gray-500); }
-.metric-chip__sub { font-size: 11px; color: var(--gray-400); line-height: 1.4; }
-.metric-chip__spark {
-    width: 100%;
-    height: 18px;
-    margin-top: auto;
-    display: block;
-    opacity: 0.6;
-}
-.metric-chip--skeleton {
-    align-items: center;
-    justify-content: center;
-    color: var(--gray-500);
-    font-size: 13px;
-}
 
 /* ── Hero lower：合并卡「近 7 天 · 睡眠 × 恢复」 ── */
 .hero-lower { display: grid; grid-template-columns: 1fr; gap: 12px; }
@@ -915,7 +879,7 @@ body {
     .hero-card { flex-direction: column; align-items: flex-start; gap: 14px; }
     .hero-ring { align-self: flex-end; width: 100px; height: 100px; }
     .hero-duration { font-size: 28px; }
-    .metric-chips { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .hero-stats { gap: 6px; }
     .hero-lower { grid-template-columns: 1fr; gap: 12px; }
 }
 

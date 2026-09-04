@@ -7,15 +7,13 @@ const HeroOverview = {
     async load() {
         this._cache();
         try {
-            const [recResp, whoopResp, stepsResp] = await Promise.all([
+            const [recResp, whoopResp] = await Promise.all([
                 fetch('/api/records'),
-                fetch('/api/whoop/daily'),
-                fetch('/api/healthkit/metrics?type=steps')
+                fetch('/api/whoop/daily')
             ]);
             const records = recResp.ok ? await recResp.json() : [];
             const whoop = whoopResp.ok ? await whoopResp.json() : [];
-            const steps = stepsResp.ok ? await stepsResp.json() : [];
-            this._render(records, whoop, steps);
+            this._render(records, whoop);
         } catch (e) {
             console.error('hero load failed', e);
         }
@@ -27,8 +25,8 @@ const HeroOverview = {
         const $ = (id) => document.getElementById(id);
         this._refs = {
             label: $('hero-label'), duration: $('hero-duration'), sub: $('hero-sub'),
-            pill: $('hero-pill'), pillText: $('hero-pill-text'),
-            ring: $('hero-ring'), chips: $('metric-chips'),
+            stats: $('hero-stats'),
+            ring: $('hero-ring'),
             weekStrip: $('hero-week-strip'), recStrip: $('hero-rec-strip'),
             whoopMeta: $('hero-whoop-meta'), weekHint: $('hero-week-hint'),
             algo: $('algo-body')
@@ -57,7 +55,7 @@ const HeroOverview = {
         return h + 'h ' + String(m).padStart(2, '0') + 'm';
     },
 
-    _render(records, whoop, steps) {
+    _render(records, whoop) {
         const sleeps = Array.isArray(records) ? records : [];
         const night = sleeps.find(r => r.record_type === 'night' || r.record_type === 'segment') || sleeps[0];
         const r = this._refs;
@@ -77,39 +75,32 @@ const HeroOverview = {
             r.sub.textContent = '还没有记录，点上方「记录睡眠」';
         }
 
-        // 恢复小标签：优先 Whoop 最新恢复值，回退到睡眠记录 recovery_score
+        // ── Hero 主卡指标行：恢复 · 深睡占比（与同义 pill/芯片去重后合并到这里） ──
         const whoopSorted = [...whoop].sort((a, b) => (a.record_date < b.record_date ? -1 : 1));
         const latestWhoop = whoopSorted.length ? whoopSorted[whoopSorted.length - 1] : null;
         const recovery = (latestWhoop && latestWhoop.recovery_score != null) ? latestWhoop.recovery_score
             : (night && night.recovery_score != null ? night.recovery_score : null);
+        const deep = this._deepPct(night);
+        const recZone = (recovery == null) ? null : (recovery >= 67 ? 'high' : recovery >= 34 ? 'mid' : 'low');
+        const recZoneWord = { high: '良好', mid: '一般', low: '偏低' };
+        const recZoneCls = { high: 'good', mid: 'warn', low: 'bad' };
+        const statBits = [];
         if (recovery != null) {
-            const q = (night && night.sleep_quality) || (recovery >= 70 ? 'good' : recovery >= 40 ? 'average' : 'poor');
-            const qText = { good: '良好', average: '一般', poor: '较差' }[q] || '';
-            r.pill.hidden = false;
-            r.pillText.textContent = '恢复 ' + Math.round(recovery) + (qText ? ' · ' + qText : '');
-        } else {
-            r.pill.hidden = true;
+            statBits.push(`<span class="hero-stat hero-stat--${recZoneCls[recZone]}">
+                <span class="hs-label">恢复</span><b>${Math.round(recovery)}</b><small>· ${recZoneWord[recZone]}</small></span>`);
         }
+        if (deep != null) {
+            statBits.push(`<span class="hero-stat">
+                <span class="hs-label">深睡占比</span><b>${Math.round(deep)}<span class="hs-unit">%</span></b></span>`);
+        }
+        r.stats.innerHTML = statBits.length
+            ? statBits.join('<span class="hero-stat-sep">·</span>')
+            : '<span class="hero-stat-empty">尚无恢复/深睡数据</span>';
 
         // 评分环：手环评分(device_score) → recovery_score → 无
         const score = (night && night.device_score != null) ? night.device_score
             : (night && night.recovery_score != null ? night.recovery_score : null);
         this._renderRing(r.ring, score);
-
-        // ── 指标芯片条（与上方 评分环/恢复 pill 去重：只剩 深睡占比 这类有日期的指标） ──
-        // 注：步数等 HealthKit 数据若同步断档会显示陈旧孤立值、无法回答"哪天走的"，
-        //     反而不利于理解，暂不展示——后续要做「活动量」卡时按 date 字段对齐到具体某天再回归。
-        const deep = this._deepPct(night);
-        const chips = [
-            { label: '深睡占比', value: deep == null ? '—' : Math.round(deep) + '%', spark: this._deepSeries(sleeps), color: 'deep' }
-        ];
-        r.chips.innerHTML = chips.map(c => `
-            <div class="metric-chip">
-                <div class="metric-chip__label">${c.label}</div>
-                <div class="metric-chip__value">${c.value}${c.unit ? `<span class="metric-chip__unit">${c.unit}</span>` : ''}</div>
-                ${c.sub ? `<div class="metric-chip__sub">${c.sub}</div>` : ''}
-                ${this._sparkSvg(c.spark, c.color)}
-            </div>`).join('');
 
         // ── 近 7 天健康：睡眠色块 + Whoop 恢复分（原「本周睡眠」「健康总览」两卡已合并） ──
         this._renderWeekHealth(r, sleeps, whoopSorted);
@@ -125,38 +116,6 @@ const HeroOverview = {
         }
         if (rec.sleep_efficiency != null) return rec.sleep_efficiency;
         return null;
-    },
-
-    _deepSeries(records) {
-        return (records || []).filter(r => r.deep_sleep_minutes != null || r.sleep_efficiency != null)
-            .map(r => this._deepPct(r)).filter(v => v != null);
-    },
-
-    _series(arr, field) {
-        return (arr || []).map(o => o[field]).filter(v => v != null && !isNaN(v));
-    },
-
-    _fmtNum(n) { return Number(n).toLocaleString('en-US'); },
-
-    _sparkSvg(series, color) {
-        if (!series || series.length < 2) return '<div class="metric-chip__spark"></div>';
-        const w = 100, h = 22, pad = 2;
-        const min = Math.min(...series), max = Math.max(...series);
-        const range = (max - min) || 1;
-        const step = (w - pad * 2) / (series.length - 1);
-        const pts = series.map((v, i) => {
-            const x = pad + i * step;
-            const y = pad + (h - pad * 2) * (1 - (v - min) / range);
-            return x.toFixed(1) + ',' + y.toFixed(1);
-        }).join(' ');
-        return `<svg class="metric-chip__spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
-            <polyline points="${pts}" fill="none" stroke="${this._stroke(color)}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>`;
-    },
-
-    _stroke(color) {
-        // DS 语义色：score → 蓝、deep → 绿(深睡)、recovery → 绿
-        return { score: '#2563eb', deep: '#16a34a', recovery: '#2563eb' }[color] || '#2563eb';
     },
 
     _renderRing(el, score) {
