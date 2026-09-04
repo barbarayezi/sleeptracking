@@ -11,7 +11,7 @@
     <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="/static/icon.svg">
     <title>量化健康 — QHealth</title>
-    <link rel="stylesheet" href="/static/style.css?v=19">
+    <link rel="stylesheet" href="/static/style.css?v=20">
 </head>
 <body>
 
@@ -687,20 +687,27 @@
                     <div class="form-label">⚡ 一键打卡常用药</div>
                     <div class="medication-quick-buttons">
                         <button type="button" class="btn-quick-med"
-                            data-name="鱼油" data-dosage="2" data-unit="粒" data-category="supplement"
+                            data-name="鱼油" data-dosage="2" data-unit="粒"
+                            data-category="supplement" data-slot="morning"
                             title="早晨服用 2 粒">🐟 鱼油 · 2 粒</button>
                         <button type="button" class="btn-quick-med"
-                            data-name="健视佳" data-dosage="1" data-unit="粒" data-category="supplement"
+                            data-name="健视佳" data-dosage="1" data-unit="粒"
+                            data-category="supplement" data-slot="morning"
                             title="早晨服用 1 粒">👁️ 健视佳 · 1 粒</button>
                         <button type="button" class="btn-quick-med"
                             data-name="草酸艾司西酞普兰口服溶液" data-dosage="1" data-unit="支"
-                            data-category="antidepressant"
+                            data-category="antidepressant" data-slot="morning"
                             title="早晨口服 1 支">💊 草酸艾司西酞普兰 · 1 支</button>
                         <button type="button" class="btn-quick-med"
-                            data-name="解郁除烦胶囊" data-dosage="3" data-unit="粒" data-category="supplement"
-                            title="早晨服用 3 粒">🌿 解郁除烦胶囊 · 3 粒</button>
+                            data-name="解郁除烦胶囊" data-dosage="3" data-unit="粒"
+                            data-category="supplement" data-slot="morning"
+                            title="早晨服用 3 粒（早 + 晚各一次）">🌿 解郁除烦胶囊 · 早 3 粒</button>
+                        <button type="button" class="btn-quick-med"
+                            data-name="解郁除烦胶囊" data-dosage="3" data-unit="粒"
+                            data-category="supplement" data-slot="evening"
+                            title="晚上服用 3 粒（早 + 晚各一次）">🌿 解郁除烦胶囊 · 晚 3 粒</button>
                     </div>
-                    <div class="medication-quickfill-hint">点击即记录当前日期的服药状态（每日早 08:00）。</div>
+                    <div class="medication-quickfill-hint">点击即记录当前日期的服药状态（早 08:00 / 晚 20:00）。</div>
                 </div>
 
                 <!-- Medication list for current date -->
@@ -891,7 +898,7 @@
     <script src="/static/form.js?v=16"></script>
     <script src="/static/meal.js?v=16"></script>
     <script src="/static/period.js?v=16"></script>
-    <script src="/static/medication.js?v=1"></script>
+    <script src="/static/medication.js?v=2"></script>
     <script src="/static/calendar.js?v=16"></script>
     <script src="/static/timeline.js?v=16"></script>
     <script src="/static/reports.js?v=10"></script>

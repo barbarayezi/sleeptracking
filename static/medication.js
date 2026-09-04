@@ -78,14 +78,23 @@ class MedicationManager {
 
     /** POST a single med record using the button's data-* attributes. */
     async _quickLog(btn) {
+        const slot = (btn.dataset.slot || 'morning').trim();
+        // Default intake time per slot so the timestamp on the row matches when
+        // the user actually took it (08:00 morning / 20:00 evening / etc.).
+        const slotTime = {
+            morning: '08:00',
+            noon:    '12:00',
+            evening: '20:00',
+            night:   '22:00',
+        };
         const payload = {
             record_date: this._selectedDate,
-            record_time: '08:00',
+            record_time: slotTime[slot] || '08:00',
             medication_name: (btn.dataset.name || '').trim(),
             dosage: parseFloat(btn.dataset.dosage || '1') || 1,
             dosage_unit: btn.dataset.unit || '粒',
             category: btn.dataset.category || 'supplement',
-            administration_slot: 'morning',
+            administration_slot: slot,
             notes: '一键打卡',
         };
         if (!payload.medication_name) {
@@ -110,7 +119,8 @@ class MedicationManager {
             this._medicationsForDate.push(data);
             this._renderList();
             await this._loadDaySummary();
-            this._showMessage('✅ 已记录 ' + payload.medication_name, 'success');
+            const slotTxt = {morning:'早',noon:'午',evening:'晚',night:'睡前'}[slot] || '早';
+            this._showMessage('✅ 已记录 ' + payload.medication_name + '（' + slotTxt + '）', 'success');
         } catch (err) {
             this._showMessage('❌ 网络错误: ' + err.message, 'error');
         } finally {
