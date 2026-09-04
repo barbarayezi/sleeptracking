@@ -11,7 +11,7 @@
     <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="/static/icon.svg">
     <title>量化健康 — QHealth</title>
-    <link rel="stylesheet" href="/static/style.css?v=21">
+    <link rel="stylesheet" href="/static/style.css?v=22">
 </head>
 <body>
 
@@ -77,24 +77,20 @@
             <div class="hero-lower">
                 <div class="hero-week-card">
                     <div class="hero-week-head">
-                        <span class="hero-week-title">本周睡眠</span>
-                        <span class="hero-week-hint">按质量着色 · 今日高亮</span>
+                        <span class="hero-week-title">近 7 天 · 睡眠 × 恢复</span>
+                        <span class="hero-week-hint" id="hero-week-hint"></span>
                     </div>
                     <div class="hero-week-strip" id="hero-week-strip"></div>
+                    <div class="hero-rec-strip" id="hero-rec-strip"></div>
+                    <div class="hero-whoop-meta" id="hero-whoop-meta" hidden></div>
                     <div class="hero-week-legend">
                         <span><i class="dot dot--good"></i>良好</span>
                         <span><i class="dot dot--average"></i>一般</span>
                         <span><i class="dot dot--poor"></i>较差</span>
-                    </div>
-                </div>
-
-                <div class="hero-whoop-card">
-                    <div class="hero-week-head">
-                        <span class="hero-week-title">健康总览 · Whoop</span>
-                        <span class="hero-week-hint" id="hero-whoop-date"></span>
-                    </div>
-                    <div class="hero-whoop-rows" id="hero-whoop-rows">
-                        <div class="hero-whoop-empty">尚未同步手环数据</div>
+                        <span class="hw-sep">｜</span>
+                        <span><i class="dot dot--rec-high"></i>恢复 ≥67</span>
+                        <span><i class="dot dot--rec-mid"></i>34–66</span>
+                        <span><i class="dot dot--rec-low"></i>&lt;34</span>
                     </div>
                 </div>
             </div>
@@ -904,7 +900,7 @@
     <script src="/static/reports.js?v=10"></script>
     <script src="/static/healthOverview.js?v=17"></script>
     <script src="/static/researchDashboard.js?v=1"></script>
-    <script src="/static/hero.js?v=16"></script>
+    <script src="/static/hero.js?v=17"></script>
     <script src="/static/agent.js?v=1"></script>
     <script src="/static/dailyReport.js?v=1"></script>
     <script src="/static/app.js?v=12"></script>

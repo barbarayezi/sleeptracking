@@ -29,8 +29,8 @@ const HeroOverview = {
             label: $('hero-label'), duration: $('hero-duration'), sub: $('hero-sub'),
             pill: $('hero-pill'), pillText: $('hero-pill-text'),
             ring: $('hero-ring'), chips: $('metric-chips'),
-            weekStrip: $('hero-week-strip'),
-            whoopRows: $('hero-whoop-rows'), whoopDate: $('hero-whoop-date'),
+            weekStrip: $('hero-week-strip'), recStrip: $('hero-rec-strip'),
+            whoopMeta: $('hero-whoop-meta'), weekHint: $('hero-week-hint'),
             algo: $('algo-body')
         };
     },
@@ -96,26 +96,24 @@ const HeroOverview = {
             : (night && night.recovery_score != null ? night.recovery_score : null);
         this._renderRing(r.ring, score);
 
-        // ── 指标芯片条
+        // ── 指标芯片条（与上方 评分环/恢复 pill 去重：只剩 深睡占比、步数） ──
         const deep = this._deepPct(night);
         const latestSteps = steps.length ? steps[steps.length - 1].value : null;
-        const whoopRecovery = (latestWhoop && latestWhoop.recovery_score != null) ? latestWhoop.recovery_score : null;
         const chips = [
-            { label: '睡眠评分', value: score == null ? '—' : Math.round(score), spark: this._series(sleeps, 'device_score'), color: 'score' },
             { label: '深睡占比', value: deep == null ? '—' : Math.round(deep) + '%', spark: this._deepSeries(sleeps), color: 'deep' },
-            { label: 'Whoop 恢复', value: whoopRecovery == null ? '—' : Math.round(whoopRecovery), spark: this._series(whoop, 'recovery_score'), color: 'recovery' },
-            { label: '步数', value: latestSteps == null ? '—' : this._fmtNum(latestSteps), spark: this._series(steps, 'value'), color: 'steps' }
+            { label: '步数', value: latestSteps == null ? '—' : this._fmtNum(latestSteps), unit: latestSteps == null ? '' : '步',
+              sub: latestSteps == null ? '' : '≈ ' + this._stepsKm(latestSteps) + ' 公里', spark: this._series(steps, 'value'), color: 'steps' }
         ];
         r.chips.innerHTML = chips.map(c => `
             <div class="metric-chip">
                 <div class="metric-chip__label">${c.label}</div>
-                <div class="metric-chip__value">${c.value}</div>
+                <div class="metric-chip__value">${c.value}${c.unit ? `<span class="metric-chip__unit">${c.unit}</span>` : ''}</div>
+                ${c.sub ? `<div class="metric-chip__sub">${c.sub}</div>` : ''}
                 ${this._sparkSvg(c.spark, c.color)}
             </div>`).join('');
 
-        // ── 本周睡眠色块 + Whoop 总览 + 恢复分算法解读
-        this._renderWeek(r.weekStrip, sleeps);
-        this._renderWhoop(r, whoopSorted);
+        // ── 近 7 天健康：睡眠色块 + Whoop 恢复分（原「本周睡眠」「健康总览」两卡已合并） ──
+        this._renderWeekHealth(r, sleeps, whoopSorted);
         this._renderAlgo(r.algo, sleeps, whoopSorted, night);
     },
 
@@ -140,6 +138,12 @@ const HeroOverview = {
     },
 
     _fmtNum(n) { return Number(n).toLocaleString('en-US'); },
+
+    // 步数 → 约 X 公里（按常见步距 0.7m 估算，仅作直观参照）
+    _stepsKm(n) {
+        if (n == null || isNaN(n)) return '—';
+        return (Number(n) * 0.7 / 1000).toFixed(1);
+    },
 
     _sparkSvg(series, color) {
         if (!series || series.length < 2) return '<div class="metric-chip__spark"></div>';
@@ -186,62 +190,86 @@ const HeroOverview = {
         return '#dc2626';
     },
 
-    _renderWeek(el, sleeps) {
-        const days = [];
+    // ── 近 7 天 · 睡眠 × 恢复（合并卡）：上排睡眠质量色块，下排 Whoop 恢复分 ──
+    _renderWeekHealth(r, sleeps, whoop) {
         const today = new Date();
+        const days = [];
         for (let i = 6; i >= 0; i--) {
             const d = new Date(today);
             d.setDate(today.getDate() - i);
             days.push(d);
         }
         const todayStr = this._dateStr(today);
-        el.innerHTML = days.map(d => {
+        const whoopByDate = {};
+        (whoop || []).forEach(o => { if (o && o.record_date) whoopByDate[o.record_date] = o; });
+
+        // 上排：睡眠时长 + 质量底色
+        const sleepHtml = days.map(d => {
             const ds = this._dateStr(d);
             const rec = sleeps.find(s => s.record_date === ds && (s.record_type === 'night' || s.record_type === 'segment'))
                 || sleeps.find(s => s.record_date === ds);
             const cls = rec ? ('hero-week-cell--' + (rec.sleep_quality || 'average')) : 'hero-week-cell--empty';
             const isToday = (ds === todayStr) ? ' hero-week-cell--today' : '';
             const dur = rec ? this._durStr(this._durHours(rec.sleep_time, rec.wake_time)) : '';
-            return `<div class="hero-week-cell ${cls}${isToday}">
+            const tip = rec ? (ds + ' 睡眠 ' + dur) : (ds + ' 无睡眠记录');
+            return `<div class="hero-week-cell ${cls}${isToday}" title="${tip}">
                 <div class="hero-week-cell__date">${d.getDate()}</div>
                 <div class="hero-week-cell__dur">${dur}</div>
             </div>`;
         }).join('');
-    },
+        r.weekStrip.innerHTML = sleepHtml;
 
-    _renderWhoop(r, sorted) {
-        if (!sorted || !sorted.length) {
-            r.whoopRows.innerHTML = '<div class="hero-whoop-empty">尚未同步手环数据<br><span style="font-size:.75rem">在「数据同步」连接 Whoop 后显示</span></div>';
-            r.whoopDate.textContent = '';
-            return;
-        }
-        const last = sorted[sorted.length - 1];
-        const prev = sorted.length > 1 ? sorted[sorted.length - 2] : null;
-        r.whoopDate.textContent = '最近 ' + last.record_date;
-        const rows = [
-            { label: '恢复', field: 'recovery_score', higherBetter: true },
-            { label: 'Strain', field: 'strain', higherBetter: true },
-            { label: '静息心率', field: 'resting_heart_rate', higherBetter: false }
-        ];
-        const html = rows.map(row => {
-            const v = last[row.field];
-            if (v == null) return '';
-            let trendHtml = '';
-            if (prev && prev[row.field] != null) {
-                const diff = v - prev[row.field];
-                if (diff !== 0) {
-                    const up = diff > 0;
-                    const good = row.higherBetter ? up : !up;
-                    const cls = (up ? 'trend-up-' : 'trend-down-') + (good ? 'good' : 'bad');
-                    trendHtml = `<span class="hero-whoop-row__trend ${cls}">${up ? '▲' : '▼'} ${Math.abs(diff).toFixed(1)}</span>`;
-                }
+        // 下排：按日恢复分（≥67 绿 / 34–66 黄 / <34 红）
+        const cells = days.map(d => {
+            const ds = this._dateStr(d);
+            const o = whoopByDate[ds];
+            const v = (o && o.recovery_score != null) ? Number(o.recovery_score) : null;
+            return { ds, v, isToday: ds === todayStr };
+        });
+        const hasWhoop = cells.some(x => x.v != null);
+        const recHtml = cells.map(x => {
+            if (!hasWhoop) {
+                return `<div class="hero-rec-cell hero-rec-cell--empty" title="${x.ds} 无 Whoop 数据">—</div>`;
             }
-            return `<div class="hero-whoop-row">
-                <span class="hero-whoop-row__label">${row.label}</span>
-                <span><span class="hero-whoop-row__val">${this._num(v)}</span>${trendHtml}</span>
-            </div>`;
+            const band = x.v == null ? '' : (x.v >= 67 ? 'high' : x.v >= 34 ? 'mid' : 'low');
+            const cls = x.v == null ? 'hero-rec-cell--empty' : 'hero-rec-cell--' + band;
+            return `<div class="hero-rec-cell ${cls}${x.isToday ? ' hero-rec-cell--today' : ''}"
+                title="${x.ds}${x.v == null ? ' 无恢复分' : ' 恢复 ' + Math.round(x.v)}">${x.v == null ? '—' : Math.round(x.v)}</div>`;
         }).join('');
-        r.whoopRows.innerHTML = html || '<div class="hero-whoop-empty">暂无可用指标</div>';
+        r.recStrip.innerHTML = recHtml;
+
+        // 头部提示 + 同步状态
+        const base = '底色＝睡眠质量 · 下排＝恢复分';
+        const last = (whoop && whoop.length) ? whoop[whoop.length - 1] : null;
+        r.weekHint.textContent = last ? base + ' · 同步 ' + last.record_date : base + ' · Whoop 未同步';
+
+        // 底部一行：Strain / 静息心率 与昨日环比（补原 Whoop 卡的增量信息）
+        if (last) {
+            const prev = whoop.length > 1 ? whoop[whoop.length - 2] : null;
+            const parts = [];
+            const addMeta = (label, field, higherBetter) => {
+                if (last[field] == null) return;
+                let t = '';
+                if (prev && prev[field] != null && Number(prev[field]) !== Number(last[field])) {
+                    const diff = Number(last[field]) - Number(prev[field]);
+                    const up = diff > 0;
+                    const good = higherBetter ? up : !up;
+                    const cls = (up ? 'trend-up-' : 'trend-down-') + (good ? 'good' : 'bad');
+                    t = `<span class="${cls}">${up ? '▲' : '▼'} ${Math.abs(diff).toFixed(1)}</span>`;
+                }
+                parts.push(`<span class="meta-it"><span class="meta-lbl">${label}</span><b>${this._num(last[field])}</b>${t}</span>`);
+            };
+            addMeta('Strain', 'strain', true);
+            addMeta('静息心率', 'resting_heart_rate', false);
+            if (parts.length) {
+                r.whoopMeta.hidden = false;
+                r.whoopMeta.innerHTML = parts.join('');
+            } else {
+                r.whoopMeta.hidden = true;
+            }
+        } else {
+            r.whoopMeta.hidden = true;
+        }
     },
 
     // ── 恢复分算法解读：基线轴拆解 + 今日建议 ──

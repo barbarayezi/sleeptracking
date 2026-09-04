@@ -786,7 +786,7 @@ body {
 .hero-ring svg { width: 100%; height: 100%; display: block; }
 
 /* ── Metric chips（白卡 + 清晰灰边，无装饰条；文字深但非纯黑） ── */
-.metric-chips { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+.metric-chips { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 320px)); justify-content: center; gap: 12px; margin-bottom: 16px; }
 .metric-chip {
     background: #ffffff;
     border: 1px solid #ccd3df;
@@ -815,11 +815,16 @@ body {
     font-variant-numeric: tabular-nums;
     line-height: 1.2;
     letter-spacing: -.01em;
+    display: flex;
+    align-items: baseline;
+    gap: 3px;
 }
+.metric-chip__unit { font-size: 12px; font-weight: 600; color: var(--gray-500); }
+.metric-chip__sub { font-size: 11px; color: var(--gray-400); line-height: 1.4; }
 .metric-chip__spark {
     width: 100%;
     height: 18px;
-    margin-top: 4px;
+    margin-top: auto;
     display: block;
     opacity: 0.6;
 }
@@ -830,17 +835,17 @@ body {
     font-size: 13px;
 }
 
-/* ── Hero lower ── */
-.hero-lower { display: grid; grid-template-columns: 1.2fr 1fr; gap: 12px; }
-.hero-week-card, .hero-whoop-card {
+/* ── Hero lower：合并卡「近 7 天 · 睡眠 × 恢复」 ── */
+.hero-lower { display: grid; grid-template-columns: 1fr; gap: 12px; }
+.hero-week-card {
     background: var(--gray-50);
     border: 1px solid var(--gray-200);
     border-radius: var(--radius);
     padding: 14px 16px;
 }
-.hero-week-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.hero-week-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
 .hero-week-title { font-size: 14px; font-weight: 700; color: var(--gray-900); }
-.hero-week-hint { font-size: 12px; color: var(--gray-500); }
+.hero-week-hint { font-size: 12px; color: var(--gray-500); font-variant-numeric: tabular-nums; }
 
 .hero-week-strip { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
 .hero-week-cell {
@@ -864,22 +869,43 @@ body {
 }
 .hero-week-cell--today .hero-week-cell__date { color: var(--primary); font-weight: 700; }
 
+/* 下排：Whoop 恢复分（按日着色 ≥67 绿 / 34–66 黄 / <34 红） */
+.hero-rec-strip { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-top: 6px; }
+.hero-rec-cell {
+    border-radius: var(--radius-sm); min-height: 24px; padding: 2px 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums;
+    background: #fff; border: 1px solid var(--gray-200);
+    color: var(--gray-400);
+}
+.hero-rec-cell--high { background: var(--success-soft); color: var(--success); border-color: transparent; }
+.hero-rec-cell--mid  { background: var(--warning-soft); color: var(--warning); border-color: transparent; }
+.hero-rec-cell--low  { background: var(--danger-soft);  color: var(--danger);  border-color: transparent; }
+.hero-rec-cell--empty { border-style: dashed; }
+.hero-rec-cell--today { box-shadow: inset 0 0 0 1.5px var(--primary); }
+
+/* 底部 meta：Strain / 静息心率 + 环比 */
+.hero-whoop-meta {
+    display: flex; align-items: center; justify-content: flex-end; gap: 14px;
+    margin-top: 8px; flex-wrap: wrap;
+    font-size: 12px; color: var(--gray-500); font-variant-numeric: tabular-nums;
+}
+.hero-whoop-meta .meta-it { display: inline-flex; align-items: center; gap: 5px; }
+.hero-whoop-meta .meta-lbl { color: var(--gray-500); }
+.hero-whoop-meta b { color: var(--gray-700); font-weight: 700; }
+.hero-whoop-meta[hidden] { display: none; }
+
 .hero-week-legend { display: flex; gap: 12px; margin-top: 8px; font-size: 12px; color: var(--gray-500); flex-wrap: wrap; }
 .hero-week-legend .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
 .dot--good { background: var(--success); }
 .dot--average { background: var(--warning); }
 .dot--poor { background: var(--danger); }
-
-/* ── Whoop mini ── */
-.hero-whoop-rows { display: flex; flex-direction: column; }
-.hero-whoop-row { display: flex; align-items: center; justify-content: space-between; padding: 9px 2px; border-bottom: 1px solid var(--gray-200); }
-.hero-whoop-row:last-child { border-bottom: none; }
-.hero-whoop-row__label { font-size: 13px; color: var(--gray-600); display: inline-flex; align-items: center; gap: 8px; }
-.hero-whoop-row__val { font-size: 14px; font-weight: 700; color: var(--gray-900); font-variant-numeric: tabular-nums; }
-.hero-whoop-row__trend { font-size: 12px; margin-left: 6px; font-variant-numeric: tabular-nums; }
+.dot--rec-high { background: var(--success); }
+.dot--rec-mid  { background: var(--warning); }
+.dot--rec-low  { background: var(--danger); }
+.hw-sep { color: var(--gray-300); }
 .trend-up-good, .trend-down-good { color: var(--success); }
 .trend-up-bad, .trend-down-bad { color: var(--danger); }
-.hero-whoop-empty { color: var(--gray-500); font-size: 13px; padding: 14px 2px; text-align: center; line-height: 1.6; }
 
 .hero-actions { display: flex; align-items: center; gap: 10px; margin-top: 14px; flex-wrap: wrap; padding-top: 14px; border-top: 1px solid var(--gray-200); }
 .hero-actions .btn { font-size: 13px; padding: 6px 14px; min-height: 32px; }
