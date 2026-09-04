@@ -96,13 +96,12 @@ const HeroOverview = {
             : (night && night.recovery_score != null ? night.recovery_score : null);
         this._renderRing(r.ring, score);
 
-        // ── 指标芯片条（与上方 评分环/恢复 pill 去重：只剩 深睡占比、步数） ──
+        // ── 指标芯片条（与上方 评分环/恢复 pill 去重：只剩 深睡占比 这类有日期的指标） ──
+        // 注：步数等 HealthKit 数据若同步断档会显示陈旧孤立值、无法回答"哪天走的"，
+        //     反而不利于理解，暂不展示——后续要做「活动量」卡时按 date 字段对齐到具体某天再回归。
         const deep = this._deepPct(night);
-        const latestSteps = steps.length ? steps[steps.length - 1].value : null;
         const chips = [
-            { label: '深睡占比', value: deep == null ? '—' : Math.round(deep) + '%', spark: this._deepSeries(sleeps), color: 'deep' },
-            { label: '步数', value: latestSteps == null ? '—' : this._fmtNum(latestSteps), unit: latestSteps == null ? '' : '步',
-              sub: latestSteps == null ? '' : '≈ ' + this._stepsKm(latestSteps) + ' 公里', spark: this._series(steps, 'value'), color: 'steps' }
+            { label: '深睡占比', value: deep == null ? '—' : Math.round(deep) + '%', spark: this._deepSeries(sleeps), color: 'deep' }
         ];
         r.chips.innerHTML = chips.map(c => `
             <div class="metric-chip">
@@ -139,12 +138,6 @@ const HeroOverview = {
 
     _fmtNum(n) { return Number(n).toLocaleString('en-US'); },
 
-    // 步数 → 约 X 公里（按常见步距 0.7m 估算，仅作直观参照）
-    _stepsKm(n) {
-        if (n == null || isNaN(n)) return '—';
-        return (Number(n) * 0.7 / 1000).toFixed(1);
-    },
-
     _sparkSvg(series, color) {
         if (!series || series.length < 2) return '<div class="metric-chip__spark"></div>';
         const w = 100, h = 22, pad = 2;
@@ -162,8 +155,8 @@ const HeroOverview = {
     },
 
     _stroke(color) {
-        // DS 语义色：score → 蓝、deep → 绿(深睡)、recovery → 绿、steps → slate
-        return { score: '#2563eb', deep: '#16a34a', recovery: '#2563eb', steps: '#94a3b8' }[color] || '#2563eb';
+        // DS 语义色：score → 蓝、deep → 绿(深睡)、recovery → 绿
+        return { score: '#2563eb', deep: '#16a34a', recovery: '#2563eb' }[color] || '#2563eb';
     },
 
     _renderRing(el, score) {
