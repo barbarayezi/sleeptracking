@@ -1282,7 +1282,7 @@ i.algo-lg-line { background: transparent; border-left: 1px solid var(--gray-400)
 .algo-note { font-size: 12px; color: var(--gray-500); background: var(--gray-50); border: 1px dashed var(--gray-300); border-radius: var(--radius); padding: 8px 12px; margin-bottom: 12px; line-height: 1.7; }
 .algo-note b { color: var(--primary); font-weight: 600; }
 
-.algo-row { display: grid; grid-template-columns: 200px minmax(0, 1fr) 160px; gap: 14px; align-items: center; padding: 10px 12px; border-radius: var(--radius); }
+.algo-row { display: grid; grid-template-columns: 200px minmax(0, 1fr) 160px; gap: 14px; align-items: center; padding: 16px 12px 24px; border-radius: var(--radius); }
 .algo-row:hover { background: var(--gray-50); }
 .algo-m-name { font-size: 13px; font-weight: 700; color: var(--gray-900); }
 .algo-m-desc { font-size: 12px; color: var(--gray-500); margin-top: 1px; }
@@ -1291,7 +1291,7 @@ i.algo-lg-line { background: transparent; border-left: 1px solid var(--gray-400)
 .algo-wdots i.on { background: var(--primary); }
 .algo-fromsleep { display: inline-block; font-size: 11px; color: var(--primary); border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent); border-radius: 4px; padding: 0 4px; margin-top: 3px; }
 
-.algo-meter { position: relative; padding: 16px 2px 4px; }
+.algo-meter { position: relative; padding: 16px 2px 6px; min-height: 50px; }
 .algo-axis { display: flex; justify-content: space-between; font-size: 11px; color: var(--gray-400); margin-bottom: 3px; padding: 0 4px; }
 .algo-bar { position: relative; height: 10px; border-radius: 5px; background: var(--gray-100); overflow: hidden; }
 .algo-bar .lo { position: absolute; left: 0; top: 0; bottom: 0; width: 50%; }
@@ -1307,8 +1307,26 @@ i.algo-lg-line { background: transparent; border-left: 1px solid var(--gray-400)
 .algo-dot--mild { background: var(--warning); }
 .algo-dot--good { background: var(--success); }
 .algo-dot--neu { background: var(--gray-400); }
-.algo-dotval { position: absolute; transform: translateX(-50%); top: 15px; font-size: 12px; font-weight: 700; white-space: nowrap; }
-.algo-dotval small { font-weight: 500; color: var(--gray-500); font-size: 11px; }
+/* dotval chip: solid white background + border + z-index above bar, so it
+   can't be visually read as "background-less floating text" against the
+   colored zone shading, and labels won't run into each other when rows pack
+   tightly. top bumped so it clears the dot entirely. */
+.algo-dotval {
+    position: absolute;
+    transform: translateX(-50%);
+    top: 22px;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+    background: var(--bg-card);
+    border: 1px solid var(--gray-200);
+    border-radius: 4px;
+    padding: 2px 8px;
+    z-index: 4;
+    box-shadow: var(--shadow-sm);
+    font-variant-numeric: tabular-nums;
+}
+.algo-dotval small { font-weight: 500; color: var(--gray-500); font-size: 11px; margin-left: 4px; }
 
 .algo-result { text-align: right; }
 .algo-chip { display: inline-flex; align-items: center; font-size: 12px; padding: 2px 8px; border-radius: var(--radius-pill); white-space: nowrap; font-weight: 700; }
