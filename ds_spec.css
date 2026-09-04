@@ -1,0 +1,164 @@
+/* ============================================================
+   ds.css — 统一门户设计系统（组件级单一真源）
+   引用方式（服务端绝对路径，无写死 IP）：
+     <link rel="stylesheet" href="/docs/ds/ds.css">
+   作用域全部以 .ds- 前缀命名，注入现有页面不会与其自有类名冲突。
+   主色统一 #2563eb，废弃 #3b82f6。
+   ============================================================ */
+:root {
+  /* 品牌色（唯一真源） */
+  --ds-primary:       #2563eb;
+  --ds-primary-hover: #1d4ed8;
+  --ds-primary-active:#1e40af;
+  --ds-primary-soft:  #eff6ff;
+  --ds-primary-softer:#f5f9ff;
+
+  /* 语义色 */
+  --ds-success:     #16a34a;
+  --ds-success-soft:#dcfce7;
+  --ds-warning:     #d97706;
+  --ds-warning-soft:#fef3c7;
+  --ds-danger:      #dc2626;
+  --ds-danger-soft: #fee2e2;
+  --ds-info:        #0891b2;
+  --ds-info-soft:   #cffafe;
+
+  /* 中性灰阶 */
+  --ds-gray-900:#0f172a; --ds-gray-800:#1e293b; --ds-gray-700:#334155;
+  --ds-gray-600:#475569; --ds-gray-500:#64748b; --ds-gray-400:#94a3b8;
+  --ds-gray-300:#cbd5e1; --ds-gray-200:#e2e8f0; --ds-gray-100:#f1f5f9;
+  --ds-gray-50: #f8fafc;  --ds-white:#ffffff;
+
+  /* 间距（4 基准） */
+  --ds-sp-1:4px; --ds-sp-2:8px; --ds-sp-3:12px; --ds-sp-4:16px;
+  --ds-sp-5:20px; --ds-sp-6:24px; --ds-sp-8:32px; --ds-sp-10:40px; --ds-sp-12:48px;
+
+  /* 圆角 */
+  --ds-r-sm:4px; --ds-r-md:6px; --ds-r-lg:8px; --ds-r-xl:12px; --ds-r-2xl:16px; --ds-r-full:999px;
+
+  /* 阴影 */
+  --ds-sh-sm:0 1px 2px rgba(15,23,42,.06),0 1px 3px rgba(15,23,42,.05);
+  --ds-sh-md:0 4px 12px rgba(15,23,42,.08);
+  --ds-sh-lg:0 12px 32px rgba(15,23,42,.12);
+
+  /* 字体 */
+  --ds-font:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",Arial,sans-serif;
+  --ds-fs-12:12px; --ds-fs-13:13px; --ds-fs-14:14px; --ds-fs-16:16px;
+  --ds-fs-18:18px; --ds-fs-20:20px; --ds-fs-24:24px; --ds-fs-30:30px;
+}
+
+/* ===================== 统一外壳 ===================== */
+.ds-shell { font-family: var(--ds-font); }
+
+.ds-topnav {
+  position: sticky; top: 0; z-index: 50;
+  display: flex; align-items: center; gap: var(--ds-sp-6);
+  min-height: 56px; padding: 0 var(--ds-sp-6);
+  background: var(--ds-white);
+  border-bottom: 1px solid var(--ds-gray-200);
+  box-shadow: var(--ds-sh-sm);
+}
+.ds-brand { display: flex; align-items: center; gap: var(--ds-sp-2); font-weight: 700; font-size: var(--ds-fs-16); color: var(--ds-gray-900); white-space: nowrap; text-decoration: none; }
+.ds-logo {
+  width: 26px; height: 26px; border-radius: 7px; flex: none; display: block;
+  box-shadow: 0 1px 3px rgba(30,64,175,.35);
+}
+.ds-etl { color: var(--ds-primary); }
+.ds-tabs { display: flex; gap: var(--ds-sp-1); }
+.ds-tab {
+  padding: var(--ds-sp-2) var(--ds-sp-4); border-radius: var(--ds-r-lg);
+  color: var(--ds-gray-600); font-weight: 600; cursor: pointer; font-size: var(--ds-fs-13);
+  border: 1px solid transparent; background: transparent; font-family: inherit; transition: .15s;
+}
+.ds-tab:hover { background: var(--ds-gray-100); color: var(--ds-gray-900); }
+.ds-tab.active { background: var(--ds-primary-soft); color: var(--ds-primary); border-color: color-mix(in srgb, var(--ds-primary) 25%, transparent); }
+.ds-spacer { flex: 1; }
+.ds-freshness {
+  display: inline-flex; align-items: center; gap: var(--ds-sp-2);
+  font-size: var(--ds-fs-12); color: var(--ds-gray-600);
+  background: var(--ds-gray-100); padding: var(--ds-sp-1) var(--ds-sp-3); border-radius: var(--ds-r-full); white-space: nowrap;
+}
+.ds-dot { width: 7px; height: 7px; border-radius: var(--ds-r-full); background: var(--ds-success); box-shadow: 0 0 0 3px var(--ds-success-soft); }
+
+/* 用户 widget 由 serve_static 注入的 _USER_WIDGET_JS 统一渲染，不再由 DS shell 处理 */
+.ds-breadcrumb {
+  display: flex; align-items: center; gap: var(--ds-sp-2);
+  padding: var(--ds-sp-3) var(--ds-sp-8); font-size: var(--ds-fs-13); color: var(--ds-gray-400);
+  background: var(--ds-gray-50);
+  border-bottom: 1px solid var(--ds-gray-200);
+}
+.ds-breadcrumb b { color: var(--ds-gray-600); font-weight: 600; }
+.ds-breadcrumb .ds-sep { color: var(--ds-gray-400); }
+.ds-breadcrumb .ds-crumb-link {
+  color: var(--ds-gray-600); font-weight: 600; text-decoration: none;
+  transition: color .15s;
+}
+.ds-breadcrumb .ds-crumb-link:hover { color: var(--ds-primary); text-decoration: underline; }
+
+/* ===================== 二级子导航（用于治理层等模块内切换） ===================== */
+.ds-subnav {
+  display: flex; align-items: center; gap: var(--ds-sp-2);
+  padding: var(--ds-sp-2) var(--ds-sp-8);
+  background: var(--ds-gray-100);
+  border-bottom: 1px solid var(--ds-gray-200);
+  overflow-x: auto;
+}
+.ds-subtab {
+  display: inline-flex; align-items: center; gap: var(--ds-sp-1);
+  padding: var(--ds-sp-2) var(--ds-sp-4);
+  border-radius: var(--ds-r-lg);
+  font-size: var(--ds-fs-13); font-weight: 500;
+  color: var(--ds-gray-600); background: transparent;
+  border: 1px solid transparent; cursor: pointer;
+  text-decoration: none; white-space: nowrap; transition: .15s;
+}
+.ds-subtab:hover { background: var(--ds-gray-200); color: var(--ds-gray-900); }
+.ds-subtab.active { background: var(--ds-primary-soft); color: var(--ds-primary); border-color: color-mix(in srgb, var(--ds-primary) 25%, transparent); font-weight: 600; }
+
+/* ===================== 组件库（可选复用，命名空间隔离） ===================== */
+.ds-card {
+  background: var(--ds-white); border: 1px solid var(--ds-gray-200);
+  border-radius: var(--ds-r-xl); padding: var(--ds-sp-5); box-shadow: var(--ds-sh-sm);
+}
+.ds-card .ds-label { font-size: var(--ds-fs-12); color: var(--ds-gray-400); text-transform: uppercase; letter-spacing: .04em; }
+.ds-card h3 { font-size: var(--ds-fs-16); font-weight: 700; margin-top: var(--ds-sp-2); }
+
+.ds-stat .ds-value { font-size: var(--ds-fs-30); font-weight: 800; letter-spacing: -.02em; margin-top: var(--ds-sp-2); color: var(--ds-gray-900); }
+.ds-stat .ds-value small { font-size: var(--ds-fs-14); font-weight: 600; color: var(--ds-gray-400); }
+.ds-delta { display: inline-flex; align-items: center; gap: 4px; font-size: var(--ds-fs-12); font-weight: 700; margin-top: var(--ds-sp-2); padding: 1px var(--ds-sp-2); border-radius: var(--ds-r-sm); }
+.ds-delta.up { color: var(--ds-success); background: var(--ds-success-soft); }
+.ds-delta.down { color: var(--ds-danger); background: var(--ds-danger-soft); }
+.ds-delta.flat { color: var(--ds-gray-600); background: var(--ds-gray-100); }
+.ds-stat .ds-foot { font-size: var(--ds-fs-12); color: var(--ds-gray-400); margin-top: var(--ds-sp-2); }
+
+.ds-badge { display: inline-flex; align-items: center; gap: 4px; font-size: var(--ds-fs-12); font-weight: 600; padding: 2px var(--ds-sp-2); border-radius: var(--ds-r-full); }
+.ds-badge.primary { color: var(--ds-primary); background: var(--ds-primary-soft); }
+.ds-badge.success { color: var(--ds-success); background: var(--ds-success-soft); }
+.ds-badge.warning { color: var(--ds-warning); background: var(--ds-warning-soft); }
+.ds-badge.danger { color: var(--ds-danger); background: var(--ds-danger-soft); }
+.ds-badge.neutral { color: var(--ds-gray-600); background: var(--ds-gray-100); }
+.ds-badge.outline { color: var(--ds-gray-600); background: transparent; border: 1px solid var(--ds-gray-200); }
+
+.ds-btn { font-family: inherit; font-size: var(--ds-fs-13); font-weight: 600; padding: var(--ds-sp-2) var(--ds-sp-4); border-radius: var(--ds-r-lg); border: 1px solid transparent; cursor: pointer; transition: .15s; display: inline-flex; align-items: center; gap: var(--ds-sp-2); }
+.ds-btn.primary { background: var(--ds-primary); color: #fff; }
+.ds-btn.primary:hover { background: var(--ds-primary-hover); }
+.ds-btn.secondary { background: var(--ds-white); color: var(--ds-gray-900); border-color: var(--ds-gray-200); }
+.ds-btn.secondary:hover { border-color: var(--ds-primary); color: var(--ds-primary); }
+.ds-btn.ghost { background: transparent; color: var(--ds-primary); }
+.ds-btn.ghost:hover { background: var(--ds-primary-soft); }
+.ds-btn.sm { padding: var(--ds-sp-1) var(--ds-sp-3); font-size: var(--ds-fs-12); }
+.ds-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+.ds-banner { display: flex; align-items: flex-start; gap: var(--ds-sp-3); padding: var(--ds-sp-4) var(--ds-sp-5); border-radius: var(--ds-r-xl); border: 1px solid; font-size: var(--ds-fs-13); }
+.ds-banner.info { background: var(--ds-info-soft); border-color: color-mix(in srgb,var(--ds-info) 30%,transparent); }
+.ds-banner.warn { background: var(--ds-warning-soft); border-color: color-mix(in srgb,var(--ds-warning) 30%,transparent); }
+.ds-banner .ds-bt { font-weight: 700; }
+.ds-banner .ds-bd { color: var(--ds-gray-600); }
+
+table.ds-table { width: 100%; border-collapse: collapse; font-size: var(--ds-fs-13); }
+table.ds-table th, table.ds-table td { text-align: left; padding: var(--ds-sp-3) var(--ds-sp-4); border-bottom: 1px solid var(--ds-gray-200); }
+table.ds-table th { color: var(--ds-gray-400); font-weight: 600; background: var(--ds-gray-100); font-size: var(--ds-fs-12); text-transform: uppercase; letter-spacing: .03em; }
+table.ds-table tbody tr:hover { background: var(--ds-primary-softer); }
+table.ds-table td.ds-num { font-variant-numeric: tabular-nums; color: var(--ds-gray-600); }
+table.ds-table .ds-name { font-weight: 600; color: var(--ds-gray-900); }
+table.ds-table .ds-comment { color: var(--ds-gray-600); font-size: var(--ds-fs-12); max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: middle; }

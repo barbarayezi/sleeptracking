@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>统一门户设计系统 · Unified Portal Design System</title>
+<!-- 单一真源：引用权威样式与外壳渲染器，确保与线上门户永远一致 -->
+<link rel="stylesheet" href="/docs/ds/ds.v15-55.css">
+<style>
+  /* 仅本展示页的脚手架样式，命名空间 .pg- 避免与 .ds- 冲突 */
+  body { margin: 0; padding: 0; background: var(--ds-gray-50, #f8fafc); }
+  .pg-wrap { max-width: none; margin: 0; padding: 28px 28px 80px; }
+  .pg-hero { padding: 24px 0 18px; border-bottom: 1px solid var(--ds-gray-200); margin-bottom: 28px; }
+  .pg-hero h1 { font-family: var(--ds-font); font-size: 28px; font-weight: 800; color: var(--ds-gray-900); letter-spacing: -.02em; margin: 0; }
+  .pg-hero p { font-family: var(--ds-font); color: var(--ds-gray-500); font-size: 14px; margin: 8px 0 0; }
+  .pg-hero code { background: var(--ds-gray-100); padding: 2px 6px; border-radius: 4px; font-size: 12px; color: var(--ds-primary); }
+  .pg-section { margin: 40px 0; }
+  .pg-section > h2 { font-family: var(--ds-font); font-size: 18px; font-weight: 700; color: var(--ds-gray-900); display: flex; align-items: center; gap: 8px; margin: 0 0 4px; }
+  .pg-section > h2::before { content: ""; width: 4px; height: 18px; background: var(--ds-primary); border-radius: 2px; display: inline-block; }
+  .pg-section > .pg-desc { font-family: var(--ds-font); font-size: 13px; color: var(--ds-gray-500); margin: 0 0 16px; }
+  .pg-grid { display: grid; gap: 12px; }
+  .pg-grid.cols-2 { grid-template-columns: repeat(2, 1fr); }
+  .pg-grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
+  .pg-grid.cols-4 { grid-template-columns: repeat(4, 1fr); }
+  .pg-grid.cols-5 { grid-template-columns: repeat(5, 1fr); }
+  .pg-grid.cols-6 { grid-template-columns: repeat(6, 1fr); }
+  @media (max-width: 760px) { .pg-grid.cols-2, .pg-grid.cols-3, .pg-grid.cols-4, .pg-grid.cols-5, .pg-grid.cols-6 { grid-template-columns: 1fr; } }
+  .pg-swatch { border: 1px solid var(--ds-gray-200); border-radius: var(--ds-r-lg); overflow: hidden; font-family: var(--ds-font); }
+  .pg-swatch .chip { height: 56px; }
+  .pg-swatch .meta { padding: 8px 10px; }
+  .pg-swatch .meta .name { font-size: 12px; font-weight: 700; color: var(--ds-gray-900); }
+  .pg-swatch .meta .val { font-size: 11px; color: var(--ds-gray-500); font-variant-numeric: tabular-nums; }
+  .pg-token-row { display: flex; align-items: center; gap: 12px; font-family: var(--ds-font); padding: 8px 0; border-bottom: 1px dashed var(--ds-gray-200); }
+  .pg-token-row:last-child { border-bottom: none; }
+  .pg-token-row .box { width: 40px; height: 40px; border-radius: var(--ds-r-md); border: 1px solid var(--ds-gray-200); flex: none; }
+  .pg-token-row .k { font-size: 13px; font-weight: 600; color: var(--ds-gray-900); }
+  .pg-token-row .v { font-size: 12px; color: var(--ds-gray-500); }
+  .pg-demo { border: 1px solid var(--ds-gray-200); border-radius: var(--ds-r-xl); padding: 18px; background: var(--ds-gray-50); }
+  .pg-demo .pg-cap { font-family: var(--ds-font); font-size: 12px; font-weight: 600; color: var(--ds-gray-400); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 12px; }
+  .pg-stack { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .pg-note { font-family: var(--ds-font); font-size: 12px; color: var(--ds-gray-500); margin-top: 10px; }
+</style>
+
+<style id="portal-auth-style">
+.portal-user-widget{display:flex;align-items:center;gap:8px;margin-left:auto;font-size:12px;white-space:nowrap}
+.portal-user-widget .pu-name{color:#475569;font-weight:600;cursor:default}
+.portal-user-widget .pu-role{font-size:10px;padding:1px 6px;border-radius:8px;background:#dbeafe;color:#1e40af;font-weight:600}
+.portal-user-widget .pu-admin,.portal-user-widget .pu-logout{color:#2563eb;text-decoration:none;padding:2px 8px;border-radius:4px;font-weight:500}
+.portal-user-widget .pu-admin:hover,.portal-user-widget .pu-logout:hover{background:#eff6ff}
+.portal-user-widget .pu-logout{color:#dc2626}
+.portal-user-widget .pu-logout:hover{background:#fee2e2}
+</style>
+</head>
+<body class="ds-shell">
+
+  <!-- ============ 实时外壳（直接挂载权威 DS 渲染器） ============ -->
+  <div id="ds-shell"></div>
+  <script src="/docs/ds/ds.v15-55.js"></script>
+  <script>
+    DS.mount({
+      layer: '门户首页',
+      trail: ['门户', '中台文档中心', '门户设计规范'],
+      trailHref: ['/docs/', '', '/docs/index.html#docs-center'],
+      freshness: '设计系统真源 · docs/ds/ds.css',
+      subnav: [
+        { label: '令牌 Tokens',      view: 'tokens' },
+        { label: '外壳 Shell',       view: 'shell' },
+        { label: '组件 Components', view: 'components' }
+      ],
+      // 设计系统不在任何功能层（数据源/治理/运营/服务）内, 而是挂在门户首页 → 中台文档中心 → 门户设计规范
+      // 所以顶 tab 高亮「门户首页」, 面包屑第二段用粗体不用链接, 让用户清楚这是「文档中心的一部分」而非治理层子模块
+      // 二级子导航做锚点跳转, 配 ds.css :target 视觉同步 active
+      onSubnav: function (item, btn) {
+        var sel = '#' + item.view;
+        var el = document.querySelector(sel);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          if (history.pushState) history.pushState(null, '', sel);
+        }
+      }
+    });
+  </script>
+
+  <div class="pg-wrap">
+
+    <div class="pg-hero">
+      <h1>统一门户设计系统</h1>
+      <p>Unified Portal Design System · 组件级单一真源 <code>docs/ds/ds.css</code> · <code>docs/ds/ds.js</code> · 主色 <code>#2563eb</code></p>
+    </div>
+
+    <!-- ============ 设计令牌 ============ -->
+    <section class="pg-section" id="tokens">
+      <h2>设计令牌 Design Tokens</h2>
+      <p class="pg-desc">所有颜色、间距、圆角、阴影、字号均定义在 <code>ds.css :root</code>，全门户引用同一组变量，杜绝多套主色漂移。</p>
+
+      <h3 style="font-family:var(--ds-font);font-size:14px;color:var(--ds-gray-700);margin:18px 0 10px;">品牌色 Brand</h3>
+      <div class="pg-grid cols-5">
+        <div class="pg-swatch"><div class="chip" style="background:var(--ds-primary)"></div><div class="meta"><div class="name">primary</div><div class="val">#2563eb</div></div></div>
+        <div class="pg-swatch"><div class="chip" style="background:var(--ds-primary-hover)"></div><div class="meta"><div class="name">primary-hover</div><div class="val">#1d4ed8</div></div></div>
+        <div class="pg-swatch"><div class="chip" style="background:var(--ds-primary-active)"></div><div class="meta"><div class="name">primary-active</div><div class="val">#1e40af</div></div></div>
+        <div class="pg-swatch"><div class="chip" style="background:var(--ds-primary-soft)"></div><div class="meta"><div class="name">primary-soft</div><div class="val">#eff6ff</div></div></div>
+        <div class="pg-swatch"><div class="chip" style="background:var(--ds-primary-softer)"></div><div class="meta"><div class="name">primary-softer</div><div class="val">#f5f9ff</div></div></div>
+      </div>
+
+      <h3 style="font-family:var(--ds-font);font-size:14px;color:var(--ds-gray-700);margin:22px 0 10px;">语义色 Semantic</h3>
+      <div class="pg-grid cols-4">
+        <div class="pg-swatch"><div class="chip" style="background:var(--ds-success)"></div><div class="meta"><div class="name">success</div><div class="val">#16a34a</div></div></div>
+        <div class="pg-swatch"><div class="chip" style="background:var(--ds-warning)"></div><div class="meta"><div class="name">warning</div><div class="val">#d97706</div></div></div>
+        <div class="pg-swatch"><div class="chip" style="background:var(--ds-danger)"></div><div class="meta"><div class="name">danger</div><div class="val">#dc2626</div></div></div>
+        <div class="pg-swatch"><div class="chip" style="background:var(--ds-info)"></div><div class="meta"><div class="name">info</div><div class="val">#0891b2</div></div></div>
+      </div>
+
+      <h3 style="font-family:var(--ds-font);font-size:14px;color:var(--ds-gray-700);margin:22px 0 10px;">中性灰阶 Neutral</h3>
+      <div class="pg-grid cols-6">
+        <div class="pg-swatch"><div class="chip" style="background:var(--ds-gray-900)"></div><div class="meta"><div class="name">900</div><div class="val">#0f172a</div></div></div>
+        <div class="pg-swatch"><div class="chip" style="background:var(--ds-gray-700)"></div><div class="meta"><div class="name">700</div><div class="val">#334155</div></div></div>
+        <div class="pg-swatch"><div class="chip" style="background:var(--ds-gray-500)"></div><div class="meta"><div class="name">500</div><div class="val">#64748b</div></div></div>
+        <div class="pg-swatch"><div class="chip" style="background:var(--ds-gray-300)"></div><div class="meta"><div class="name">300</div><div class="val">#cbd5e1</div></div></div>
+        <div class="pg-swatch"><div class="chip" style="background:var(--ds-gray-100)"></div><div class="meta"><div class="name">100</div><div class="val">#f1f5f9</div></div></div>
+        <div class="pg-swatch"><div class="chip" style="background:var(--ds-gray-50);border:1px solid var(--ds-gray-200)"></div><div class="meta"><div class="name">50</div><div class="val">#f8fafc</div></div></div>
+      </div>
+
+      <h3 style="font-family:var(--ds-font);font-size:14px;color:var(--ds-gray-700);margin:22px 0 10px;">间距 Spacing（4 基准）</h3>
+      <div class="pg-grid cols-3">
+        <div class="pg-token-row"><div class="box" style="width:4px"></div><div><div class="k">--ds-sp-1</div><div class="v">4px</div></div></div>
+        <div class="pg-token-row"><div class="box" style="width:8px"></div><div><div class="k">--ds-sp-2</div><div class="v">8px</div></div></div>
+        <div class="pg-token-row"><div class="box" style="width:12px"></div><div><div class="k">--ds-sp-3</div><div class="v">12px</div></div></div>
+        <div class="pg-token-row"><div class="box" style="width:16px"></div><div><div class="k">--ds-sp-4</div><div class="v">16px</div></div></div>
+        <div class="pg-token-row"><div class="box" style="width:24px"></div><div><div class="k">--ds-sp-6</div><div class="v">24px</div></div></div>
+        <div class="pg-token-row"><div class="box" style="width:32px"></div><div><div class="k">--ds-sp-8</div><div class="v">32px</div></div></div>
+      </div>
+
+      <h3 style="font-family:var(--ds-font);font-size:14px;color:var(--ds-gray-700);margin:22px 0 10px;">圆角 Radius / 阴影 Shadow / 字号 Type</h3>
+      <div class="pg-grid cols-3">
+        <div class="pg-token-row"><div class="box" style="border-radius:var(--ds-r-sm)"></div><div><div class="k">r-sm / md / lg</div><div class="v">4 / 6 / 8px</div></div></div>
+        <div class="pg-token-row"><div class="box" style="border-radius:var(--ds-r-xl);box-shadow:var(--ds-sh-md)"></div><div><div class="k">r-xl + sh-md</div><div class="v">12px · 4/12 阴影</div></div></div>
+        <div class="pg-token-row"><div class="box" style="border-radius:var(--ds-r-full)"></div><div><div class="k">r-full</div><div class="v">999px 胶囊</div></div></div>
+      </div>
+      <p class="pg-note">字号阶梯：12 / 13 / 14 / 16 / 18 / 20 / 24 / 30px（见 <code>--ds-fs-*</code>）；字体栈 <code>--ds-font</code> 优先系统字体，中文回退 PingFang SC / 微软雅黑。</p>
+    </section>
+
+    <!-- ============ 外壳 ============ -->
+    <section class="pg-section" id="shell">
+      <h2>统一外壳 Shell</h2>
+      <p class="pg-desc">顶部导航 + 面包屑 + 二级子导航由 <code>ds.js</code> 的 <code>DS.mount()</code> 统一渲染，命名空间 <code>.ds-</code> 前缀，注入任意页面不冲突。本页顶部即实时挂载示例。</p>
+      <div class="pg-demo">
+        <div class="pg-cap">静态结构示意（与 DS.mount 输出一致）</div>
+        <div style="border:1px solid var(--ds-gray-200);border-radius:var(--ds-r-lg);overflow:hidden;font-family:var(--ds-font);">
+          <div class="ds-topnav">
+            <a class="ds-brand" href="#"><span class="ds-logo" style="background:#2563eb;border-radius:7px;width:26px;height:26px;display:inline-block"></span>datalake<span class="ds-etl">·etl</span></a>
+            <nav class="ds-tabs"><button class="ds-tab">门户首页</button><button class="ds-tab">接入层</button><button class="ds-tab active">治理层</button><button class="ds-tab">运营层</button><button class="ds-tab">输出层</button></nav>
+            <span class="ds-spacer"></span>
+            <span class="ds-freshness"><span class="ds-dot"></span>今日 08:00 · T+1</span>
+          </div>
+          <div class="ds-breadcrumb"><a class="ds-crumb-link" href="#">门户</a><span class="ds-sep">/</span><b>治理层</b><span class="ds-sep">/</span><span>设计系统</span></div>
+          <nav class="ds-subnav"><a class="ds-subtab active" href="#">令牌</a><a class="ds-subtab" href="#">外壳</a><a class="ds-subtab" href="#">组件</a></nav>
+          <div style="padding:16px;color:var(--ds-gray-500);font-size:13px;">页面主体内容区…</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 组件 ============ -->
+    <section class="pg-section" id="components">
+      <h2>组件库 Components</h2>
+      <p class="pg-desc">以下组件均为可复用、命名空间隔离的 <code>.ds-</code> 类，直接拷贝到任意页面即可获得一致观感。</p>
+
+      <h3 style="font-family:var(--ds-font);font-size:14px;color:var(--ds-gray-700);margin:18px 0 10px;">卡片 Card & 统计 Stat</h3>
+      <div class="pg-grid cols-3">
+        <div class="ds-card ds-stat">
+          <div class="ds-label">ODS 表总数</div>
+          <div class="ds-value">1,284</div>
+          <div class="ds-delta up">▲ 12 本周</div>
+          <div class="ds-foot">较上周 +0.9%</div>
+        </div>
+        <div class="ds-card ds-stat">
+          <div class="ds-label">DWD 金记录</div>
+          <div class="ds-value">386<small> 实体</small></div>
+          <div class="ds-delta flat">— 持平</div>
+          <div class="ds-foot">跨 4 套源库整合</div>
+        </div>
+        <div class="ds-card">
+          <div class="ds-label">数据新鲜度</div>
+          <h3>今日 08:00 · T+1</h3>
+          <span class="ds-badge success">● 正常</span>
+        </div>
+      </div>
+
+      <h3 style="font-family:var(--ds-font);font-size:14px;color:var(--ds-gray-700);margin:22px 0 10px;">徽标 Badge</h3>
+      <div class="pg-demo">
+        <div class="pg-stack">
+          <span class="ds-badge primary">primary</span>
+          <span class="ds-badge success">success</span>
+          <span class="ds-badge warning">warning</span>
+          <span class="ds-badge danger">danger</span>
+          <span class="ds-badge neutral">neutral</span>
+          <span class="ds-badge outline">outline</span>
+        </div>
+      </div>
+
+      <h3 style="font-family:var(--ds-font);font-size:14px;color:var(--ds-gray-700);margin:22px 0 10px;">按钮 Button</h3>
+      <div class="pg-demo">
+        <div class="pg-stack">
+          <button class="ds-btn primary">主操作</button>
+          <button class="ds-btn secondary">次操作</button>
+          <button class="ds-btn ghost">文字按钮</button>
+          <button class="ds-btn primary sm">小号</button>
+          <button class="ds-btn primary" disabled>禁用</button>
+        </div>
+      </div>
+
+      <h3 style="font-family:var(--ds-font);font-size:14px;color:var(--ds-gray-700);margin:22px 0 10px;">横幅 Banner</h3>
+      <div class="pg-demo">
+        <div class="pg-stack" style="flex-direction:column;align-items:stretch;">
+          <div class="ds-banner info"><div><div class="ds-bt">提示</div><div class="ds-bd">门户统一浅色主题，不再提供深色变体。</div></div></div>
+          <div class="ds-banner warn"><div><div class="ds-bt">注意</div><div class="ds-bd">修改 <code>ds.css</code> 会全门户生效，请走评审。</div></div></div>
+        </div>
+      </div>
+
+      <h3 style="font-family:var(--ds-font);font-size:14px;color:var(--ds-gray-700);margin:22px 0 10px;">表格 Table</h3>
+      <div class="pg-demo">
+        <table class="ds-table">
+          <thead><tr><th>实体</th><th>源表</th><th class="ds-num">记录数</th><th>状态</th></tr></thead>
+          <tbody>
+            <tr><td class="ds-name">客户</td><td class="ds-comment">ods_epk_customer</td><td class="ds-num">12,480</td><td><span class="ds-badge success">● 已同步</span></td></tr>
+            <tr><td class="ds-name">合同</td><td class="ds-comment">ods_oa_contract</td><td class="ds-num">3,902</td><td><span class="ds-badge warning">● 待核对</span></td></tr>
+            <tr><td class="ds-name">设备</td><td class="ds-comment">ods_epk_device</td><td class="ds-num">58,114</td><td><span class="ds-badge success">● 已同步</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p class="pg-note">本页为统一门户设计系统的可视化展示页，样式与外壳均引用 <code>/docs/ds/ds.css</code> 与 <code>/docs/ds/ds.js</code>（组件级单一真源），与 8082 线上门户保持一致。修改设计系统请改这两份真源文件，本页无需改动即自动同步。</p>
+    </section>
+
+  </div>
+
+<script>
+(function(){
+  var nav = document.querySelector('.ds-topnav');
+  if (!nav) return;
+  var el = document.createElement('div');
+  el.className = 'portal-user-widget';
+  el.id = 'portal-user-widget';
+  el.innerHTML = '<span class="pu-name">...</span><a href="/auth/logout" class="pu-logout">退出</a>';
+  nav.appendChild(el);
+  fetch('/auth/me').then(function(r){return r.json()}).then(function(u){
+    if (!u || !u.username) return;
+    var w = document.getElementById('portal-user-widget');
+    if (!w) return;
+    var roleTag = u.role === 'admin' ? '<span class="pu-role">管理员</span>' : '<span class="pu-role">访客</span>';
+    var adminLink = u.role === 'admin' ? '<a href="/admin/users" class="pu-admin">用户管理</a>' : '';
+    // 写权限标记：admin 始终可写；viewer 根据 write_permissions 判断
+    var writeTag = '';
+    if (u.role === 'admin') {
+      writeTag = '<span class="pu-role" style="background:#dcfce7;color:#16a34a">可写</span>';
+    } else {
+      writeTag = '<span class="pu-role" style="background:#fee2e2;color:#dc2626" title="只读模式，写操作需管理员授权">只读</span>';
+    }
+    w.innerHTML = '<span class="pu-name">' + (u.display_name || u.username) + '</span>' + roleTag + writeTag + adminLink + '<a href="/auth/logout" class="pu-logout">退出</a>';
+  }).catch(function(){});
+})();
+</script>
+</body>
+</html>
