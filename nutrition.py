@@ -399,13 +399,33 @@ def _load_vision_config():
 _JPEG_MAX_SIDE = 1600  # qwen-vl 侧尺寸上限以内留余量；也控制请求体大小
 
 
+def _is_heic(raw):
+    """Sniff HEIC/HEIF file magic from the first bytes.
+
+    ISO Base Media File Format: [4-byte size] 'ftyp' [brand].
+    Common HEIF brands: heic, heix, mif1, msf1.
+    """
+    if not raw or len(raw) < 16:
+        return False
+    head = raw[:16]
+    if b'ftyp' not in head:
+        return False
+    # brand starts 8 bytes in (size + 'ftyp')
+    brand = head[8:12].lower()
+    return brand in (b'heic', b'heix', b'mif1', b'msf1')
+
+
 def _to_jpeg_bytes(raw, max_side=_JPEG_MAX_SIDE):
-    """Convert any decodeable image (PNG/WebP/JPEG/GIF...) to a JPEG blob.
+    """Convert any decodeable image (PNG/WebP/JPEG/GIF/HEIC...) to a JPEG blob.
 
     Measured (2026-09-03): the Aliyun MaaS vision gateway REJECTS PNG outright
     ("The image format is illegal and cannot be opened") while JPEG goes through
     — it sniffs the real bytes, so lying about media_type does not help. So every
     upload is normalised to JPEG before being sent.
+
+    HEIC/HEIF photos from iPhone are registered via pillow-heif (declared in
+    requirements.txt). If the dependency is missing, we return a clear error
+    asking the user to convert to JPEG instead of the cryptic Pillow message.
 
     Returns (jpeg_bytes, None) on success, or (None, user_friendly_error).
     """
@@ -413,6 +433,16 @@ def _to_jpeg_bytes(raw, max_side=_JPEG_MAX_SIDE):
         from PIL import Image, ImageOps
     except Exception:
         return None, "服务器缺少 Pillow 图片处理依赖，无法分析图片。"
+
+    # Register HEIF/HEIC opener for Pillow if pillow-heif is installed.
+    try:
+        from pillow_heif import register_heif_opener
+        register_heif_opener()
+    except Exception:
+        pass
+
+    is_heic = _is_heic(raw)
+
     try:
         im = Image.open(io.BytesIO(raw))
         im = ImageOps.exif_transpose(im)
@@ -428,6 +458,11 @@ def _to_jpeg_bytes(raw, max_side=_JPEG_MAX_SIDE):
         im.save(buf, "JPEG", quality=88)
         return buf.getvalue(), None
     except Exception as e:
+        if is_heic:
+            try:
+                import pillow_heif  # noqa: F401
+            except ImportError:
+                return None, "图片为 HEIC/HEIF 格式，服务器尚未安装解码依赖（pillow-heif）。请转换为 JPEG 后重试，或等待下次部署后使用。"
         return None, f"图片无法解析：{e}"
 
 
