@@ -5,6 +5,7 @@ All REST API routes for CRUD operations, statistics, and reports.
 
 import os
 import sys
+import json
 import threading
 import urllib.parse
 from dotenv import load_dotenv
@@ -531,15 +532,28 @@ def _extract_morning(date_str):
     records = models.get_all_records(date=date_str)
     if not records:
         return {'weight': None, 'water_cups': None, 'steps': None,
-                'sleep_minutes': None, 'sleep_quality': None}
+                'sleep_minutes': None, 'sleep_quality': None,
+                'sleep_problems': [], 'dream_journal': ''}
     # Weight / water / steps live on the night record (per schema v4).
     night = next((r for r in records if r.get('record_type') == 'night'), records[0])
+    # sleep_problems is stored as JSON; get_all_records already parses it to a
+    # list, but guard against a raw string / None just in case.
+    sp = night.get('sleep_problems')
+    if isinstance(sp, str):
+        try:
+            sp = json.loads(sp)
+        except Exception:
+            sp = []
+    if not isinstance(sp, list):
+        sp = []
     return {
         'weight': night.get('weight'),
         'water_cups': night.get('water_cups'),
         'steps': night.get('steps'),
         'sleep_minutes': _sleep_minutes(night),
         'sleep_quality': night.get('sleep_quality'),
+        'sleep_problems': sp,
+        'dream_journal': (night.get('dream_journal') or '').strip(),
     }
 
 
@@ -706,7 +720,9 @@ def daily_brief():
     try:
         result = nutrition.daily_brief(yesterday, date, meal_summary, morning,
                                       trends=trends, profile=profile,
-                                      medication=_medication_context(date))
+                                      medication=_medication_context(date),
+                                      dream_journal=morning.get('dream_journal'),
+                                      sleep_problems=morning.get('sleep_problems'))
     except Exception as e:
         return jsonify({'error': f'生成简报失败：{e}'}), 500
 
@@ -845,6 +861,8 @@ def daily_brief_chat():
             trends=trends,
             profile=profile,
             medication=_medication_context(date),
+            dream_journal=morning.get('dream_journal'),
+            sleep_problems=morning.get('sleep_problems'),
         )
     except Exception as e:
         return jsonify({'error': f'生成回复失败：{e}'}), 500
@@ -1030,7 +1048,9 @@ def generate_daily_report():
     try:
         result = nutrition.daily_brief(yesterday, date, meal_summary, morning,
                                        trends=trends, profile=profile,
-                                       medication=_medication_context(date))
+                                       medication=_medication_context(date),
+                                       dream_journal=morning.get('dream_journal'),
+                                       sleep_problems=morning.get('sleep_problems'))
     except Exception as e:
         return jsonify({'error': f'生成 AI 简报失败：{e}'}), 500
 

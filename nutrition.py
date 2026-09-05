@@ -644,6 +644,9 @@ _DAILY_BRIEF_PROMPT = """你是用户长期跟踪的私人健康教练 + 营养�
 【今晨身体指标（{today}）】
 {morning_block}
 
+【夜间睡眠主观反馈（{today}）】
+{sleep_block}
+
 【用药情况（{today}）】
 {medication_block}
 
@@ -662,11 +665,12 @@ _DAILY_BRIEF_PROMPT = """你是用户长期跟踪的私人健康教练 + 营养�
 6. 7 天趋势若显示体重上升/下降/营养不均衡，要点名指出趋势方向。
 7. 结尾给 1 个今天可执行的具体行动（具体到几杯水/多少步/哪种食物）。
 8. 若提供了用药情况：把「连续规律服用抗抑郁/中成药」作为近期恢复趋势的可能相关因素之一来提（注意抗抑郁药通常需 2–4 周起效）；只做相关性观察，绝不建议停药、减量或自行调整；未记录的药不要编造。
+9. 【夜间睡眠主观反馈】必须纳入解读：睡眠问题（失眠 / 多梦 / 多汗 / 频醒 / 早醒）与梦境/身体感受记录，对今晨情绪、精力、身体感受的可能影响；若记录了多梦 / 早醒 / 频醒等，结合睡眠时长与质量，给出今晚可调整的具体建议（如睡前 30 分钟远离屏幕、固定起床时间、睡前温水浴）。不要对梦境做过度玄学解读，只做与睡眠结构、压力水平相关的合理关联。
 """
 
 
 def daily_brief(yesterday, today, meal_summary, morning, trends=None, profile=None,
-                medication=None):
+                medication=None, dream_journal=None, sleep_problems=None):
     """Generate a cross-day health brief.
 
     Returns the SAME ok-shape as analyze_meal:
@@ -677,11 +681,15 @@ def daily_brief(yesterday, today, meal_summary, morning, trends=None, profile=No
         today: morning-metrics day (YYYY-MM-DD)
         meal_summary: nutrition.summarize() result (dict) or None
         morning: dict with keys weight / water_cups / steps / sleep_minutes /
-                 sleep_quality (each may be None when not recorded)
+                 sleep_quality / sleep_problems / dream_journal
+                 (each may be None / empty when not recorded)
         trends: optional 7-day rolling summary dict (from app._compute_7d_trends)
         profile: optional user profile dict (age/sex/height/goal/activity)
         medication: optional dict describing the day's pill log, shaped by
                     app._medication_context(): {summary, streak_days, first_date}
+        dream_journal: optional str, the night's dream / body-feeling journal
+        sleep_problems: optional list of problem keys (insomnia/dreams/sweats/
+                       waking/early_waking)
     """
     base, key, _ = _load_config()
     if not (base and key):
@@ -691,6 +699,7 @@ def daily_brief(yesterday, today, meal_summary, morning, trends=None, profile=No
         yesterday=yesterday, today=today,
         diet_block=_build_diet_block(meal_summary),
         morning_block=_build_morning_block(morning),
+        sleep_block=_build_sleep_block(dream_journal, sleep_problems),
         medication_block=_build_medication_block(medication),
         trends_block=_build_trends_block(trends or {}),
         profile_block=_build_profile_block(profile or {}),
@@ -789,6 +798,38 @@ def _build_morning_block(morning):
     return chr(10).join(lines)
 
 
+_PROBLEM_NAMES = {
+    'insomnia': '失眠', 'dreams': '多梦', 'sweats': '多汗',
+    'waking': '频醒', 'early_waking': '早醒',
+}
+
+
+def _build_sleep_block(dream_journal, sleep_problems):
+    """Render the night's subjective sleep feedback for the prompt.
+
+    `sleep_problems` is an optional list of problem keys; `dream_journal` is an
+    optional free-text journal. Both may be empty. Never fabricates content.
+    """
+    problems = sleep_problems or []
+    if isinstance(problems, str):
+        try:
+            problems = json.loads(problems)
+        except Exception:
+            problems = []
+    lines = []
+    if problems:
+        names = [_PROBLEM_NAMES.get(p, p) for p in problems if p]
+        lines.append(f"- 睡眠问题：{'、'.join(names)}")
+    else:
+        lines.append("- 睡眠问题：无记录")
+    dj = (dream_journal or '').strip()
+    if dj:
+        lines.append(f"- 梦境/身体感受记录：{dj[:800]}")
+    else:
+        lines.append("- 梦境/身体感受记录：未填写")
+    return chr(10).join(lines)
+
+
 def _build_history_block(history):
     """Render prior conversation turns for the chat prompt.
 
@@ -868,6 +909,7 @@ _CHAT_BRIEF_PROMPT = """你是用户的私人健康教练 + 营养师。用户�
 - 回复必须基于下面的原始数据，**不能编造未记录的数字**；若数据有矛盾或缺失，友好指出并建议用户去修改对应记录后再重新生成
 - 关联 7 天趋势（体重、饮水量、步数、营养得分）做纵向洞察——这是关键差异化价值
 - 若用户问"今天该怎么吃 / 怎么练 / 怎么调整"，给 1 个今天就能做的具体行动（具体到几杯水 / 多少步 / 哪种食物 / 几点睡）
+- 若用户聊到睡眠问题（失眠/多梦/早醒/频醒）或梦境，结合【夜间睡眠主观反馈】做与睡眠结构、压力水平相关的合理关联，不要过度玄学解读
 - 保持口语化、有温度
 
 【昨日饮食（{yesterday}）】
@@ -875,6 +917,9 @@ _CHAT_BRIEF_PROMPT = """你是用户的私人健康教练 + 营养师。用户�
 
 【今晨身体指标（{today}）】
 {morning_block}
+
+【夜间睡眠主观反馈（{today}）】
+{sleep_block}
 
 【用药情况（{today}）】
 {medication_block}
@@ -897,7 +942,8 @@ _CHAT_BRIEF_PROMPT = """你是用户的私人健康教练 + 营养师。用户�
 
 
 def chat_brief(yesterday, today, meal_summary, morning, previous_brief, user_message,
-               history=None, trends=None, profile=None, medication=None):
+               history=None, trends=None, profile=None, medication=None,
+               dream_journal=None, sleep_problems=None):
     """Continue the cross-day brief as a conversation.
 
     Args:
@@ -907,6 +953,8 @@ def chat_brief(yesterday, today, meal_summary, morning, previous_brief, user_mes
         trends: optional 7-day rolling summary dict (from app._compute_7d_trends)
         profile: optional user profile dict (age/sex/height/goal/activity)
         medication: optional medication-context dict (same shape as daily_brief)
+        dream_journal / sleep_problems: optional night subjective feedback,
+                 same semantics as daily_brief.
 
     Returns the SAME ok-shape as daily_brief:
         {"ok": True, "data": {"brief": str}} or {"ok": False, "error": str}
@@ -920,6 +968,7 @@ def chat_brief(yesterday, today, meal_summary, morning, previous_brief, user_mes
         yesterday=yesterday, today=today,
         diet_block=_build_diet_block(meal_summary),
         morning_block=_build_morning_block(morning),
+        sleep_block=_build_sleep_block(dream_journal, sleep_problems),
         medication_block=_build_medication_block(medication),
         trends_block=_build_trends_block(trends or {}),
         profile_block=_build_profile_block(profile or {}),
