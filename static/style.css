@@ -535,6 +535,105 @@ body {
 .bar-fill.late    { background: #7c3aed; }
 .bar-row .bar-count { width: 32px; font-size: 12px; color: var(--gray-500); font-variant-numeric: tabular-nums; }
 
+/* ── Scientific distribution cards (report section) ── */
+.report-distribution-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 20px;
+}
+@media (max-width: 1100px) {
+    .report-distribution-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 600px) {
+    .report-distribution-grid { grid-template-columns: 1fr; }
+}
+
+.dist-card {
+    background: var(--bg-card);
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius);
+    padding: 16px;
+    box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    transition: transform var(--transition), box-shadow var(--transition);
+}
+.dist-card:hover { transform: translateY(-1px); box-shadow: var(--shadow-lg); }
+
+.dist-card__head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--gray-700);
+}
+.dist-card__icon { font-size: 15px; line-height: 1; }
+.dist-card__body {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-height: 108px;
+}
+.dist-card__viz {
+    flex: 0 0 auto;
+    width: 96px;
+    height: 96px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.dist-card__legend { flex: 1; min-width: 0; }
+.dist-card__insight {
+    font-size: 12px;
+    color: var(--gray-500);
+    padding: 8px 10px;
+    background: var(--gray-50);
+    border-radius: var(--radius-sm);
+    line-height: 1.5;
+}
+
+/* Donut chart */
+.dist-donut { width: 96px; height: 96px; }
+.dist-donut--empty {
+    width: 96px;
+    height: 96px;
+    border-radius: 50%;
+    border: 10px solid var(--gray-100);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    color: var(--gray-400);
+}
+.dist-donut circle { transition: stroke-dasharray .6s ease; }
+.dist-donut__total { font-size: 20px; font-weight: 800; fill: var(--gray-900); font-variant-numeric: tabular-nums; }
+.dist-donut__unit { font-size: 10px; fill: var(--gray-500); }
+
+/* Legend */
+.dist-legend { display: flex; flex-direction: column; gap: 7px; }
+.dist-legend__row {
+    display: grid;
+    grid-template-columns: 12px 1fr auto auto;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+}
+.dist-legend__dot { width: 10px; height: 10px; border-radius: 50%; }
+.dist-legend__label { color: var(--gray-600); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dist-legend__count { color: var(--gray-900); font-weight: 700; font-variant-numeric: tabular-nums; }
+.dist-legend__pct { color: var(--gray-400); font-variant-numeric: tabular-nums; min-width: 32px; text-align: right; }
+
+/* Bar chart inside distribution card */
+.dist-bars { width: 100%; display: flex; flex-direction: column; gap: 10px; }
+.dist-bar { display: flex; align-items: center; gap: 10px; font-size: 12px; }
+.dist-bar__label { width: 42px; flex-shrink: 0; color: var(--gray-600); text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dist-bar__track { flex: 1; height: 8px; background: var(--gray-100); border-radius: 4px; overflow: hidden; }
+.dist-bar__fill { height: 100%; border-radius: 4px; transition: width .5s ease; }
+.dist-bar__count { color: var(--gray-700); font-weight: 700; width: 34px; text-align: right; font-variant-numeric: tabular-nums; }
+
 .report-trend { padding: 12px 16px; background: var(--gray-100); border-radius: var(--radius); margin-bottom: 16px; text-align: center; font-size: 14px; font-weight: 600; }
 .report-trend.improving { color: var(--success); background: var(--success-soft); }
 .report-trend.declining { color: var(--danger); background: var(--danger-soft); }

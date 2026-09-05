@@ -52,62 +52,89 @@ class ReportManager {
         html += this._statCard(report.average_sleep_time, '平均入睡时间');
         html += '</div>';
 
-        // Breakdown
-        html += '<div class="report-breakdown">';
+        // Distribution grid: 4 visual cards with legend + insight
+        html += '<div class="report-distribution-grid">';
 
-        // Quality breakdown
-        html += '<div class="breakdown-group">';
-        html += '<h4>😴 睡眠质量分布</h4>';
-        html += '<div class="breakdown-bars">';
-        html += this._barRow('良好', report.quality_breakdown.good, report.total_days_recorded, 'good');
-        html += this._barRow('一般', report.quality_breakdown.average, report.total_days_recorded, 'average');
-        html += this._barRow('较差', report.quality_breakdown.poor, report.total_days_recorded, 'poor');
-        html += '</div></div>';
+        const totalQuality = report.total_days_recorded || 1;
+        const qualityGoodRate = report.quality_breakdown.good / totalQuality;
+        html += this._distCard({
+            icon: '😴',
+            title: '睡眠质量分布',
+            type: 'donut',
+            data: [
+                { label: '良好', count: report.quality_breakdown.good, color: 'var(--success)' },
+                { label: '一般', count: report.quality_breakdown.average, color: 'var(--warning)' },
+                { label: '较差', count: report.quality_breakdown.poor, color: 'var(--danger)' },
+            ],
+            total: report.total_days_recorded,
+            unit: '天',
+            insight: qualityGoodRate >= 0.5
+                ? `睡眠良好率 ${(qualityGoodRate * 100).toFixed(0)}%，整体质量偏优`
+                : `睡眠良好率 ${(qualityGoodRate * 100).toFixed(0)}%，质量有提升空间`,
+        });
 
-        // Classification breakdown
-        html += '<div class="breakdown-group">';
-        html += '<h4>⏰ 入睡分类</h4>';
-        html += '<div class="breakdown-bars">';
-        html += this._barRow('早睡', report.classification_breakdown.early, report.total_records, 'early');
-        html += this._barRow('晚睡', report.classification_breakdown.late, report.total_records, 'late');
-        html += '</div></div>';
+        const totalClass = report.total_records || 1;
+        html += this._distCard({
+            icon: '⏰',
+            title: '入睡分类',
+            type: 'donut',
+            data: [
+                { label: '早睡', count: report.classification_breakdown.early, color: 'var(--primary)' },
+                { label: '晚睡', count: report.classification_breakdown.late, color: '#7c3aed' },
+            ],
+            total: report.total_records,
+            unit: '条',
+            insight: report.classification_breakdown.late > report.classification_breakdown.early
+                ? '晚睡记录更多，建议关注入睡节律'
+                : '早睡占比更高，节律相对规律',
+        });
 
-        html += '</div>';
-
-        // Type breakdown
         if (report.type_breakdown) {
-            html += '<div class="report-breakdown">';
-            html += '<div class="breakdown-group">';
-            html += '<h4>🏷️ 记录类型</h4>';
-            html += '<div class="breakdown-bars">';
-            html += this._barRow('夜间睡眠', report.type_breakdown.night, report.total_records, 'night');
-            html += this._barRow('午睡', report.type_breakdown.nap, report.total_records, 'nap');
-            html += this._barRow('分段睡眠', report.type_breakdown.segment, report.total_records, 'segment');
-            html += '</div></div>';
-            html += '</div>';
+            html += this._distCard({
+                icon: '🏷️',
+                title: '记录类型',
+                type: 'donut',
+                data: [
+                    { label: '夜间睡眠', count: report.type_breakdown.night, color: '#0c5a56' },
+                    { label: '午睡', count: report.type_breakdown.nap, color: '#d97706' },
+                    { label: '分段睡眠', count: report.type_breakdown.segment, color: '#64748b' },
+                ],
+                total: report.total_records,
+                unit: '条',
+                insight: `夜间睡眠占 ${(report.type_breakdown.night / totalClass * 100).toFixed(0)}%，为记录主体`,
+            });
         }
 
-        // Problem frequency
         if (report.problem_frequency && Object.keys(report.problem_frequency).length > 0) {
             const problemNames = {
                 insomnia: '失眠', dreams: '多梦', sweats: '多汗',
                 waking: '频醒', early_waking: '早醒'
             };
-            html += '<div class="breakdown-group" style="margin-bottom:16px;">';
-            html += '<h4>⚠️ 睡眠问题频率</h4>';
-            html += '<div class="breakdown-bars">';
-            for (const [key, count] of Object.entries(report.problem_frequency).sort((a, b) => b[1] - a[1])) {
-                const name = problemNames[key] || key;
-                const pct = report.total_days_recorded > 0
-                    ? Math.round(count / report.total_days_recorded * 100) : 0;
-                html += `<div class="bar-row">
-                    <span class="bar-label">${name}</span>
-                    <span class="bar-track"><span class="bar-fill poor" style="width:${pct}%"></span></span>
-                    <span class="bar-count">${count}次</span>
-                </div>`;
-            }
-            html += '</div></div>';
+            const problemColors = {
+                insomnia: 'var(--danger)', dreams: 'var(--warning)',
+                sweats: '#ea580c', waking: '#0891b2', early_waking: '#7c3aed'
+            };
+            const problemData = Object.entries(report.problem_frequency)
+                .sort((a, b) => b[1] - a[1])
+                .map(([key, count]) => ({
+                    label: problemNames[key] || key,
+                    count,
+                    color: problemColors[key] || 'var(--gray-400)',
+                }));
+            const maxCount = Math.max(...problemData.map(d => d.count));
+            html += this._distCard({
+                icon: '⚠️',
+                title: '睡眠问题频率',
+                type: 'bar',
+                data: problemData,
+                max: maxCount,
+                total: report.total_days_recorded,
+                unit: '天',
+                insight: `最常见问题：${problemData[0].label}，共 ${problemData[0].count} 次`,
+            });
         }
+
+        html += '</div>';
 
         // Trend
         const trendLabels = {
@@ -241,5 +268,77 @@ class ReportManager {
             <span class="bar-track"><span class="bar-fill ${cssClass}" style="width:${pct}%"></span></span>
             <span class="bar-count">${count}天</span>
         </div>`;
+    }
+
+    /* ── Scientific distribution cards ────────────────────────────── */
+
+    _distCard({ icon, title, type, data, total, unit, max, insight }) {
+        const nonZero = data.filter(d => d.count > 0);
+        const viz = type === 'donut' && nonZero.length > 0
+            ? this._donutViz(nonZero, total, unit)
+            : this._barViz(data, max);
+        const legend = this._distLegend(data, total, type, unit);
+        return `<div class="dist-card">
+            <div class="dist-card__head">
+                <span class="dist-card__icon">${icon}</span>
+                <span class="dist-card__title">${title}</span>
+            </div>
+            <div class="dist-card__body">
+                <div class="dist-card__viz">${viz}</div>
+                <div class="dist-card__legend">${legend}</div>
+            </div>
+            <div class="dist-card__insight">${insight}</div>
+        </div>`;
+    }
+
+    _donutViz(data, total, unit) {
+        if (!total || data.length === 0) {
+            return '<div class="dist-donut dist-donut--empty">无数据</div>';
+        }
+        const r = 36;
+        const c = 2 * Math.PI * r;
+        let offset = 0;
+        const segments = data.map(d => {
+            const frac = d.count / total;
+            const len = frac * c;
+            const seg = `<circle cx="50" cy="50" r="${r}" fill="none" stroke="${d.color}" stroke-width="12"
+                stroke-dasharray="${len.toFixed(2)} ${(c - len).toFixed(2)}"
+                stroke-dashoffset="${-offset.toFixed(2)}"
+                transform="rotate(-90 50 50)" />`;
+            offset += len;
+            return seg;
+        }).join('');
+        return `<svg class="dist-donut" viewBox="0 0 100 100">
+            ${segments}
+            <text x="50" y="47" text-anchor="middle" class="dist-donut__total">${total}</text>
+            <text x="50" y="60" text-anchor="middle" class="dist-donut__unit">${unit}</text>
+        </svg>`;
+    }
+
+    _barViz(data, max) {
+        const rows = data.map(d => {
+            const pct = max > 0 ? (d.count / max * 100).toFixed(1) : 0;
+            return `<div class="dist-bar">
+                <span class="dist-bar__label">${d.label}</span>
+                <span class="dist-bar__track"><span class="dist-bar__fill" style="width:${pct}%;background:${d.color}"></span></span>
+                <span class="dist-bar__count">${d.count}次</span>
+            </div>`;
+        }).join('');
+        return `<div class="dist-bars">${rows}</div>`;
+    }
+
+    _distLegend(data, total, type, unit = '') {
+        const rows = data.map(d => {
+            const pct = total > 0 ? Math.round(d.count / total * 100) : 0;
+            const countLabel = type === 'bar' ? `${d.count}次` : `${d.count}${unit}`;
+            const pctCell = type === 'bar' ? '' : `<span class="dist-legend__pct">${pct}%</span>`;
+            return `<div class="dist-legend__row">
+                <span class="dist-legend__dot" style="background:${d.color}"></span>
+                <span class="dist-legend__label">${d.label}</span>
+                <span class="dist-legend__count">${countLabel}</span>
+                ${pctCell}
+            </div>`;
+        }).join('');
+        return `<div class="dist-legend">${rows}</div>`;
     }
 }
