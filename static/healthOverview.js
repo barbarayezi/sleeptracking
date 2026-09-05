@@ -11,6 +11,34 @@
  * Exposes: HealthOverview class
  */
 
+// Module-level lookup for help modal — populated on every render so a fresh
+// /api/health-overview response always feeds accurate context.
+const _HO_METRIC_HELP = {};
+
+// Plain-language glossary used by the "?" help button. Each entry explains
+// one visual element in 1–2 sentences for someone who knows no statistics.
+// Tooltips on the legend chips give a one-liner; this is the long-form.
+const _HO_GLOSSARY = [
+    { key: 'raw',  title: '原始数据',
+      desc: '每天的实测值（折线 + 点）。看到点就说明那天真的记录到了。' },
+    { key: 'sma7', title: '7 日均值',
+      desc: '过去 7 天（含今天）的滚动平均值。它会平滑掉单日的随机噪声，让你看清"大致方向"。' },
+    { key: 'sd1',  title: '±1 SD（标准差带）',
+      desc: '过去一段时间里大多数日子的波动范围（中心 ±1 个标准差）。浅色窄带落在里面 = 正常。' },
+    { key: 'ci95', title: '95% CI 均值',
+      desc: '均值附近的"可信范围"。如果今天的值落在带外，有 95% 以上的把握判断它是异常的。' },
+    { key: 'p25',  title: 'P25–P75（四分位距）',
+      desc: '小框表示当前附近 50% 的数据落在哪里。框越窄 = 数据越稳。' },
+    { key: 'ols',  title: '线性趋势 OLS (R²)',
+      desc: '用最小二乘法画的长期趋势虚线，旁边会附 R²（0–1）。R² 越大，趋势越值得信。' },
+    { key: 'cur',  title: '当前值（红圈）',
+      desc: '今天/最新一天的实际读数，用于和历史分布做对比。' },
+    { key: 'z2',   title: 'Z > 2 异常值',
+      desc: '偏离历史均值超过 2 个标准差的点（出现概率 <5%）。⚠ 标记越多越需要关注原因。' },
+    { key: 'gap',  title: '缺失值',
+      desc: '该日没有数据（漏记 / 同步失败 / 设备未佩戴），不是真的健康问题。' },
+];
+
 class HealthOverview {
     constructor() {
         this.el = document.getElementById('health-overview');
@@ -121,12 +149,25 @@ class HealthOverview {
         if (medStrip) html += medStrip;
 
         // ════ TIER 1: CORE SCORE TRIO ════
+        // Register metric explanations so the "?" help button can look them up
+        // without stuffing them into data-attributes (cleaner + no escape risk).
+        for (const m of coreMetrics) {
+            _HO_METRIC_HELP[m.key] = {
+                label: m.label, sub: m.sub, unit: m.unit, explain: m.explain || '',
+            };
+        }
         html += '<div class="ho2-core-row">';
         for (const m of coreMetrics) {
             html += `<div class="ho2-core-card" data-metric="${m.key}">
                 <div class="ho2-core__head">
                     <div>
-                        <div class="ho2-core__label">${m.label}</div>
+                        <div class="ho2-core__label">
+                            ${m.label}
+                            <button type="button" class="ho-help-btn"
+                                title="看图说明（写给小白）"
+                                data-help-key="${m.key}"
+                                aria-label="看图说明">?</button>
+                        </div>
                         <div class="ho2-core__sub">${m.sub}</div>
                     </div>
                     <div class="ho2-core__score-wrap">
@@ -139,15 +180,24 @@ class HealthOverview {
                     <canvas class="ho2-core-canvas" id="ho2-canvas-${m.key}"></canvas>
                 </div>
                 <div class="ho2-legend" id="ho2-legend-${m.key}">
-                    <span class="ho2-legend__item"><span class="ho2-legend__swatch" style="background:${m.color}"></span>原始数据</span>
-                    <span class="ho2-legend__item"><span class="ho2-legend__swatch" style="background:${m.colorRgba}0.7)"></span>7日均值</span>
-                    <span class="ho2-legend__item"><span class="ho2-legend__swatch ho2-legend__swatch--band" style="background:${m.colorRgba}0.13)"></span>±1 SD</span>
-                    <span class="ho2-legend__item"><span class="ho2-legend__swatch" style="background:${m.colorRgba}0.20); border-top:1px dashed #475569"></span>95% CI均值</span>
-                    <span class="ho2-legend__item"><span class="ho2-legend__swatch ho2-legend__swatch--dash"></span>线性 OLS (R²)</span>
-                    <span class="ho2-legend__item"><span class="ho2-legend__swatch ho2-legend__swatch--red-ring"></span>当前值</span>
-                    <span class="ho2-legend__item"><span class="ho2-legend__swatch ho2-legend__swatch--warn">⚠</span>Z&gt;2 异常值</span>
-                    <span class="ho2-legend__item"><span class="ho2-legend__swatch ho2-legend__swatch--gap"></span>缺失值</span>
-                    <span class="ho2-legend__item"><span class="ho2-legend__swatch ho2-legend__swatch--box" style="color:${m.color}"></span>P25–P75</span>
+                    <span class="ho2-legend__group">
+                        <span class="ho2-legend__group-title">数据</span>
+                        <span class="ho2-legend__item" title="每天的实测数据点（折线+点）"><span class="ho2-legend__swatch" style="background:${m.color}"></span>原始数据</span>
+                        <span class="ho2-legend__item" title="过去 7 天的均值，平滑短期波动"><span class="ho2-legend__swatch" style="background:${m.colorRgba}0.7)"></span>7日均值</span>
+                    </span>
+                    <span class="ho2-legend__group">
+                        <span class="ho2-legend__group-title">分布参考</span>
+                        <span class="ho2-legend__item" title="过去一段时间的 ±1 标准差带——大多数正常日都落在里面"><span class="ho2-legend__swatch ho2-legend__swatch--band" style="background:${m.colorRgba}0.13)"></span>±1 SD</span>
+                        <span class="ho2-legend__item" title="均值附近的 95% 置信带——判断今天是否异常"><span class="ho2-legend__swatch" style="background:${m.colorRgba}0.20); border-top:1px dashed #475569"></span>95% CI均值</span>
+                        <span class="ho2-legend__item" title="小框 = 当前点的 25–75 百分位跨度（中段 50% 数据范围）"><span class="ho2-legend__swatch ho2-legend__swatch--box" style="color:${m.color}"></span>P25–P75</span>
+                    </span>
+                    <span class="ho2-legend__group">
+                        <span class="ho2-legend__group-title">标注</span>
+                        <span class="ho2-legend__item" title="最小二乘拟合的长期趋势线，附 R² 反映趋势可信度（0–1，越大越稳）"><span class="ho2-legend__swatch ho2-legend__swatch--dash"></span>线性 OLS (R²)</span>
+                        <span class="ho2-legend__item" title="今天的实测值（红圈）"><span class="ho2-legend__swatch ho2-legend__swatch--red-ring"></span>当前值</span>
+                        <span class="ho2-legend__item" title="偏离历史均值 >2 个标准差的异常点（概率 <5%，需关注）"><span class="ho2-legend__swatch ho2-legend__swatch--warn">⚠</span>Z&gt;2 异常值</span>
+                        <span class="ho2-legend__item" title="该日未记录 / 同步失败（虚线）"><span class="ho2-legend__swatch ho2-legend__swatch--gap"></span>缺失值</span>
+                    </span>
                 </div>
                 <div class="ho2-core__stats" id="ho2-stats-${m.key}"></div>
             </div>`;
@@ -193,6 +243,74 @@ class HealthOverview {
         // Draw all charts
         for (const m of coreMetrics) this._drawCoreMetric(m, days);
         for (const m of physioMetrics) this._drawPhysioMetric(m, days);
+
+        // Wire the per-card "?" help buttons (event delegation; re-bound per render)
+        this._wireHelpButtons();
+    }
+
+    /**
+     * Wire all .ho-help-btn buttons inside the dashboard to a single shared
+     * click handler. Use event delegation on the dashboard root so re-renders
+     * don't leak handlers.
+     */
+    _wireHelpButtons() {
+        if (!this.el) return;
+        if (!this._helpDelegateBound) {
+            this._helpDelegateBound = true;
+            this.el.addEventListener('click', (e) => {
+                const btn = e.target.closest('.ho-help-btn');
+                if (!btn) return;
+                const key = btn.dataset.helpKey;
+                if (key) this._openHelp(key);
+            });
+        }
+    }
+
+    /**
+     * Open the help modal with both the metric-specific explain and the
+     * generic visual-element glossary. Lazy-creates the DOM node once.
+     */
+    _openHelp(key) {
+        const info = _HO_METRIC_HELP[key] || {};
+        let m = document.getElementById('ho-help-modal');
+        if (!m) {
+            m = document.createElement('div');
+            m.id = 'ho-help-modal';
+            m.className = 'ho-help-modal hidden';
+            m.setAttribute('role', 'dialog');
+            m.setAttribute('aria-modal', 'true');
+            m.innerHTML = `
+                <div class="ho-help-modal__backdrop"></div>
+                <div class="ho-help-modal__panel">
+                    <button type="button" class="ho-help-modal__close" aria-label="关闭">×</button>
+                    <h3 class="ho-help-modal__title"></h3>
+                    <p class="ho-help-modal__sub"></p>
+                    <p class="ho-help-modal__explain"></p>
+                    <h4 class="ho-help-modal__h4">📖 图表元素速查（小白友好）</h4>
+                    <dl class="ho-help-modal__glossary"></dl>
+                </div>
+            `;
+            document.body.appendChild(m);
+            const close = () => m.classList.add('hidden');
+            m.querySelector('.ho-help-modal__backdrop').addEventListener('click', close);
+            m.querySelector('.ho-help-modal__close').addEventListener('click', close);
+            document.addEventListener('keydown', (ev) => {
+                if (ev.key === 'Escape' && !m.classList.contains('hidden')) close();
+            });
+        }
+        m.querySelector('.ho-help-modal__title').textContent =
+            `${info.label || '指标'} ${info.sub ? '· ' + info.sub : ''}`;
+        m.querySelector('.ho-help-modal__sub').textContent =
+            info.unit ? `单位：${info.unit}` : '';
+        m.querySelector('.ho-help-modal__explain').textContent =
+            info.explain || '（暂无专项说明，请结合下方的视觉元素速查表阅读）';
+
+        const glossary = m.querySelector('.ho-help-modal__glossary');
+        glossary.innerHTML = _HO_GLOSSARY.map(g => `
+            <dt>${g.title}</dt>
+            <dd>${g.desc}</dd>
+        `).join('');
+        m.classList.remove('hidden');
     }
 
     /* ── Medication adherence strip ────────────────────────
