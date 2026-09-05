@@ -1288,6 +1288,60 @@ body {
 .summary-stat { display: flex; flex-direction: column; line-height: 1.2; }
 .summary-stat__val { font-size: 20px; font-weight: 800; color: var(--gray-900); font-variant-numeric: tabular-nums; }
 .summary-stat__label { font-size: 12px; color: var(--gray-500); margin-top: 2px; }
+
+/* ── Report Center (daily / weekly / monthly analysis reports) ── */
+.report-center-controls { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
+.report-center-period-tabs { display: inline-flex; gap: 0; border: 1px solid var(--gray-300); border-radius: var(--radius-sm); overflow: hidden; width: fit-content; background: var(--gray-50); }
+.report-center-tab { padding: 7px 18px; font-size: 13px; font-weight: 600; background: transparent; color: var(--gray-600); border: none; cursor: pointer; transition: background .15s ease, color .15s ease; }
+.report-center-tab:hover { background: var(--gray-100); color: var(--gray-900); }
+.report-center-tab.is-active { background: var(--primary); color: #fff; }
+.report-center-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.report-center-date { padding: 6px 12px; border: 1px solid var(--gray-300); border-radius: var(--radius-sm); font-size: 13px; background: #fff; color: var(--gray-900); font-variant-numeric: tabular-nums; }
+.report-center-status { font-size: 12.5px; color: var(--gray-500); }
+.report-center-status.is-success { color: var(--success); }
+.report-center-status.is-error { color: var(--danger); }
+.report-center-status.is-warn { color: var(--warning); }
+.report-center-status.is-pending { color: var(--primary); }
+.report-center-history { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--gray-600); }
+.report-center-history select {
+    background: var(--bg-card); color: var(--text); border: 1px solid var(--gray-300);
+    border-radius: var(--radius-sm); padding: 5px 12px; font-size: 13px; cursor: pointer; font-weight: 600;
+    min-width: 180px;
+}
+.report-center-output { margin-top: 14px; padding: 18px 20px; background: var(--gray-50); border: 1px solid var(--gray-200); border-radius: var(--radius); }
+.report-center-output.hidden { display: none; }
+.report-center-error { color: var(--danger); }
+.report-center-meta { display: flex; gap: 8px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px dashed var(--gray-200); }
+.report-center-period-chip, .report-center-date-chip {
+    font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: var(--radius-pill);
+    background: var(--primary-soft); color: var(--primary);
+}
+.report-center-date-chip { background: var(--gray-100); color: var(--gray-700); font-variant-numeric: tabular-nums; }
+.report-center-body { line-height: 1.75; color: var(--gray-800); font-size: 14px; }
+.report-center-body h2 { font-size: 17px; font-weight: 700; margin: 14px 0 8px; color: var(--gray-900); }
+.report-center-body h3 { font-size: 15px; font-weight: 700; margin: 12px 0 6px; color: var(--gray-800); }
+.report-center-body h4 { font-size: 14px; font-weight: 700; margin: 10px 0 6px; color: var(--gray-700); }
+.report-center-body p { margin: 0 0 10px; }
+.report-center-body ul { margin: 6px 0 10px 20px; padding: 0; }
+.report-center-body li { margin: 4px 0; }
+.report-center-body strong { color: var(--gray-900); }
+.report-center-chat { margin-top: 14px; padding: 14px 16px; background: #fff; border: 1px solid var(--gray-200); border-radius: var(--radius); }
+.report-center-chat.hidden { display: none; }
+.report-center-chat__hint { font-size: 12.5px; color: var(--gray-500); margin-bottom: 10px; }
+.report-center-chat__messages { display: flex; flex-direction: column; gap: 10px; max-height: 320px; overflow-y: auto; padding-right: 4px; margin-bottom: 10px; }
+.report-center-msg { display: flex; align-items: flex-start; gap: 8px; }
+.report-center-msg--user { flex-direction: row-reverse; }
+.report-center-msg__icon { flex-shrink: 0; width: 26px; height: 26px; display: grid; place-items: center; border-radius: 50%; background: var(--gray-100); font-size: 13px; }
+.report-center-msg__bubble { padding: 9px 14px; border-radius: var(--radius-lg); background: var(--gray-100); color: var(--gray-800); line-height: 1.6; font-size: 13px; max-width: 88%; word-break: break-word; }
+.report-center-msg--user .report-center-msg__bubble { background: var(--primary); color: #fff; }
+.report-center-chat__input { display: flex; gap: 8px; }
+.report-center-chat__input input {
+    flex: 1; padding: 8px 14px; border: 1px solid var(--gray-300); border-radius: var(--radius-pill);
+    font-size: 13px; outline: none; background: #fff; color: var(--gray-900);
+}
+.report-center-chat__input input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+.report-center-chat__input input:disabled { opacity: .6; cursor: not-allowed; }
+.report-center-chat__tip { margin-top: 6px; font-size: 12px; color: var(--gray-500); text-align: center; }
 .macro-bar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; margin-top: 10px; background: var(--gray-200); }
 .macro-seg { display: block; }
 .macro-seg--protein { background: var(--primary); }

@@ -752,6 +752,122 @@ def daily_brief(yesterday, today, meal_summary, morning, trends=None, profile=No
     return {"ok": True, "data": {"brief": text}}
 
 
+# ── Weekly / monthly summaries ───────────────────────
+
+
+_WEEKLY_PROMPT = """你是用户长期跟踪的私人健康教练 + 营养师 + 体能顾问。中文、口语化、有专业度。
+
+请用「6–10 句」自然段（不要 bullet 堆砌）回应一段【周总结】（周期 {period_label}，{from_date} 至 {to_date}）。
+用户希望每周都能保留一份可回看的总结，所以语气可以稍正式一些，但仍然口语化、有温度。
+
+【本周饮食概览（{from_date} – {to_date}）】
+{weekly_diet_block}
+
+【本周身体指标概览（{from_date} – {to_date}）】
+{weekly_metrics_block}
+
+【本周睡眠概览（{from_date} – {to_date}）】
+{weekly_sleep_block}
+
+【本周 7 日趋势 / 对比上周】
+{trends_block}
+
+【用户基础信息（可能为空，未填则跳过）】
+{profile_block}
+
+解读要求：
+1. 给出本周的整体走向（向上/向下/平稳），用一句话点出最值得关注的趋势。
+2. 饮食：本周平均热量、营养素是否均衡、有无亮点/隐忧。
+3. 身体：体重、饮水量、步数的变化方向，与上周对比（百分比或绝对值均可）。
+4. 睡眠：平均时长、平均质量、最差一天与原因（结合 sleep_summary 的结构化数据）。
+5. 给 2 条「下周就能做」的具体行动（不要堆清单）。
+6. 数据缺失项要明确说明「本周未记录…」，不要编造。
+"""
+
+
+_MONTHLY_PROMPT = """你是用户长期跟踪的私人健康教练 + 营养师 + 体能顾问。中文、口语化、有专业度。
+
+请用「8–14 句」自然段（不要 bullet 堆砌）回应一段【月总结】（周期 {period_label}，{from_date} 至 {to_date}）。
+用户希望每月都能保留一份可回看的长期总结，请重点放在「整体走向 + 与既往对比 + 长期趋势解读」。
+
+【本月饮食概览（{from_date} – {to_date}）】
+{weekly_diet_block}
+
+【本月身体指标概览（{from_date} – {to_date}）】
+{weekly_metrics_block}
+
+【本月睡眠概览（{from_date} – {to_date}）】
+{weekly_sleep_block}
+
+【本月 30 日趋势 / 与上月对比（若有）】
+{trends_block}
+
+【用户基础信息（可能为空，未填则跳过）】
+{profile_block}
+
+解读要求：
+1. 一句话总结本月主旋律。
+2. 饮食：平均日热量、营养结构、最常出现的「问题餐」类型（例如高糖/过咸/极端低脂等模式）。
+3. 身体：体重月度趋势（升/降/平稳）、饮水量是否稳定、步数活跃日占比。
+4. 睡眠：整月平均时长/质量、变化趋势、最差的几天与可能原因。
+5. 与上月（或月初）对比，给出关键指标的方向性结论。
+6. 给 3 条「下月可尝试」的具体行动建议。
+7. 数据缺失项要明确说明「本月未记录…」，不要编造。
+"""
+
+
+def weekly_brief(period_start, period_end, weekly_aggregates, trends=None, profile=None):
+    """Generate a weekly or monthly summary over the period.
+
+    Args:
+        period_start, period_end: ISO dates (inclusive) of the period.
+        weekly_aggregates: dict with keys weekly_diet / weekly_metrics /
+                          weekly_sleep (each a human-readable summary string
+                          produced by app.py helpers).
+        trends: optional pre-formatted trend block string (already rendered).
+        profile: optional user profile dict.
+
+    Returns: ok-shape dict ({"ok": True, "data": {"brief": str}} or error).
+    """
+    base, key, _ = _load_config()
+    if not (base and key):
+        return {"ok": False, "error": "未配置 LLM。请设置 LLM_BASE_URL / LLM_API_KEY 环境变量。"}
+
+    n_days = _days_between(period_start, period_end)
+    period_label = '月' if n_days >= 28 else '周'
+
+    prompt = (_MONTHLY_PROMPT if n_days >= 28 else _WEEKLY_PROMPT).format(
+        period_label=period_label,
+        from_date=period_start,
+        to_date=period_end,
+        weekly_diet_block=weekly_aggregates.get('diet', '（本周/本月无饮食记录）'),
+        weekly_metrics_block=weekly_aggregates.get('metrics', '（本周/本月无身体指标）'),
+        weekly_sleep_block=weekly_aggregates.get('sleep', '（本周/本月无睡眠记录）'),
+        trends_block=trends or '（无 7 日趋势数据）',
+        profile_block=_build_profile_block(profile or {}),
+    )
+
+    try:
+        raw = _call_model(prompt, max_tokens=2400)
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+    text = _collect_text(raw)
+    if not text:
+        return {"ok": False, "error": "模型没有返回文本内容，请重试。"}
+
+    return {"ok": True, "data": {"brief": text}}
+
+
+def _days_between(a_iso, b_iso):
+    """Inclusive day count between two ISO dates."""
+    from datetime import date as _d
+    try:
+        return (_d.fromisoformat(b_iso) - _d.fromisoformat(a_iso)).days + 1
+    except Exception:
+        return 0
+
+
 
 def _build_diet_block(meal_summary):
     """Textual summary of yesterday's diet for prompts."""

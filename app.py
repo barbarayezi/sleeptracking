@@ -216,18 +216,9 @@ def delete_record(record_id):
 # ──────────────────────────────────────────────
 #  Reports & Stats
 # ──────────────────────────────────────────────
-
-@app.route('/api/report', methods=['GET'])
-def get_report():
-    """Generate a sleep analysis report."""
-    period = request.args.get('period', 'weekly')
-    from_date = request.args.get('from', None)
-
-    if period not in ('weekly', 'monthly'):
-        return jsonify({'error': 'period must be "weekly" or "monthly"'}), 400
-
-    report = generate_report(period=period, from_date=from_date)
-    return jsonify(report)
+#  Period-aware reports live under /api/reports/<period>/<date>
+#  (see lower in this file). The legacy /api/report route was retired when
+#  the standalone "睡眠分析报告" card was merged into the report center.
 
 
 @app.route('/api/stats', methods=['GET'])
@@ -1151,55 +1142,213 @@ def _format_combined_daily_report(sleep_summary, ai_brief_text):
     return '\n'.join(lines)
 
 
-@app.route('/api/daily-report', methods=['GET'])
-def get_daily_report():
-    """Return the saved combined report for a specific date."""
-    date = request.args.get('date') or _today_local()
+# ──────────────────────────────────────────────
+#  Analysis Reports (period-aware: daily / weekly / monthly)
+# ──────────────────────────────────────────────
+
+
+def _period_bounds(period, anchor_iso):
+    """Return (start, end, n_days) for the given period around the anchor date.
+
+    - daily:   start == end == anchor
+    - weekly:  start = Monday of anchor's week, end = Sunday of same week
+    - monthly: start = first of anchor's month, end = last day of same month
+    """
+    from datetime import date as _d, timedelta as _td
+    try:
+        anchor = _d.fromisoformat(anchor_iso)
+    except (ValueError, TypeError):
+        anchor = _d.today()
+    if period == 'daily':
+        return anchor.isoformat(), anchor.isoformat(), 1
+    if period == 'weekly':
+        # ISO weekday: Monday=1 … Sunday=7
+        start = anchor - _td(days=anchor.weekday() - 1)
+        end = start + _td(days=6)
+        return start.isoformat(), end.isoformat(), 7
+    if period == 'monthly':
+        start = anchor.replace(day=1)
+        # First day of next month minus one day
+        if start.month == 12:
+            next_first = start.replace(year=start.year + 1, month=1)
+        else:
+            next_first = start.replace(month=start.month + 1)
+        end = next_first - _td(days=1)
+        return start.isoformat(), end.isoformat(), (end - start).days + 1
+    raise ValueError(f'period must be daily/weekly/monthly, got {period!r}')
+
+
+def _aggregate_meals(from_date, to_date):
+    """Aggregate meal_records over [from_date, to_date] inclusive."""
+    all_meals = []
+    for r in models.get_all_records.__module__:  # noqa — placeholder
+        pass
+    # Simpler: just call models.get_all_records(from=..., to=...) doesn't exist
+    # for meals; use the per-date helper in a loop is wasteful. Use a direct
+    # query instead.
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT * FROM meal_records WHERE meal_date >= ? AND meal_date <= ? "
+        "ORDER BY meal_date ASC, meal_time ASC",
+        (from_date, to_date),
+    ).fetchall()
+    meals = []
+    for r in rows:
+        d = dict(r)
+        if d.get('items_json'):
+            try:
+                d['items'] = json.loads(d['items_json'])
+            except (ValueError, TypeError):
+                d['items'] = []
+        meals.append(d)
+    return meals
+
+
+def _aggregate_sleep(from_date, to_date):
+    """Run the existing reports.py pipeline over [from_date, to_date]."""
+    from datetime import date as _d
+    from reports import generate_report
+    span = (_d.fromisoformat(to_date) - _d.fromisoformat(from_date)).days + 1
+    period = 'monthly' if span > 7 else 'weekly'
+    return generate_report(period=period, from_date=from_date)
+
+
+@app.route('/api/reports/<period>/<date>', methods=['GET'])
+def get_report_by_period(period, date):
+    """Return a saved report by (period, date)."""
+    if period not in ('daily', 'weekly', 'monthly'):
+        return jsonify({'error': 'period must be daily/weekly/monthly'}), 400
     try:
         from datetime import date as _d
         _d.fromisoformat(date)
     except ValueError:
         return jsonify({'error': 'date 参数格式应为 YYYY-MM-DD'}), 400
-
-    report = daily_report_models.get_daily_report(date)
+    report = daily_report_models.get_report(period, date)
     if not report:
-        return jsonify({'date': date, 'report': None}), 404
-    return jsonify({'date': date, 'report': report})
+        return jsonify({'period': period, 'date': date, 'report': None}), 404
+    return jsonify({'period': period, 'date': date, 'report': report})
 
 
-@app.route('/api/daily-report/dates', methods=['GET'])
-def list_daily_report_dates():
-    """List dates that already have a saved combined report."""
+@app.route('/api/reports/<period>/dates', methods=['GET'])
+def list_report_dates(period):
+    """List saved dates for a given period (newest first)."""
+    if period not in ('daily', 'weekly', 'monthly'):
+        return jsonify({'error': 'period must be daily/weekly/monthly'}), 400
     limit = request.args.get('limit', 365, type=int)
     offset = request.args.get('offset', 0, type=int)
-    dates = daily_report_models.list_daily_report_dates(limit=limit, offset=offset)
-    return jsonify({'dates': dates})
+    dates = daily_report_models.list_report_dates(period=period, limit=limit, offset=offset)
+    return jsonify({'period': period, 'dates': dates})
 
 
-@app.route('/api/daily-report/generate', methods=['POST'])
-def generate_daily_report():
-    """Generate and persist a combined daily report for the given date.
+def _build_weekly_aggregates(from_date, to_date):
+    """Build human-readable aggregate strings for the AI prompt."""
+    # Diet
+    meals = _aggregate_meals(from_date, to_date)
+    if meals:
+        meal_summary = nutrition.summarize(meals)
+        diet = (
+            f"共 {meal_summary['meal_count']} 餐，总热量约 {round(meal_summary['kcal'])} kcal；"
+            f"蛋白 {meal_summary['protein_g']}g / 脂肪 {meal_summary['fat_g']}g / 碳水 {meal_summary['carbs_g']}g"
+            + (f"；平均健康分 {meal_summary['avg_score']}/10" if meal_summary.get('avg_score') is not None else "")
+        )
+    else:
+        diet = '（本周/本月无饮食记录）'
 
-    Combines:
-      - Sleep summary for the date (from sleep_records)
-      - AI cross-day brief (yesterday diet + this morning metrics)
+    # Sleep: re-use the structured pipeline
+    sleep_block = _aggregate_sleep(from_date, to_date)
+    # sleep_block is the full generate_report dict — we only want the high-
+    # level stats in the prompt. Extract a compact summary.
+    sleep_summary_text = _summarize_sleep_report(sleep_block)
+
+    # Body metrics: aggregate weight / water / steps from sleep_records (these
+    # live on the night record).
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT weight, water_cups, steps FROM sleep_records "
+        "WHERE record_date >= ? AND record_date <= ?",
+        (from_date, to_date),
+    ).fetchall()
+    weights = [r['weight'] for r in rows if r['weight'] is not None]
+    waters = [r['water_cups'] for r in rows if r['water_cups'] is not None]
+    steps = [r['steps'] for r in rows if r['steps'] is not None]
+    metrics = []
+    if weights:
+        metrics.append(f"体重 {len(weights)} 天记录，均值 {sum(weights)/len(weights):.1f} kg（区间 {min(weights):.1f}–{max(weights):.1f}）")
+    if waters:
+        avg_cup = sum(waters)/len(waters)
+        metrics.append(f"饮水 {len(waters)} 天记录，日均 {avg_cup:.1f} 杯")
+    if steps:
+        avg_step = sum(steps)/len(steps)
+        metrics.append(f"步数 {len(steps)} 天记录，日均 {avg_step:.0f}")
+    metrics_text = '；'.join(metrics) or '（本周/本月无身体指标）'
+
+    return {'diet': diet, 'sleep': sleep_summary_text, 'metrics': metrics_text}
+
+
+def _summarize_sleep_report(rep):
+    """Pull the headline numbers from a reports.py output dict."""
+    if not isinstance(rep, dict):
+        return '（睡眠报告生成失败）'
+    total_days = rep.get('total_days_recorded')
+    avg_hours = rep.get('avg_sleep_hours')
+    parts = []
+    if total_days:
+        parts.append(f"记录 {total_days} 天")
+    if avg_hours is not None:
+        parts.append(f"平均时长 {avg_hours}h")
+    qb = rep.get('quality_breakdown') or {}
+    if qb:
+        parts.append(f"质量 良好 {qb.get('good', 0)} / 一般 {qb.get('average', 0)} / 较差 {qb.get('poor', 0)}")
+    cb = rep.get('classification_breakdown') or {}
+    if cb:
+        parts.append(f"入睡 早 {cb.get('early', 0)} / 晚 {cb.get('late', 0)}")
+    if not parts:
+        return '（本周/本月无睡眠记录）'
+    return '；'.join(parts)
+
+
+@app.route('/api/reports/<period>/generate', methods=['POST'])
+def generate_report_by_period(period):
+    """Generate and persist a report for the given period.
+
+    For `daily`: existing logic — sleep summary for the date + AI cross-day
+    brief (yesterday diet + this morning metrics + sleep subjective feedback).
+
+    For `weekly` / `monthly`: aggregate diet / sleep / body metrics over the
+    period, then ask the LLM for a period summary.
     """
     from datetime import date as _d, timedelta as _td
+
+    if period not in ('daily', 'weekly', 'monthly'):
+        return jsonify({'error': 'period must be daily/weekly/monthly'}), 400
+
     date = request.args.get('date') or _today_local()
     try:
         d0 = _d.fromisoformat(date)
     except ValueError:
         return jsonify({'error': 'date 参数格式应为 YYYY-MM-DD'}), 400
 
+    try:
+        period_start, period_end, n_days = _period_bounds(period, date)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+
+    if period == 'daily':
+        return _generate_daily_report_for(d0)
+    return _generate_periodic_report(period, period_start, period_end)
+
+
+def _generate_daily_report_for(d0):
+    """Daily report — sleep summary for `d0` + AI cross-day brief for `d0-1`."""
+    from datetime import timedelta as _td
+    date = d0.isoformat()
     yesterday = (d0 - _td(days=1)).isoformat()
 
-    # Sleep summary for the target date
     try:
         sleep_summary = _compute_daily_sleep_summary(date)
     except Exception as e:
         return jsonify({'error': f'读取睡眠记录失败：{e}'}), 500
 
-    # AI brief: yesterday diet + this morning metrics
     try:
         meals = meal_models.get_all_meals(date=yesterday)
     except Exception as e:
@@ -1211,11 +1360,13 @@ def generate_daily_report():
     profile = _profile_defaults()
 
     try:
-        result = nutrition.daily_brief(yesterday, date, meal_summary, morning,
-                                       trends=trends, profile=profile,
-                                       medication=_medication_context(date),
-                                       dream_journal=morning.get('dream_journal'),
-                                       sleep_problems=morning.get('sleep_problems'))
+        result = nutrition.daily_brief(
+            yesterday, date, meal_summary, morning,
+            trends=trends, profile=profile,
+            medication=_medication_context(date),
+            dream_journal=morning.get('dream_journal'),
+            sleep_problems=morning.get('sleep_problems'),
+        )
     except Exception as e:
         return jsonify({'error': f'生成 AI 简报失败：{e}'}), 500
 
@@ -1225,14 +1376,129 @@ def generate_daily_report():
     ai_brief_text = result['data']['brief']
     combined_text = _format_combined_daily_report(sleep_summary, ai_brief_text)
 
+    # Preserve any existing chat history when re-generating.
+    existing = daily_report_models.get_report('daily', date)
+    chat = (existing or {}).get('chat') or []
+
     try:
-        report = daily_report_models.save_daily_report(
-            date, sleep_summary, ai_brief_text, combined_text
+        report = daily_report_models.save_report(
+            'daily', date, sleep_summary, ai_brief_text,
+            combined_text=combined_text, chat=chat,
         )
     except Exception as e:
         return jsonify({'error': f'保存报告失败：{e}'}), 500
 
-    return jsonify({'date': date, 'report': report})
+    return jsonify({'period': 'daily', 'date': date, 'report': report})
+
+
+def _generate_periodic_report(period, period_start, period_end):
+    """Weekly / monthly report — aggregate + LLM summary."""
+    aggregates = _build_weekly_aggregates(period_start, period_end)
+    trends = None  # could plug in cross-period trend comparison here
+    profile = _profile_defaults()
+
+    try:
+        result = nutrition.weekly_brief(
+            period_start, period_end,
+            weekly_aggregates=aggregates,
+            trends=trends,
+            profile=profile,
+        )
+    except Exception as e:
+        return jsonify({'error': f'生成 {period} 简报失败：{e}'}), 500
+
+    if not result.get('ok'):
+        return jsonify({'error': result.get('error', '生成失败')}), 502
+
+    ai_brief_text = result['data']['brief']
+
+    # sleep_summary field stores the aggregate blocks (so they survive across
+    # re-renders). combined_text is the full markdown with header + summary.
+    sleep_summary_blob = aggregates
+    combined_text = (
+        f'# {period_start} ~ {period_end} '
+        f'{"月度" if period == "monthly" else "周度"}综合报告\n\n'
+        f'## 📊 数据概览\n{aggregates["diet"]}\n{aggregates["metrics"]}\n{aggregates["sleep"]}\n\n'
+        f'## 🤖 AI 简报\n\n{ai_brief_text}'
+    )
+
+    try:
+        report = daily_report_models.save_report(
+            period, period_start, sleep_summary_blob, ai_brief_text,
+            combined_text=combined_text, chat=[],
+        )
+    except Exception as e:
+        return jsonify({'error': f'保存报告失败：{e}'}), 500
+
+    return jsonify({'period': period, 'date': period_start, 'report': report})
+
+
+@app.route('/api/reports/daily/<date>/chat', methods=['POST'])
+def chat_in_daily_report(date):
+    """Append a user message + AI reply to the daily report's chat history.
+
+    Persists both turns in `daily_reports.chat_json` so the conversation is
+    preserved as part of the saved report and viewable later.
+    """
+    from datetime import date as _d
+    try:
+        _d.fromisoformat(date)
+    except ValueError:
+        return jsonify({'error': 'date 参数格式应为 YYYY-MM-DD'}), 400
+
+    data = request.get_json(silent=True) or {}
+    user_message = (data.get('message') or '').strip()
+    if not user_message:
+        return jsonify({'error': 'message 不能为空'}), 400
+
+    # Persist the user turn first so even a downstream LLM failure keeps history.
+    daily_report_models.append_chat_message('daily', date, 'user', user_message)
+
+    # Reuse the existing /api/daily-brief/chat LLM pipeline by re-implementing
+    # the call here (so the route works even if that endpoint is later removed).
+    yesterday = (_d.fromisoformat(date) - __import__('datetime').timedelta(days=1)).isoformat()
+    meals = meal_models.get_all_meals(date=yesterday)
+    meal_summary = nutrition.summarize(meals)
+    morning = _extract_morning(date)
+    trends = _compute_7d_trends(date)
+    profile = _profile_defaults()
+    existing = daily_report_models.get_report('daily', date)
+    previous_brief = (existing or {}).get('ai_brief_text') or ''
+    history = ((existing or {}).get('chat') or [])[:-1]  # exclude the just-appended user turn
+
+    try:
+        result = nutrition.chat_brief(
+            yesterday, date, meal_summary, morning,
+            previous_brief, user_message,
+            history=history,
+            trends=trends, profile=profile,
+            medication=_medication_context(date),
+            dream_journal=morning.get('dream_journal'),
+            sleep_problems=morning.get('sleep_problems'),
+        )
+    except Exception as e:
+        return jsonify({'error': f'AI 回复失败：{e}'}), 502
+
+    if not result.get('ok'):
+        return jsonify({'error': result.get('error', '回复失败')}), 502
+
+    daily_report_models.append_chat_message('daily', date, 'assistant', result['data']['reply'])
+    return jsonify(daily_report_models.get_report('daily', date))
+
+
+@app.route('/api/reports/daily/<date>/chat', methods=['GET'])
+def get_daily_chat_history(date):
+    """Return the persisted chat history for a daily report (so the UI can
+    restore a previous conversation on refresh or date jump)."""
+    from datetime import date as _d
+    try:
+        _d.fromisoformat(date)
+    except ValueError:
+        return jsonify({'error': 'date 参数格式应为 YYYY-MM-DD'}), 400
+    report = daily_report_models.get_report('daily', date)
+    if not report:
+        return jsonify({'date': date, 'chat': []})
+    return jsonify({'date': date, 'chat': report.get('chat') or []})
 
 
 # ──────────────────────────────────────────────

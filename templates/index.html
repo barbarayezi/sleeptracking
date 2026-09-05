@@ -39,7 +39,6 @@
             <a href="#group-display" class="cat-nav-item active">📊 图表展示</a>
             <a href="#group-actions" class="cat-nav-item">🔗 数据同步</a>
             <a href="#group-forms" class="cat-nav-item">✍️ 手动记录</a>
-            <a href="#group-agent" class="cat-nav-item">💬 AI 分析</a>
         </nav>
     </div>
 
@@ -119,21 +118,38 @@
         <div class="category-group" id="group-display">
             <div class="category-banner"><span>📊</span> 图表与展示</div>
 
-            <!-- SECTION: DAILY COMBINED REPORT -->
-            <section class="card daily-report-section">
-                <h2>📋 每日综合报告</h2>
-                <p class="section-hint">把当天睡眠摘要与 AI 分析结论合并保存，随时通过日期跳转回看。</p>
-                <div class="daily-report-controls">
-                    <button type="button" id="btn-daily-report-generate" class="btn btn-ai">🤖 生成/刷新当日报告</button>
-                    <span id="daily-report-status" class="daily-report-status"></span>
-                    <div class="daily-report-date-jump">
-                        <label for="daily-report-date-select">查看历史：</label>
-                        <select id="daily-report-date-select">
-                            <option value="">选择日期…</option>
+            <!-- SECTION: ANALYSIS REPORT CENTER -->
+            <section class="card report-center-section">
+                <h2>📊 分析报告中心</h2>
+                <p class="section-hint">支持日 / 周 / 月 三种周期的报告生成与保存。报告持久化保存后，可随时通过日期跳转回看。<strong>日报</strong>额外支持对 AI 简报继续追问，所有问答都会作为报告的一部分保存。</p>
+                <div class="report-center-controls">
+                    <div class="report-center-period-tabs" role="tablist" aria-label="报告周期">
+                        <button type="button" class="report-center-tab is-active" data-period="daily" role="tab">📅 日报</button>
+                        <button type="button" class="report-center-tab" data-period="weekly" role="tab">📆 周报</button>
+                        <button type="button" class="report-center-tab" data-period="monthly" role="tab">🗓️ 月报</button>
+                    </div>
+                    <div class="report-center-actions">
+                        <input type="date" id="report-center-anchor" class="report-center-date" title="报告锚定日期（日=当天；周=该周周一；月=该月1号）">
+                        <button type="button" id="btn-report-center-generate" class="btn btn-ai">🤖 生成并保存</button>
+                        <span id="report-center-status" class="report-center-status"></span>
+                    </div>
+                    <div class="report-center-history">
+                        <label for="report-center-history-select">查看历史：</label>
+                        <select id="report-center-history-select">
+                            <option value="">暂无已保存的「<span class="rc-current-period">日报</span>」</option>
                         </select>
                     </div>
                 </div>
-                <div id="daily-report-output" class="daily-report-output hidden"></div>
+                <div id="report-center-output" class="report-center-output hidden"></div>
+                <div id="report-center-chat" class="report-center-chat hidden">
+                    <div class="report-center-chat__hint">💬 对这份报告有疑问或补充？直接问——问答会作为今日报告的一部分保存。</div>
+                    <div id="report-center-chat-messages" class="report-center-chat__messages"></div>
+                    <div class="report-center-chat__input">
+                        <input type="text" id="report-center-chat-input" placeholder="例如：今晚要不要加一次复盘？" autocomplete="off">
+                        <button type="button" id="btn-report-center-chat-send" class="btn btn-ai">发送</button>
+                    </div>
+                    <div class="report-center-chat__tip">按 Enter 发送，AI 会基于该日数据继续回复</div>
+                </div>
             </section>
 
             <!-- SECTION: RESEARCH DASHBOARD -->
@@ -212,23 +228,7 @@
                 </div>
             </section>
 
-            <!-- SECTION: REPORT PANEL -->
-            <section class="card report-section">
-                <h2>📈 睡眠分析报告</h2>
-                <div class="report-controls">
-                    <label>
-                        报告周期：
-                        <select id="report-period">
-                            <option value="weekly">周报告</option>
-                            <option value="monthly">月报告</option>
-                        </select>
-                    </label>
-                    <button id="btn-generate-report" class="btn btn-primary">生成报告</button>
-                </div>
-                <div id="report-output" class="report-output">
-                    <p class="report-placeholder">点击"生成报告"查看睡眠分析。</p>
-                </div>
-            </section>
+            <!-- SECTION: REPORT PANEL (removed — merged into analysis report center) -->
         </div>
 
         <!-- ═══════════════════════════════════════ -->
@@ -853,21 +853,8 @@
         </div>
 
         <!-- ═══════════════════════════════════════ -->
-        <!--  CATEGORY 4: AI 分析 (嵌入 Agent 应用)     -->
+        <!--  CATEGORY 4: AI 分析 (merged into analysis report center)   -->
         <!-- ═══════════════════════════════════════ -->
-        <div class="category-group" id="group-agent">
-            <div class="category-banner"><span>💬</span> AI 分析</div>
-
-            <section class="card ai-agent-section">
-                <h2>🤖 健康数据分析师</h2>
-                <p class="section-hint">用自然语言随时分析你的睡眠 / Whoop 恢复 / 苹果健康 / 饮食数据。先生成今日的跨日分析，再针对它追问。</p>
-                <div class="ai-agent-actions">
-                    <button type="button" id="btn-agent-generate" class="btn btn-ai">🤖 生成今日分析</button>
-                    <span id="agent-status" class="agent-status"></span>
-                </div>
-                <div id="agent-result" class="ai-agent-result hidden"></div>
-            </section>
-        </div>
 
     </main>
 
@@ -881,12 +868,10 @@
     <script src="/static/medication.js?v=2"></script>
     <script src="/static/calendar.js?v=16"></script>
     <script src="/static/timeline.js?v=16"></script>
-    <script src="/static/reports.js?v=10"></script>
     <script src="/static/healthOverview.js?v=17"></script>
     <script src="/static/researchDashboard.js?v=1"></script>
     <script src="/static/hero.js?v=19"></script>
-    <script src="/static/agent.js?v=1"></script>
-    <script src="/static/dailyReport.js?v=1"></script>
+    <script src="/static/reportCenter.js?v=1"></script>
     <script src="/static/app.js?v=12"></script>
     <script>
         (function () {

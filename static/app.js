@@ -10,9 +10,7 @@ const App = {
     medication: null,
     timeline: null,
     calendar: null,
-    report: null,
     health: null,
-    dailyReport: null,
     research: null,
     currentDate: null,
     deferredInstallPrompt: null,
@@ -26,11 +24,7 @@ const App = {
         this.medication = new MedicationManager();
         this.timeline = new Timeline('timeline-canvas', 'timeline-empty');
         this.calendar = new Calendar();
-        this.report = new ReportManager();
         this.health = new HealthOverview();
-        this.dailyReport = new DailyReportManager({
-            onDateChange: (dateStr) => this.setDate(dateStr)
-        });
         this.research = new ResearchDashboard({
             range: 30,
             onDateChange: (dateStr) => this.setDate(dateStr)
@@ -58,7 +52,6 @@ const App = {
         await this._refreshTimeline();
         await this.health.load();
         await this.research.load();
-        await this.dailyReport.init(this.currentDate);
 
         // Load Hero 首页概览（昨晚睡眠 + 指标芯片 + 本周/Whoop 总览）
         if (window.HeroOverview) HeroOverview.refresh();
@@ -227,7 +220,6 @@ const App = {
         this.period.loadDate(dateStr);
         this.medication.loadDate(dateStr);
         this.calendar.showDate(dateStr);
-        if (this.dailyReport) this.dailyReport.loadDate(dateStr);
     },
 
     _updateDateLabel() {

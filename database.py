@@ -511,6 +511,11 @@ def _migrate(conn):
     if version < 13:
         _migrate_v13(conn)
 
+    # v14: daily_reports now stores period (daily/weekly/monthly) + chat_json
+    version = _get_schema_version(conn)
+    if version < 14:
+        _migrate_v14(conn)
+
 
 def _migrate_v12(conn):
     """Migrate from v11 to v12: add medication_records table for daily medication log.
@@ -579,6 +584,61 @@ def _migrate_v13(conn):
     """)
     _set_schema_version(conn, 13)
     print("  Migration v12 -> v13 completed.")
+
+
+def _migrate_v14(conn):
+    """Migrate from v13 to v14: extend daily_reports with period + chat_json.
+
+    Adds a `period` column (default 'daily' for existing rows) and `chat_json`
+    (default '[]'). SQLite cannot drop a column-level UNIQUE constraint in
+    place, so the table is rebuilt with `UNIQUE(period, report_date)`.
+
+    Idempotent: re-running on a fresh v14+ DB is a no-op because the CREATE
+    TABLE in init_db() already produces the desired shape. The conditional
+    `PRAGMA table_info` checks below make sure we don't accidentally apply
+    the migration to a DB that's already on v14.
+    """
+    print("  Running migration v13 -> v14 ...")
+    cols = [row[1] for row in conn.execute("PRAGMA table_info('daily_reports')").fetchall()]
+    if 'period' not in cols:
+        conn.execute("ALTER TABLE daily_reports ADD COLUMN period TEXT NOT NULL DEFAULT 'daily'")
+    if 'chat_json' not in cols:
+        conn.execute("ALTER TABLE daily_reports ADD COLUMN chat_json TEXT NOT NULL DEFAULT '[]'")
+    # Rebuild table to apply composite UNIQUE(period, report_date). Skip when
+    # the new schema already has it (i.e. fresh init or prior migration ran).
+    constraints = [row['sql'] for row in conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='daily_reports'").fetchall()]
+    if constraints and 'UNIQUE(period, report_date)' not in (constraints[0] or ''):
+        conn.execute("""
+            CREATE TABLE daily_reports_new (
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                period              TEXT NOT NULL DEFAULT 'daily'
+                                    CHECK(period IN ('daily','weekly','monthly')),
+                report_date         DATE NOT NULL,
+                sleep_summary_json  TEXT NOT NULL,
+                ai_brief_text       TEXT NOT NULL,
+                combined_text       TEXT,
+                chat_json           TEXT NOT NULL DEFAULT '[]',
+                created_at          TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+                updated_at          TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+                UNIQUE(period, report_date)
+            )
+        """)
+        conn.execute("""
+            INSERT INTO daily_reports_new
+                (id, period, report_date, sleep_summary_json, ai_brief_text,
+                 combined_text, chat_json, created_at, updated_at)
+            SELECT id, period, report_date, sleep_summary_json, ai_brief_text,
+                   combined_text, chat_json, created_at, updated_at
+            FROM daily_reports
+        """)
+        conn.execute("DROP TABLE daily_reports")
+        conn.execute("ALTER TABLE daily_reports_new RENAME TO daily_reports")
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_daily_reports_period_date
+        ON daily_reports(period, report_date)
+    """)
+    _set_schema_version(conn, 14)
+    print("  Migration v13 -> v14 completed.")
     """Migrate from v5 to v6: add device_score column (smart bracelet score)."""
     print("  Running migration v5 -> v6 ...")
     col_cursor = conn.execute("PRAGMA table_info('sleep_records')")
@@ -964,22 +1024,27 @@ def init_db():
         ON brief_chat_messages(brief_date, id)
     """)
 
-    # Daily combined report (v19): sleep summary + AI brief, persisted per date
-    # so users can jump back to any day's report without regenerating.
+    # Daily / weekly / monthly combined report (v14): sleep summary + AI brief,
+    # persisted per (period, report_date) so users can jump back to any day's
+    # weekly's or month's report without regenerating.
     conn.execute("""
         CREATE TABLE IF NOT EXISTS daily_reports (
             id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-            report_date         DATE NOT NULL UNIQUE,
+            period              TEXT NOT NULL DEFAULT 'daily'
+                                CHECK(period IN ('daily','weekly','monthly')),
+            report_date         DATE NOT NULL,
             sleep_summary_json  TEXT NOT NULL,
             ai_brief_text       TEXT NOT NULL,
             combined_text       TEXT,
+            chat_json           TEXT NOT NULL DEFAULT '[]',
             created_at          TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
-            updated_at          TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+            updated_at          TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+            UNIQUE(period, report_date)
         )
     """)
     conn.execute("""
-        CREATE INDEX IF NOT EXISTS idx_daily_reports_date
-        ON daily_reports(report_date)
+        CREATE INDEX IF NOT EXISTS idx_daily_reports_period_date
+        ON daily_reports(period, report_date)
     """)
 
     # Medication records table (v12) — daily medication log (supplements, antidepressants, etc.)
