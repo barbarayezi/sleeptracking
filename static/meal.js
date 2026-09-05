@@ -234,11 +234,11 @@ class MealManager {
     }
 
     /** Handle multi-file selection for a given channel (before / after). */
-    _onImagesSelected(e, role) {
+    async _onImagesSelected(e, role) {
         const files = Array.from((e.target.files || []));
         if (!files.length) return;
 
-        const bad = files.filter(f => !f.type.startsWith('image/'));
+        const bad = files.filter(f => !f.type.startsWith('image/') && !/\.heic|\.heif/i.test(f.name));
         if (bad.length) {
             this._showAiMessage('请选择图片文件。', 'error');
             e.target.value = '';
@@ -251,25 +251,60 @@ class MealManager {
             return;
         }
 
-        // Stage each new file with the channel's role; read thumbnails async.
+        // Stage each new file with the channel's role; for HEIC/HEIF we ask
+        // the server to convert to JPEG so non-Safari browsers can preview.
         let pending = files.length;
-        files.forEach(file => {
+        const finalize = () => { if (pending === 0) this._renderImageGrid(); };
+        for (const file of files) {
             const item = { file, role, dataUrl: '' };
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-                item.dataUrl = ev.target.result;
-                pending -= 1;
-                if (pending === 0) this._renderImageGrid();
-            };
-            reader.onerror = () => {
-                pending -= 1;
-                if (pending === 0) this._renderImageGrid();
-            };
-            reader.readAsDataURL(file);
             this._imageFiles.push(item);
-        });
+            try {
+                const dataUrl = await this._previewDataUrl(file);
+                item.dataUrl = dataUrl;
+            } catch (err) {
+                console.warn('[meal] preview failed', err);
+                item.dataUrl = '';
+            }
+            pending -= 1;
+            finalize();
+        }
         e.target.value = '';  // allow re-selecting to append more
         this._renderImageGrid();
+    }
+
+    /**
+     * Build a browser-displayable data URL for an image file.
+     *
+     * - HEIC/HEIF: ask the server (which has pillow-heif) to convert to JPEG,
+     *   then return its data URL. This is the only way to preview HEIC in
+     *   Chrome/Edge/Firefox, which can't decode HEIC natively.
+     * - Any other format: just FileReader.readAsDataURL the raw bytes.
+     */
+    async _previewDataUrl(file) {
+        const head = await file.slice(0, 16).arrayBuffer();
+        const view = new Uint8Array(head);
+        const isHeic = view.length >= 16
+            && view[4] === 0x66 && view[5] === 0x74 && view[6] === 0x79 && view[7] === 0x70
+            && ['heic', 'heix', 'mif1', 'msf1'].includes(
+                String.fromCharCode(view[8], view[9], view[10], view[11]).toLowerCase()
+            );
+        if (isHeic) {
+            const fd = new FormData();
+            fd.append('image', file, file.name);
+            const resp = await fetch('/api/meals/convert-image', { method: 'POST', body: fd });
+            const data = await resp.json();
+            if (!resp.ok || !data.data_url) {
+                throw new Error(data.error || 'HEIC 预览转换失败');
+            }
+            return data.data_url;
+        }
+        // Default: read raw file as data URL (works for JPEG, PNG, WebP, GIF).
+        return await new Promise((resolve, reject) => {
+            const r = new FileReader();
+            r.onload = (ev) => resolve(ev.target.result);
+            r.onerror = () => reject(new Error('读取图片失败'));
+            r.readAsDataURL(file);
+        });
     }
 
     /** Render the staged photos as a grid with before/after toggle + remove. */
@@ -357,6 +392,42 @@ class MealManager {
         if (this.imageInputBefore) this.imageInputBefore.value = '';
         if (this.imageInputAfter) this.imageInputAfter.value = '';
         this._renderImageGrid();
+    }
+
+    /**
+     * Open the photo lightbox for a single stored meal image. The viewer is
+     * a single shared DOM node (#meal-photo-lightbox) — its content is rebuilt
+     * each call. ESC / backdrop click closes; arrow keys / swipe not in scope.
+     */
+    _openPhotoLightbox(mealId, imgId, role, dim) {
+        let lb = document.getElementById('meal-photo-lightbox');
+        if (!lb) {
+            lb = document.createElement('div');
+            lb.id = 'meal-photo-lightbox';
+            lb.className = 'meal-lightbox hidden';
+            lb.setAttribute('role', 'dialog');
+            lb.innerHTML = `
+                <div class="meal-lightbox__backdrop"></div>
+                <div class="meal-lightbox__panel">
+                    <button type="button" class="meal-lightbox__close" aria-label="关闭">×</button>
+                    <img class="meal-lightbox__img" alt="餐食照片">
+                    <div class="meal-lightbox__caption"></div>
+                </div>
+            `;
+            document.body.appendChild(lb);
+            const close = () => lb.classList.add('hidden');
+            lb.querySelector('.meal-lightbox__backdrop').addEventListener('click', close);
+            lb.querySelector('.meal-lightbox__close').addEventListener('click', close);
+            document.addEventListener('keydown', (ev) => {
+                if (ev.key === 'Escape' && !lb.classList.contains('hidden')) close();
+            });
+        }
+        const imgEl = lb.querySelector('.meal-lightbox__img');
+        const capEl = lb.querySelector('.meal-lightbox__caption');
+        const src = `/api/meals/${mealId}/images/${imgId}?format=jpeg`;
+        imgEl.src = src;
+        capEl.textContent = `餐食照片 · ${role || ''}${dim ? ' · ' + dim : ''}`;
+        lb.classList.remove('hidden');
     }
 
     /** Generate the cross-day daily brief (yesterday diet + this morning metrics). */
@@ -714,6 +785,29 @@ class MealManager {
                 html += `<span class="meal-card__allergy" title="过敏反应">⚠️ ${this._escapeHtml(m.allergy_reaction)}</span>`;
             }
             html += '</div>';
+
+            // Photo strip (v13): show persistent thumbnails; click to enlarge.
+            if (Array.isArray(m.images) && m.images.length) {
+                html += '<div class="meal-card__photos">';
+                for (const im of m.images) {
+                    const w = im.width || '';
+                    const h = im.height || '';
+                    const dim = (w && h) ? `${w}×${h}` : '';
+                    const role = im.role === 'after' ? '餐后' : '餐前';
+                    // Always request ?format=jpeg so non-Safari browsers can
+                    // render HEIC uploads via the server-side conversion path.
+                    html += `<button type="button" class="meal-card__photo" `
+                         + `data-meal="${m.id}" data-img="${im.id}" `
+                         + `data-role="${role}" data-dim="${dim}" `
+                         + `title="餐食照片 · ${role}${dim ? ' · ' + dim : ''}">`
+                         + `<img src="/api/meals/${m.id}/images/${im.id}?format=jpeg" `
+                         + `loading="lazy" alt="餐食照片">`
+                         + `<span class="meal-card__photo-role">${role}</span>`
+                         + `</button>`;
+                }
+                html += '</div>';
+            }
+
             html += '<div class="record-card__actions">';
             if (!isEditing) {
                 html += `<button class="btn-record-edit" data-id="${m.id}" title="编辑">✏️</button>`;
@@ -737,6 +831,17 @@ class MealManager {
             btn.addEventListener('click', (e) => {
                 const id = parseInt(e.currentTarget.dataset.id);
                 this._deleteMeal(id);
+            });
+        });
+
+        // Wire photo thumbnails → lightbox viewer
+        this.listEl.querySelectorAll('.meal-card__photo').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const mealId = e.currentTarget.dataset.meal;
+                const imgId = e.currentTarget.dataset.img;
+                const role = e.currentTarget.dataset.role || '';
+                const dim = e.currentTarget.dataset.dim || '';
+                this._openPhotoLightbox(mealId, imgId, role, dim);
             });
         });
     }
@@ -893,16 +998,27 @@ class MealManager {
         this.btnSave.disabled = true;
         this.btnSave.textContent = '保存中...';
 
-        try {
-            const isUpdate = (this._editingMealId !== null);
-            const url = isUpdate ? `/api/meals/${this._editingMealId}` : '/api/meals';
-            const method = isUpdate ? 'PUT' : 'POST';
+        const isUpdate = (this._editingMealId !== null);
+        const url = isUpdate ? `/api/meals/${this._editingMealId}` : '/api/meals';
+        const method = isUpdate ? 'PUT' : 'POST';
 
-            const resp = await fetch(url, {
-                method,
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data)
-            });
+        const hasImages = this._imageFiles.length > 0;
+        const fetchOpts = { method };
+        try {
+            if (hasImages) {
+                // multipart: payload JSON + before/after image files.
+                const fd = new FormData();
+                fd.append('payload', JSON.stringify(data));
+                for (const item of this._imageFiles) {
+                    fd.append(item.role || 'before', item.file, item.file.name || 'photo.jpg');
+                }
+                fetchOpts.body = fd;
+            } else {
+                fetchOpts.headers = { 'Content-Type': 'application/json' };
+                fetchOpts.body = JSON.stringify(data);
+            }
+
+            const resp = await fetch(url, fetchOpts);
 
             if (resp.ok) {
                 const saved = await resp.json();

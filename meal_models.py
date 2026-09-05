@@ -235,8 +235,111 @@ def update_meal_by_id(meal_id, data):
 def delete_meal_by_id(meal_id):
     """Delete a meal record by ID. Returns True if deleted, False if not found."""
     conn = get_connection()
+    # Drop any attached photos first — the FK ON DELETE CASCADE only fires
+    # when foreign_keys=ON, which isn't guaranteed on every platform.
+    conn.execute("DELETE FROM meal_images WHERE meal_id = ?", (meal_id,))
     cursor = conn.execute("DELETE FROM meal_records WHERE id = ?", (meal_id,))
     deleted = cursor.rowcount > 0
     conn.commit()
     conn.close()
     return deleted
+
+
+# ── Meal images (v13) ──────────────────────────────
+
+
+def add_meal_images(meal_id, images):
+    """Attach one or more photo BLOBs to a meal record.
+
+    Args:
+        meal_id: FK to meal_records
+        images: list of dicts, each with keys:
+                - image_blob (bytes, required)
+                - mime_type (str, default 'image/jpeg')
+                - role (str, default 'before', one of 'before'|'after')
+                - original_filename (str, default '')
+                - width / height / byte_size (optional ints)
+
+    Returns: list of inserted image ids (in input order).
+    """
+    if not images:
+        return []
+    conn = get_connection()
+    ids = []
+    for img in images:
+        blob = img.get("image_blob")
+        if not blob:
+            continue
+        cursor = conn.execute(
+            """
+            INSERT INTO meal_images
+                (meal_id, image_blob, mime_type, role, original_filename,
+                 width, height, byte_size)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                meal_id,
+                blob,
+                img.get("mime_type", "image/jpeg"),
+                img.get("role", "before"),
+                img.get("original_filename", ""),
+                img.get("width"),
+                img.get("height"),
+                img.get("byte_size") or len(blob),
+            ),
+        )
+        ids.append(cursor.lastrowid)
+    conn.commit()
+    conn.close()
+    return ids
+
+
+def get_meal_images(meal_id):
+    """Return image metadata (no BLOBs) for a meal, oldest first.
+
+    Each dict has keys: id, role, mime_type, original_filename, width, height,
+    byte_size, created_at. Frontend then loads bytes from
+    /api/meals/<meal_id>/images/<image_id>.
+    """
+    conn = get_connection()
+    cursor = conn.execute(
+        """
+        SELECT id, mime_type, role, original_filename, width, height,
+               byte_size, created_at
+        FROM meal_images
+        WHERE meal_id = ?
+        ORDER BY id ASC
+        """,
+        (meal_id,),
+    )
+    rows = [row_to_dict(r) for r in cursor.fetchall()]
+    conn.close()
+    return rows
+
+
+def get_meal_image_blob(image_id):
+    """Return (blob, mime_type, original_filename) or None if not found."""
+    conn = get_connection()
+    cursor = conn.execute(
+        "SELECT image_blob, mime_type, original_filename FROM meal_images WHERE id = ?",
+        (image_id,),
+    )
+    row = cursor.fetchone()
+    conn.close()
+    if row is None:
+        return None
+    if hasattr(row, 'keys'):
+        d = dict(row)
+        return d.get('image_blob'), d.get('mime_type'), d.get('original_filename')
+    return row[0], row[1], row[2]
+
+
+def replace_meal_images(meal_id, images):
+    """Delete existing images for a meal and insert new ones (used by PUT)."""
+    conn = get_connection()
+    conn.execute("DELETE FROM meal_images WHERE meal_id = ?", (meal_id,))
+    conn.commit()
+    conn.close()
+    if not images:
+        return []
+    return add_meal_images(meal_id, images)

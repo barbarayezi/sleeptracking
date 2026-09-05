@@ -506,6 +506,11 @@ def _migrate(conn):
     if version < 12:
         _migrate_v12(conn)
 
+    # v13: meal_images (persistent storage for before/after meal photos)
+    version = _get_schema_version(conn)
+    if version < 13:
+        _migrate_v13(conn)
+
 
 def _migrate_v12(conn):
     """Migrate from v11 to v12: add medication_records table for daily medication log.
@@ -543,6 +548,37 @@ def _migrate_v12(conn):
     """)
     _set_schema_version(conn, 12)
     print("  Migration v11 -> v12 completed.")
+
+
+def _migrate_v13(conn):
+    """Migrate from v12 to v13: add meal_images table for persistent photo storage.
+
+    Stores image BLOBs (HEIC/HEIF/JPEG/PNG) attached to a meal record so the
+    user can view uploaded photos after save and across devices. Rows cascade
+    on meal delete.
+    """
+    print("  Running migration v12 -> v13 ...")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS meal_images (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            meal_id             INTEGER NOT NULL,
+            image_blob          BLOB NOT NULL,
+            mime_type           TEXT NOT NULL DEFAULT 'image/jpeg',
+            role                TEXT NOT NULL DEFAULT 'before'
+                                CHECK(role IN ('before', 'after')),
+            original_filename   TEXT DEFAULT '',
+            width               INTEGER DEFAULT NULL,
+            height              INTEGER DEFAULT NULL,
+            byte_size           INTEGER DEFAULT NULL,
+            created_at          TEXT DEFAULT (datetime('now', 'localtime'))
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_meal_images_meal
+        ON meal_images(meal_id)
+    """)
+    _set_schema_version(conn, 13)
+    print("  Migration v12 -> v13 completed.")
     """Migrate from v5 to v6: add device_score column (smart bracelet score)."""
     print("  Running migration v5 -> v6 ...")
     col_cursor = conn.execute("PRAGMA table_info('sleep_records')")
@@ -972,6 +1008,27 @@ def init_db():
     conn.execute("""
         CREATE INDEX IF NOT EXISTS idx_medication_records_category
         ON medication_records(category)
+    """)
+
+    # Meal images table (v13) — persistent photo storage for before/after photos.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS meal_images (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            meal_id             INTEGER NOT NULL,
+            image_blob          BLOB NOT NULL,
+            mime_type           TEXT NOT NULL DEFAULT 'image/jpeg',
+            role                TEXT NOT NULL DEFAULT 'before'
+                                CHECK(role IN ('before', 'after')),
+            original_filename   TEXT DEFAULT '',
+            width               INTEGER DEFAULT NULL,
+            height              INTEGER DEFAULT NULL,
+            byte_size           INTEGER DEFAULT NULL,
+            created_at          TEXT DEFAULT (datetime('now', 'localtime'))
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_meal_images_meal
+        ON meal_images(meal_id)
     """)
 
     # Now run pending migrations (ALTER TABLE for older schemas)

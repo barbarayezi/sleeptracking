@@ -6,6 +6,7 @@ All REST API routes for CRUD operations, statistics, and reports.
 import os
 import sys
 import json
+import base64
 import threading
 import urllib.parse
 from dotenv import load_dotenv
@@ -298,6 +299,10 @@ def list_meals():
     to_date = request.args.get('to')
     date = request.args.get('date')
     meals = meal_models.get_all_meals(from_date=from_date, to_date=to_date, date=date)
+    # Attach image metadata for each meal (no BLOBs to keep the list payload light).
+    if meals:
+        for m in meals:
+            m['images'] = meal_models.get_meal_images(m['id'])
     return jsonify(meals)
 
 
@@ -307,30 +312,72 @@ def get_meal(meal_id):
     meal = meal_models.get_meal_by_id(meal_id)
     if meal is None:
         return jsonify({'error': 'Meal record not found'}), 404
+    meal['images'] = meal_models.get_meal_images(meal_id)
     return jsonify(meal)
 
 
 @app.route('/api/meals', methods=['POST'])
 def create_meal():
-    """Create a new meal record."""
-    data = request.get_json()
-    if not data:
-        return jsonify({'error': 'Request body must be JSON'}), 400
+    """Create a new meal record.
+
+    Two request shapes are supported:
+    - JSON only (back-compat):  Content-Type: application/json with the meal
+      fields in the body.
+    - multipart with images:    Content-Type: multipart/form-data, with a
+      'payload' field containing the same JSON stringified, plus 'before' and
+      'after' multipart file parts. Saved into meal_images with role=before/after.
+    """
+    images = []
+    if request.content_type and 'multipart/form-data' in request.content_type:
+        payload = request.form.get('payload')
+        if not payload:
+            return jsonify({'error': 'multipart form must include a "payload" field with the meal JSON'}), 400
+        try:
+            data = json.loads(payload)
+        except Exception as e:
+            return jsonify({'error': f'payload 不是合法 JSON: {e}'}), 400
+        images = _collect_meal_image_files(request)
+    else:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Request body must be JSON'}), 400
 
     errors = _validate_meal_data(data)
     if errors:
         return jsonify({'error': errors[0]}), 400
 
     meal = meal_models.create_meal(data)
+    if images and meal and meal.get('id'):
+        ids = meal_models.add_meal_images(meal['id'], images)
+        meal['images'] = meal_models.get_meal_images(meal['id'])
+        meal['image_ids'] = ids
+    else:
+        meal['images'] = []
     return jsonify(meal), 201
 
 
 @app.route('/api/meals/<int:meal_id>', methods=['PUT'])
 def update_meal(meal_id):
-    """Update an existing meal record by ID."""
-    data = request.get_json()
-    if not data:
-        return jsonify({'error': 'Request body must be JSON'}), 400
+    """Update an existing meal record by ID.
+
+    Same dual-shape contract as POST. When the request carries images, any
+    previously stored photos for this meal are replaced by the new set (i.e.
+    PUT is full-replace for photos, mirroring the meal-record replace).
+    """
+    images = []
+    if request.content_type and 'multipart/form-data' in request.content_type:
+        payload = request.form.get('payload')
+        if not payload:
+            return jsonify({'error': 'multipart form must include a "payload" field with the meal JSON'}), 400
+        try:
+            data = json.loads(payload)
+        except Exception as e:
+            return jsonify({'error': f'payload 不是合法 JSON: {e}'}), 400
+        images = _collect_meal_image_files(request)
+    else:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Request body must be JSON'}), 400
 
     errors = _validate_meal_data(data)
     if errors:
@@ -339,6 +386,16 @@ def update_meal(meal_id):
     meal = meal_models.update_meal_by_id(meal_id, data)
     if meal is None:
         return jsonify({'error': 'Meal record not found'}), 404
+
+    if request.content_type and 'multipart/form-data' in request.content_type:
+        # If the request carried image files (any channel), replace photos.
+        # Otherwise leave existing photos untouched so callers can update text
+        # without dropping the gallery.
+        if images:
+            meal_models.replace_meal_images(meal_id, images)
+        meal['images'] = meal_models.get_meal_images(meal_id)
+    else:
+        meal['images'] = meal_models.get_meal_images(meal_id)
     return jsonify(meal)
 
 
@@ -349,6 +406,114 @@ def delete_meal(meal_id):
     if not deleted:
         return jsonify({'error': 'Meal record not found'}), 404
     return '', 204
+
+
+# ── Meal photos: convert-image fallback + persistent image stream ──
+
+
+def _collect_meal_image_files(req, max_bytes=10 * 1024 * 1024):
+    """Read staged before/after multipart files from the request.
+
+    Each item: { image_blob, mime_type, role, original_filename,
+                 width, height, byte_size }. Decode is left to the consumer
+    (nutrition._to_jpeg_bytes) so HEIC is normalised at use-time, not at
+    upload-time — that keeps the DB schema simple and lets us re-encode
+    transparently if pillow-heif is later upgraded.
+    """
+    from PIL import Image, ImageFile
+    ImageFile.LOAD_TRUNCATED_IMAGES = True
+
+    items = []
+    for role in ('before', 'after'):
+        for f in req.files.getlist(role):
+            if not f or not f.filename:
+                continue
+            blob = f.read()
+            if not blob or len(blob) > max_bytes:
+                continue
+            mime = (f.mimetype or '').lower() or 'image/jpeg'
+            item = {
+                'image_blob': blob,
+                'mime_type': mime,
+                'role': role,
+                'original_filename': f.filename,
+                'byte_size': len(blob),
+            }
+            # Try to read dimensions cheaply for storage convenience.
+            try:
+                from io import BytesIO
+                im = Image.open(BytesIO(blob))
+                im.load()
+                item['width'], item['height'] = im.size
+            except Exception:
+                pass
+            items.append(item)
+    return items
+
+
+@app.route('/api/meals/convert-image', methods=['POST'])
+def convert_meal_image():
+    """Accept a single image file (often HEIC) and return its JPEG form as a
+    base64 data URL. The frontend uses this for instant HEIC thumbnail preview
+    on browsers that can't render HEIC natively (Chrome/Edge). The original
+    bytes are NOT persisted here — that happens later when the user saves the
+    meal with the photos attached.
+    """
+    f = request.files.get('image')
+    if not f or not f.filename:
+        return jsonify({'error': '未收到图片文件'}), 400
+    raw = f.read()
+    if not raw:
+        return jsonify({'error': '图片数据为空'}), 400
+    if len(raw) > 10 * 1024 * 1024:
+        return jsonify({'error': '图片过大（上限 10MB）'}), 400
+
+    jpeg_bytes, err = nutrition._to_jpeg_bytes(raw)
+    if err:
+        return jsonify({'error': err}), 502
+
+    b64 = base64.b64encode(jpeg_bytes).decode('ascii')
+    return jsonify({
+        'ok': True,
+        'data_url': f'data:image/jpeg;base64,{b64}',
+        'mime_type': 'image/jpeg',
+        'byte_size': len(jpeg_bytes),
+    })
+
+
+@app.route('/api/meals/<int:meal_id>/images/<int:image_id>', methods=['GET'])
+def serve_meal_image(meal_id, image_id):
+    """Stream a stored meal image as raw bytes with the correct content-type.
+
+    Uses Flask's Response so the browser can natively display JPEG/HEIC/PNG
+    without further conversion. Note: non-Safari browsers won't be able to
+    render HEIC bytes here either — they need a JPEG. The frontend requests
+    JPEG via /api/meals/<id>/images/<img_id>?format=jpeg in that case.
+    """
+    row = meal_models.get_meal_image_blob(image_id)
+    if row is None:
+        return jsonify({'error': '图片不存在'}), 404
+    blob, mime_type, original_filename = row
+
+    # Optional format override: lets the frontend force JPEG so Chrome/Edge
+    # can preview HEIC photos without depending on browser codec support.
+    fmt = (request.args.get('format') or '').lower()
+    if fmt == 'jpeg':
+        jpeg_bytes, err = nutrition._to_jpeg_bytes(blob)
+        if err:
+            return jsonify({'error': err}), 502
+        blob = jpeg_bytes
+        mime_type = 'image/jpeg'
+
+    from flask import Response
+    headers = {
+        'Content-Type': mime_type or 'image/jpeg',
+        'Cache-Control': 'private, max-age=600',
+    }
+    if original_filename:
+        # inline display rather than download
+        headers['Content-Disposition'] = f'inline; filename="{original_filename}"'
+    return Response(blob, headers=headers)
 
 
 @app.route('/api/meals/analyze', methods=['POST'])
