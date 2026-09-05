@@ -639,6 +639,9 @@ def _migrate_v14(conn):
     """)
     _set_schema_version(conn, 14)
     print("  Migration v13 -> v14 completed.")
+
+
+def _migrate_v6(conn):
     """Migrate from v5 to v6: add device_score column (smart bracelet score)."""
     print("  Running migration v5 -> v6 ...")
     col_cursor = conn.execute("PRAGMA table_info('sleep_records')")
@@ -1042,10 +1045,10 @@ def init_db():
             UNIQUE(period, report_date)
         )
     """)
-    conn.execute("""
-        CREATE INDEX IF NOT EXISTS idx_daily_reports_period_date
-        ON daily_reports(period, report_date)
-    """)
+    # NOTE: idx_daily_reports_period_date is created by _migrate_v14, AFTER the
+    # ALTER/rebuild has added the period column. On a legacy DB whose
+    # daily_reports predates v14, creating this index here would fail with
+    # "no such column: period", so init_db() deliberately does not build it.
 
     # Medication records table (v12) — daily medication log (supplements, antidepressants, etc.)
     conn.execute("""
