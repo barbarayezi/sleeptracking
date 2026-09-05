@@ -36,11 +36,10 @@ class MealManager {
         // Each entry: { file, dataUrl, role: 'before' | 'after' }
         this._imageFiles = [];
 
-        // ── Daily brief (cross-day) ──
-        this.btnBrief = document.getElementById('btn-meal-brief');
-        this.briefEl = document.getElementById('meal-brief-result');
-        this._briefData = null;      // Last generated brief payload
-        this._briefMessages = [];    // Conversation history in the brief card
+        // NOTE: the cross-day AI brief used to live here too, but it duplicated
+        // the dedicated "AI 分析" section (same backend, same data, same prompt).
+        // It's been removed — see /api/daily-brief and /api/daily-brief/chat in
+        // static/agent.js for the canonical implementation.
 
         this._selectedDate = this._todayStr();
         this._mealsForDate = [];     // All meals for current date
@@ -72,56 +71,6 @@ class MealManager {
         }
 
         this._renderMealList();
-
-        // Restore any persisted daily-brief conversation for this date
-        // (no-op when the date has no history).
-        await this._loadBriefHistory(dateStr);
-    }
-
-    /** Restore the persisted brief conversation for a date after refresh /
-     *  date switch. Pulls /chat history first (fast, no LLM); only when the
-     *  date actually has history does it fetch the brief metadata needed to
-     *  render the chips and enable follow-up questions.
-     */
-    async _loadBriefHistory(dateStr) {
-        if (!this.briefEl) return;
-
-        // Clear whatever was on screen for the previous date — otherwise the
-        // chat bubbles from another date would visibly stick around.
-        this._briefData = null;
-        this._briefMessages = [];
-        this.briefEl.innerHTML = '';
-        this.briefEl.classList.add('hidden');
-
-        let chatData;
-        try {
-            const chatResp = await fetch(`/api/daily-brief/chat?date=${encodeURIComponent(dateStr)}`);
-            if (!chatResp.ok) return;   // endpoint said no — nothing to restore
-            chatData = await chatResp.json();
-        } catch (err) {
-            console.warn('[brief_history] load failed:', err);
-            return;
-        }
-
-        const history = Array.isArray(chatData?.history) ? chatData.history : [];
-        if (history.length === 0) return;
-
-        let briefData = null;
-        try {
-            const briefResp = await fetch(`/api/daily-brief?date=${encodeURIComponent(dateStr)}`);
-            if (briefResp.ok) briefData = await briefResp.json();
-        } catch (err) {
-            console.warn('[brief_history] brief metadata failed:', err);
-        }
-        if (!briefData || briefData.error) return;
-
-        // Map DB roles ('user' / 'assistant') to the UI roles ('user' / 'ai').
-        this._briefData = briefData;
-        this._briefMessages = history.map((m) => ({
-            role: m.role === 'user' ? 'user' : 'ai',
-            text: (m.content || '').trim(),
-        }));
-        this._renderBriefResult(briefData);
     }
 
     /* ── Event Wiring ─────────────────────── */
@@ -152,11 +101,6 @@ class MealManager {
         }
         if (this.imageInputAfter) {
             this.imageInputAfter.addEventListener('change', (e) => this._onImagesSelected(e, 'after'));
-        }
-
-        // Daily brief (cross-day)
-        if (this.btnBrief) {
-            this.btnBrief.addEventListener('click', () => this._generateDailyBrief());
         }
 
         // Auto-set default time when meal type changes
@@ -428,149 +372,6 @@ class MealManager {
         imgEl.src = src;
         capEl.textContent = `餐食照片 · ${role || ''}${dim ? ' · ' + dim : ''}`;
         lb.classList.remove('hidden');
-    }
-
-    /** Generate the cross-day daily brief (yesterday diet + this morning metrics). */
-    async _generateDailyBrief() {
-        if (!this.btnBrief || !this.briefEl) return;
-        const date = this._selectedDate || this._todayStr();
-        const original = this.btnBrief.textContent;
-        this.btnBrief.disabled = true;
-        this.btnBrief.textContent = '🤖 生成中…';
-        this.briefEl.classList.add('hidden');
-        try {
-            const resp = await fetch(`/api/daily-brief?date=${encodeURIComponent(date)}`);
-            const data = await resp.json();
-            if (!resp.ok) {
-                this._briefMessages = [];
-                this._renderBriefResult({ error: data.error || '生成失败' });
-                return;
-            }
-            this._briefData = data;
-            this._briefMessages = [{ role: 'ai', text: (data.brief || '').trim() }];
-            this._renderBriefResult(data);
-        } catch (err) {
-            this._briefMessages = [];
-            this._renderBriefResult({ error: `网络错误：${err.message}` });
-        } finally {
-            this.btnBrief.disabled = false;
-            this.btnBrief.textContent = original;
-        }
-    }
-
-    /** Render the brief card, including any follow-up conversation. */
-    _renderBriefResult(data) {
-        if (!this.briefEl) return;
-        if (data && data.error) {
-            this.briefEl.innerHTML = `<div class="brief-error">❌ ${this._escapeHtml(data.error)}</div>`;
-            this.briefEl.classList.remove('hidden');
-            return;
-        }
-
-        const diet = data.meal_summary || {};
-        const m = data.morning || {};
-        const chips = [];
-        if (diet && diet.meal_count) chips.push(`昨日 ${diet.meal_count} 餐 · ${Math.round(diet.kcal)} kcal`);
-        if (m.weight != null) chips.push(`体重 ${m.weight} kg`);
-        if (m.water_cups != null) chips.push(`饮水 ${m.water_cups} 杯`);
-        if (m.steps != null) chips.push(`步数 ${m.steps}`);
-        if (m.sleep_minutes != null) chips.push(`睡眠 ${Math.floor(m.sleep_minutes / 60)}h${m.sleep_minutes % 60}m`);
-        const chipHtml = chips.length
-            ? `<div class="brief-chips">${chips.map(c => `<span class="brief-chip">${this._escapeHtml(c)}</span>`).join('')}</div>`
-            : '';
-
-        const messagesHtml = (this._briefMessages || []).map(msg => {
-            const cls = msg.role === 'user' ? 'brief-msg brief-msg--user' : 'brief-msg brief-msg--ai';
-            const icon = msg.role === 'user' ? '🧑' : '🤖';
-            return `<div class="${cls}"><span class="brief-msg__icon">${icon}</span><div class="brief-msg__bubble">${this._escapeHtml(msg.text).replace(/\n/g, '<br>')}</div></div>`;
-        }).join('');
-
-        this.briefEl.innerHTML = `
-            ${chipHtml}
-            <div class="brief-chat" id="brief-chat-messages">${messagesHtml}</div>
-            <div class="brief-input-row">
-                <input type="text" id="brief-chat-input" class="brief-chat-input" placeholder="对这份总结有疑问或补充？直接说…" autocomplete="off">
-                <button type="button" id="btn-brief-send" class="btn btn-ai">发送</button>
-            </div>
-            <div class="brief-input-hint">按 Enter 发送，AI 会基于昨日饮食和今晨指标继续回复</div>
-        `;
-        this.briefEl.classList.remove('hidden');
-
-        const input = this.briefEl.querySelector('#brief-chat-input');
-        const sendBtn = this.briefEl.querySelector('#btn-brief-send');
-        if (input && sendBtn) {
-            input.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    this._sendBriefChat();
-                }
-            });
-            sendBtn.addEventListener('click', () => this._sendBriefChat());
-            input.focus();
-        }
-    }
-
-    /** Send a follow-up message in the brief conversation. */
-    async _sendBriefChat() {
-        if (!this.briefEl || !this._briefData) return;
-        const input = this.briefEl.querySelector('#brief-chat-input');
-        const sendBtn = this.briefEl.querySelector('#btn-brief-send');
-        if (!input) return;
-        const text = input.value.trim();
-        if (!text) return;
-
-        // Capture the conversation so far (everything before this new turn)
-        // so the server can give the model full multi-turn context.
-        const history = this._briefMessages.map((m) => ({
-            role: m.role === 'user' ? 'user' : 'assistant',
-            content: m.text,
-        }));
-
-        this._briefMessages.push({ role: 'user', text });
-        input.value = '';
-        input.disabled = true;
-        if (sendBtn) {
-            sendBtn.disabled = true;
-            sendBtn.textContent = '回复中…';
-        }
-        this._renderBriefResult(this._briefData);
-        const messagesEl = this.briefEl.querySelector('#brief-chat-messages');
-        if (messagesEl) messagesEl.scrollHeight;
-
-        try {
-            const resp = await fetch('/api/daily-brief/chat', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    date: this._briefData.date,
-                    previous_brief: (this._briefData.brief || ''),
-                    user_message: text,
-                    history,
-                }),
-            });
-            const data = await resp.json();
-            if (!resp.ok) {
-                this._briefMessages.push({ role: 'ai', text: `❌ ${data.error || '回复失败'}` });
-            } else {
-                this._briefMessages.push({ role: 'ai', text: (data.reply || '').trim() });
-            }
-        } catch (err) {
-            this._briefMessages.push({ role: 'ai', text: `❌ 网络错误：${err.message}` });
-        } finally {
-            this._renderBriefResult(this._briefData);
-            const newInput = this.briefEl.querySelector('#brief-chat-input');
-            if (newInput) {
-                newInput.disabled = false;
-                newInput.focus();
-            }
-            const newSendBtn = this.briefEl.querySelector('#btn-brief-send');
-            if (newSendBtn) {
-                newSendBtn.disabled = false;
-                newSendBtn.textContent = '发送';
-            }
-            const msgEl = this.briefEl.querySelector('#brief-chat-messages');
-            if (msgEl) msgEl.scrollTop = msgEl.scrollHeight;
-        }
     }
 
     /** Write an estimation into the form inputs + result panel. */

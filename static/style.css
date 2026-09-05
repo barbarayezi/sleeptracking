@@ -1392,9 +1392,6 @@ body {
 .rd-card__spark { height: 36px; width: 100%; }
 
 /* ── Meal brief ── */
-.meal-brief-block { margin-top: 10px; margin-bottom: 16px; }
-.meal-brief-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; padding-bottom: 4px; }
-.meal-brief-result { margin-top: 10px; padding: 14px 16px; background: var(--gray-50); border: 1px solid var(--gray-200); border-radius: var(--radius); }
 .brief-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
 .brief-chip { font-size: 12px; padding: 2px 10px; background: var(--primary-soft); color: var(--primary); border-radius: var(--radius-pill); font-weight: 600; }
 .brief-text { line-height: 1.7; color: var(--gray-800); white-space: normal; }

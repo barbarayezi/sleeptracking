@@ -1,9 +1,10 @@
 /* agent.js — 把「AI 分析」区块接入主应用自带的跨日简报对话能力
  * （GET /api/daily-brief 生成 + POST /api/daily-brief/chat 追问），
- * 不再依赖外部 health-agent 服务（5188 端口）。
+ * 不再依赖外部 health-agent 服务（5188 端口）。这是唯一入口——
+ * 此前「饮食记录」区块里也有一份完全重复的简报 UI/逻辑，已删除以避免双重入口。
  *
- * 与 meal.js 中饮食区块的「生成昨日汇总」共用同一张 brief_chat_messages 表，
- * 因此这里的对话历史可在刷新 / 换设备后通过 GET /api/daily-brief/chat 恢复。
+ * 对话历史持久化到 brief_chat_messages 表，刷新 / 换设备后通过
+ * GET /api/daily-brief/chat 恢复。
  */
 (function () {
   'use strict';
