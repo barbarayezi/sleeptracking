@@ -1482,7 +1482,13 @@ def chat_in_daily_report(date):
     if not result.get('ok'):
         return jsonify({'error': result.get('error', '回复失败')}), 502
 
-    daily_report_models.append_chat_message('daily', date, 'assistant', result['data']['reply'])
+    # chat_brief returns the same ok-shape as daily_brief: data.brief holds
+    # the assistant text (not data.reply).
+    reply_text = (result.get('data') or {}).get('brief') or ''
+    if not reply_text.strip():
+        return jsonify({'error': 'AI 未返回有效回复，请重试'}), 502
+
+    daily_report_models.append_chat_message('daily', date, 'assistant', reply_text)
     return jsonify(daily_report_models.get_report('daily', date))
 
 
