@@ -1035,7 +1035,6 @@ body {
     .hero-score-group { align-self: stretch; align-items: flex-start; text-align: left; width: 100%; }
     .hsg-rec { align-items: flex-start; }
     .hero-duration { font-size: 28px; }
-    .hero-stats { gap: 6px; }
     .hero-lower { grid-template-columns: 1fr; gap: 12px; }
 }
 
