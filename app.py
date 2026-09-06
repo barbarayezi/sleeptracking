@@ -300,9 +300,12 @@ def list_meals():
     date = request.args.get('date')
     meals = meal_models.get_all_meals(from_date=from_date, to_date=to_date, date=date)
     # Attach image metadata for each meal (no BLOBs to keep the list payload light).
+    # Batch into ONE query — a per-meal get_meal_images() here caused an N+1
+    # that made this endpoint take ~35s against the remote DB.
     if meals:
+        images_by_meal = meal_models.get_meals_images_batch([m['id'] for m in meals])
         for m in meals:
-            m['images'] = meal_models.get_meal_images(m['id'])
+            m['images'] = images_by_meal.get(m['id'], [])
     return jsonify(meals)
 
 

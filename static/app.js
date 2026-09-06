@@ -84,22 +84,23 @@ const App = {
     /* ── Callbacks (called by child modules) ── */
 
     onRecordSaved(record) {
-        this._refreshTimeline();
-        this.calendar.refresh();
-        if (window.HeroOverview) HeroOverview.refresh();
-        this.health.refresh();
-        if (this.research) this.research.refresh();
+        this._invalidateAndRefresh();
     },
 
     onRecordDeleted(dateStr) {
-        this._refreshTimeline();
-        this.calendar.refresh();
-        if (window.HeroOverview) HeroOverview.refresh();
-        this.health.refresh();
-        if (this.research) this.research.refresh();
+        this._invalidateAndRefresh();
     },
 
     onPeriodSaved() {
+        this._invalidateAndRefresh();
+    },
+
+    /**
+     * 数据变更后：先让相关接口缓存失效，再触发各模块重拉。
+     * 缓存键是 URL，这里按前缀清，保证下次拿到的是最新数据。
+     */
+    _invalidateAndRefresh() {
+        if (window.ApiCache) ApiCache.invalidateAll();
         this._refreshTimeline();
         this.calendar.refresh();
         if (window.HeroOverview) HeroOverview.refresh();
@@ -241,39 +242,25 @@ const App = {
 
     async _refreshTimeline() {
         try {
-            const [recordsResp, mealsResp, periodsResp, summaryResp, dailyResp, stepsResp] = await Promise.all([
-                fetch('/api/records'),
-                fetch('/api/meals'),
-                fetch('/api/periods'),
-                fetch('/api/periods/summary'),
-                fetch('/api/whoop/daily'),
-                fetch('/api/healthkit/metrics?type=steps')
+            const C = window.ApiCache;
+            const get = (url) => C ? C.fetch(url) : fetch(url).then(r => r.ok ? r.json() : null);
+            const [records, meals, periods, summary, daily, steps] = await Promise.all([
+                get('/api/records'),
+                get('/api/meals'),
+                get('/api/periods'),
+                get('/api/periods/summary'),
+                get('/api/whoop/daily'),
+                get('/api/healthkit/metrics?type=steps')
             ]);
-            if (recordsResp.ok) {
-                const records = await recordsResp.json();
-                this.timeline.setRecords(records);
-            }
-            if (mealsResp.ok) {
-                const meals = await mealsResp.json();
-                this.timeline.setMeals(meals);
-            }
-            if (periodsResp.ok) {
-                const periods = await periodsResp.json();
-                this.timeline.setPeriods(periods);
-            }
-            if (summaryResp.ok) {
-                const summary = await summaryResp.json();
+            if (records) this.timeline.setRecords(records);
+            if (meals) this.timeline.setMeals(meals);
+            if (periods) this.timeline.setPeriods(periods);
+            if (summary) {
                 this.timeline.setCycleInfo(summary);
                 this._updateCycleBadge(summary);
             }
-            if (dailyResp.ok) {
-                const daily = await dailyResp.json();
-                this.timeline.setDailyMetrics(daily);
-            }
-            if (stepsResp.ok) {
-                const steps = await stepsResp.json();
-                this.timeline.setSteps(steps);
-            }
+            if (daily) this.timeline.setDailyMetrics(daily);
+            if (steps) this.timeline.setSteps(steps);
         } catch (err) {
             console.error('Failed to refresh timeline:', err);
         }

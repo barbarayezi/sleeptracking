@@ -73,12 +73,10 @@ class HealthOverview {
         const to = this._todayStr();
         const from = this._addDays(to, -(this.range - 1));
         try {
-            const resp = await fetch(`/api/health-overview?from=${from}&to=${to}`);
-            if (!resp.ok) {
-                this.el.innerHTML = '<p class="report-placeholder">总览数据加载失败。</p>';
-                return;
-            }
-            const data = await resp.json();
+            const url = `/api/health-overview?from=${from}&to=${to}`;
+            const data = window.ApiCache
+                ? await ApiCache.fetch(url)
+                : await (await fetch(url)).json();
             this._lastData = data;
             this.render(data);
         } catch (err) {

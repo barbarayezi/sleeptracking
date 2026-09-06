@@ -321,6 +321,37 @@ def get_meal_images(meal_id):
     return rows
 
 
+def get_meals_images_batch(meal_ids):
+    """Fetch image metadata for many meals in ONE query (avoids N+1).
+
+    The list endpoint used to call get_meal_images() per meal — one round-trip
+    to the (Tokyo) DB per record. Dozens of serial round-trips made /api/meals
+    take ~35s. Batching collapses that to a single query.
+
+    Returns: { meal_id: [image_meta_dict, ...] } ordered by image id.
+    """
+    if not meal_ids:
+        return {}
+    conn = get_connection()
+    placeholders = ",".join(["?"] * len(meal_ids))
+    cursor = conn.execute(
+        f"""
+        SELECT id, meal_id, mime_type, role, original_filename, width, height,
+               byte_size, created_at
+        FROM meal_images
+        WHERE meal_id IN ({placeholders})
+        ORDER BY id ASC
+        """,
+        list(meal_ids),
+    )
+    result = {}
+    for row in cursor.fetchall():
+        d = row_to_dict(row)
+        result.setdefault(d['meal_id'], []).append(d)
+    conn.close()
+    return result
+
+
 def get_meal_image_blob(image_id):
     """Return (blob, mime_type, original_filename) or None if not found."""
     conn = get_connection()

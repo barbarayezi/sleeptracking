@@ -378,6 +378,7 @@ class MedicationManager {
                 this._updateFormMode();
                 this._renderList();
                 await this._loadDaySummary();
+                if (window.ApiCache) ApiCache.invalidateAll();
             } else {
                 const err = await resp.json();
                 this._showMessage('❌ ' + (err.error || '保存失败'), 'error');
@@ -409,6 +410,7 @@ class MedicationManager {
                 }
                 this._renderList();
                 await this._loadDaySummary();
+                if (window.ApiCache) ApiCache.invalidateAll();
                 this._showMessage('已删除。', 'success');
             } else {
                 const err = await resp.json();

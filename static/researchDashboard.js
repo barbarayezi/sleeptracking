@@ -24,9 +24,10 @@ class ResearchDashboard {
         const to = this._todayStr();
         const from = this._addDays(to, -(this.range - 1));
         try {
-            const resp = await fetch(`/api/health-overview?from=${from}&to=${to}`);
-            if (!resp.ok) throw new Error('load failed');
-            const data = await resp.json();
+            const url = `/api/health-overview?from=${from}&to=${to}`;
+            const data = window.ApiCache
+                ? await ApiCache.fetch(url)
+                : await (await fetch(url)).json();
             this._data = data;
             this.render(data);
         } catch (err) {

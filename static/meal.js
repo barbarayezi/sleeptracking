@@ -1040,6 +1040,7 @@ class MealManager {
                 this._updateFormMode();
                 this._renderMealList();
                 if (typeof App !== 'undefined' && App._loadToday) App._loadToday();
+                if (window.ApiCache) ApiCache.invalidateAll();
             } else {
                 const err = await resp.json();
                 this._showMessage('❌ ' + (err.error || '保存失败'), 'error');
@@ -1071,6 +1072,7 @@ class MealManager {
 
                 this._renderMealList();
                 if (typeof App !== 'undefined' && App._loadToday) App._loadToday();
+                if (window.ApiCache) ApiCache.invalidateAll();
                 this._showMessage('已删除。', 'success');
             } else {
                 const err = await resp.json();
