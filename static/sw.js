@@ -10,7 +10,7 @@
  *    确保用户看到的永远是最新版。
  */
 
-const CACHE_NAME = 'qhealth-v27';   // ← 每次发布改 UI 必须 +1，否则旧缓存不会被清
+const CACHE_NAME = 'qhealth-v28';   // ← 每次发布改 UI 必须 +1，否则旧缓存不会被清
 
 // Install — 直接 skipWaiting，让新 SW 尽快接管
 self.addEventListener('install', (event) => {

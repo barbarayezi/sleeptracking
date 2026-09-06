@@ -109,6 +109,10 @@ class MealManager {
             this.imageInputAfter.addEventListener('change', (e) => this._onImagesSelected(e, 'after'));
         }
 
+        // Paste-to-upload: pasting an image anywhere on the page drops it into
+        // the "before" channel (user can re-tag to 餐后 on the thumbnail).
+        document.addEventListener('paste', (e) => this._onPaste(e));
+
         // Auto-set default time when meal type changes
         const typeRadios = this.form.querySelectorAll('input[name="meal_type"]');
         typeRadios.forEach(radio => {
@@ -328,18 +332,47 @@ class MealManager {
     /** Handle multi-file selection for a given channel (before / after). */
     async _onImagesSelected(e, role) {
         const files = Array.from((e.target.files || []));
+        e.target.value = '';  // allow re-selecting to append more
+        await this._stageFiles(files, role);
+    }
+
+    /** Paste-to-upload: read images from the clipboard into the before channel. */
+    _onPaste(e) {
+        const items = Array.from((e.clipboardData && e.clipboardData.items) || []);
+        const imageItems = items.filter(it => it.kind === 'file' && it.type.startsWith('image/'));
+        if (!imageItems.length) return;  // no image on clipboard — let the paste go to wherever
+
+        const files = imageItems.map((it, idx) => {
+            const f = it.getAsFile();
+            if (!f) return null;
+            // Clipboard files have generic names like "image.png"; give each a
+            // stable, human-readable name so multipart + preview behave.
+            const ext = (f.type.split('/')[1] || 'png').replace('jpeg', 'jpg');
+            const stamp = new Date().toTimeString().slice(0, 8).replace(/:/g, '');
+            return new File([f], `粘贴-${stamp}-${idx + 1}.${ext}`, { type: f.type });
+        }).filter(Boolean);
+        if (!files.length) return;
+
+        e.preventDefault();  // stop the image also landing in a focused input
+        this._stageFiles(files, 'before');
+        this._showAiMessage(`📋 已从剪贴板粘贴 ${files.length} 张照片（计入「餐前」，可在缩略图上改）。`, 'success');
+    }
+
+    /**
+     * Stage image files into the preview grid (shared by file-picker + paste).
+     * Validates type/size, generates previews (HEIC via server), re-renders.
+     */
+    async _stageFiles(files, role) {
         if (!files.length) return;
 
         const bad = files.filter(f => !f.type.startsWith('image/') && !/\.heic|\.heif/i.test(f.name));
         if (bad.length) {
             this._showAiMessage('请选择图片文件。', 'error');
-            e.target.value = '';
             return;
         }
         const oversized = files.filter(f => f.size > 10 * 1024 * 1024);
         if (oversized.length) {
             this._showAiMessage('图片过大（上限 10MB）。', 'error');
-            e.target.value = '';
             return;
         }
 
@@ -360,7 +393,6 @@ class MealManager {
             pending -= 1;
             finalize();
         }
-        e.target.value = '';  // allow re-selecting to append more
         this._renderImageGrid();
     }
 

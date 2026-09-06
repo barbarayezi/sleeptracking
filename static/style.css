@@ -411,6 +411,16 @@ body {
     padding: 0; transition: all var(--transition);
 }
 .meal-option-del:hover { background: var(--red, #ef4444); color: #fff; }
+.meal-paste-hint {
+    font-size: 12px; color: var(--gray-500);
+    align-self: center; margin-left: 4px;
+}
+.meal-paste-hint kbd {
+    background: var(--gray-100, rgba(148,163,184,.15));
+    border: 1px solid var(--gray-300);
+    border-radius: 4px; padding: 0 4px;
+    font-size: 11px; font-family: inherit;
+}
 .meal-card__tag {
     font-size: 12px;
     color: var(--gray-600);
