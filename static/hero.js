@@ -29,7 +29,7 @@ const HeroOverview = {
         this._refs = {
             label: $('hero-label'), duration: $('hero-duration'), sub: $('hero-sub'),
             stats: $('hero-stats'),
-            ring: $('hero-ring'),
+            scoreGroup: $('hero-score-group'),
             weekStrip: $('hero-week-strip'), recStrip: $('hero-rec-strip'),
             whoopMeta: $('hero-whoop-meta'), weekHint: $('hero-week-hint'),
             algo: $('algo-body')
@@ -103,7 +103,7 @@ const HeroOverview = {
         // 评分环：手环评分(device_score) → recovery_score → 无
         const score = (night && night.device_score != null) ? night.device_score
             : (night && night.recovery_score != null ? night.recovery_score : null);
-        this._renderRing(r.ring, score);
+        this._renderScoreGroup(r.scoreGroup, recovery, score, deep);
 
         // ── 近 7 天健康：睡眠色块 + Whoop 恢复分（原「本周睡眠」「健康总览」两卡已合并） ──
         this._renderWeekHealth(r, sleeps, whoopSorted);
@@ -121,20 +121,53 @@ const HeroOverview = {
         return null;
     },
 
-    _renderRing(el, score) {
-        const size = 132, cx = 66, cy = 66, rad = 54, circ = 2 * Math.PI * rad;
-        const pct = (score != null && !isNaN(score)) ? Math.max(0, Math.min(100, score)) / 100 : 0;
-        const off = circ * (1 - pct);
-        const col = this._ringColor(score);
-        el.innerHTML = `
-        <svg viewBox="0 0 ${size} ${size}" role="img" aria-label="睡眠评分 ${score == null ? '暂无' : Math.round(score)}">
-            <circle cx="${cx}" cy="${cy}" r="${rad}" fill="none" stroke="#e2e8f0" stroke-width="11"/>
-            <circle cx="${cx}" cy="${cy}" r="${rad}" fill="none" stroke="${col}" stroke-width="11"
-                stroke-linecap="round" stroke-dasharray="${circ.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}"
-                transform="rotate(-90 ${cx} ${cy})" style="transition:stroke-dashoffset .6s ease"/>
-            <text x="${cx}" y="${cy - 2}" text-anchor="middle" fill="#0f172a" font-size="34" font-weight="800">${score == null ? '—' : Math.round(score)}</text>
-            <text x="${cx}" y="${cy + 20}" text-anchor="middle" fill="#64748b" font-size="12">睡眠评分</text>
-        </svg>`;
+    // ── 方案 B：合成 + 输入分组 ──
+    // 恢复是合成结果（上行大格），睡眠分/深睡是成分指标（下行两小格）。
+    // 视觉上主从分明：大格用恢复分区色，小格用中性蓝/灰。
+    _renderScoreGroup(el, recovery, sleepScore, deepPct) {
+        if (!el) return;
+        const parts = [];
+
+        // 上行：恢复（合成结果）
+        if (recovery != null) {
+            const zone = recovery >= 67 ? 'good' : recovery >= 34 ? 'warn' : 'bad';
+            const zoneWord = { good: '良好', warn: '一般', bad: '偏低' };
+            parts.push(
+                `<div class="hsg-row hsg-row--synth hsg-synth--${zone}">` +
+                `<div class="hsg-synth-label">恢复</div>` +
+                `<div class="hsg-synth-num">${Math.round(recovery)}<small> · ${zoneWord[zone]}</small></div>` +
+                `<div class="hsg-synth-sub">合成 · 今晨状态</div>` +
+                `</div>`
+            );
+        }
+
+        // 下行：睡眠分 + 深睡（成分输入）
+        const inputs = [];
+        if (sleepScore != null) {
+            inputs.push(
+                `<div class="hsg-cell hsg-cell--sleep">` +
+                `<div class="hsg-cell-label">睡眠分</div>` +
+                `<div class="hsg-cell-num">${Math.round(sleepScore)}</div>` +
+                `<div class="hsg-cell-sub">成分</div>` +
+                `</div>`
+            );
+        }
+        if (deepPct != null) {
+            inputs.push(
+                `<div class="hsg-cell hsg-cell--deep">` +
+                `<div class="hsg-cell-label">深睡占比</div>` +
+                `<div class="hsg-cell-num">${Math.round(deepPct)}<small>%</small></div>` +
+                `<div class="hsg-cell-sub">成分</div>` +
+                `</div>`
+            );
+        }
+        if (inputs.length) {
+            parts.push(`<div class="hsg-row hsg-row--inputs">${inputs.join('')}</div>`);
+        }
+
+        el.innerHTML = parts.length
+            ? parts.join('<div class="hsg-connector" aria-hidden="true"></div>')
+            : '<div class="hsg-empty">暂无数据</div>';
     },
 
     _ringColor(score) {

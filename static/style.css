@@ -951,6 +951,48 @@ body {
 .hero-ring { width: 120px; height: 120px; flex-shrink: 0; }
 .hero-ring svg { width: 100%; height: 100%; display: block; }
 
+/* ── Hero 右栏：方案 B 合成 + 输入分组（恢复/睡眠分/深睡） ── */
+.hero-score-group {
+    display: flex; flex-direction: column; align-items: stretch; gap: 0;
+    flex-shrink: 0; width: 190px;
+    font-variant-numeric: tabular-nums;
+}
+.hsg-row { border-radius: 12px; border: 1px solid var(--gray-200); background: var(--gray-50); }
+
+/* 上行：恢复 = 合成结果（大格，按分区着色） */
+.hsg-row--synth {
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    padding: 14px 16px 12px;
+}
+.hsg-synth--good { background: var(--success-soft); border-color: color-mix(in srgb, var(--success) 30%, transparent); }
+.hsg-synth--good .hsg-synth-num { color: var(--success); }
+.hsg-synth--warn { background: var(--warning-soft); border-color: color-mix(in srgb, var(--warning) 30%, transparent); }
+.hsg-synth--warn .hsg-synth-num { color: var(--warning); }
+.hsg-synth--bad { background: var(--danger-soft); border-color: color-mix(in srgb, var(--danger) 30%, transparent); }
+.hsg-synth--bad .hsg-synth-num { color: var(--danger); }
+.hsg-synth-label { font-size: 12px; font-weight: 600; color: var(--gray-500); }
+.hsg-synth-num { font-size: 30px; font-weight: 700; line-height: 1.1; letter-spacing: -.02em; }
+.hsg-synth-num small { font-size: 13px; font-weight: 600; color: var(--gray-500); }
+.hsg-synth-sub { font-size: 11px; color: var(--gray-400); }
+
+/* 连接符：暗示「汇入」 */
+.hsg-connector { width: 1.5px; height: 14px; align-self: center; background: var(--gray-300); }
+
+/* 下行：睡眠分 + 深睡 = 成分输入（两小格横排） */
+.hsg-row--inputs { display: flex; gap: 8px; }
+.hsg-cell {
+    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 1px;
+    padding: 9px 8px 8px; border-radius: 12px; border: 1px solid var(--gray-200); background: #fff;
+}
+.hsg-cell--sleep { border-color: color-mix(in srgb, var(--primary) 28%, transparent); background: var(--primary-softer); }
+.hsg-cell--sleep .hsg-cell-num { color: var(--primary); }
+.hsg-cell--deep { background: var(--gray-50); }
+.hsg-cell-label { font-size: 11px; font-weight: 600; color: var(--gray-500); }
+.hsg-cell-num { font-size: 19px; font-weight: 700; color: var(--gray-800); line-height: 1.15; }
+.hsg-cell-num small { font-size: 11px; font-weight: 600; color: var(--gray-500); }
+.hsg-cell-sub { font-size: 10px; color: var(--gray-400); }
+.hsg-empty { font-size: 13px; color: var(--gray-400); padding: 12px; text-align: center; }
+
 /* ── Hero lower：合并卡「近 7 天 · 睡眠 × 恢复」 ── */
 .hero-lower { display: grid; grid-template-columns: 1fr; gap: 12px; }
 .hero-week-card {
@@ -1030,6 +1072,7 @@ body {
 @media (max-width: 720px) {
     .hero-card { flex-direction: column; align-items: flex-start; gap: 14px; }
     .hero-ring { align-self: flex-end; width: 100px; height: 100px; }
+    .hero-score-group { align-self: stretch; width: 100%; }
     .hero-duration { font-size: 28px; }
     .hero-stats { gap: 6px; }
     .hero-lower { grid-template-columns: 1fr; gap: 12px; }
