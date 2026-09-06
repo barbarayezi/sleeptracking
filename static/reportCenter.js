@@ -260,59 +260,75 @@
         }
 
         // ── Helpers ──
+        // Convert the report's markdown-ish text into HTML via a single-pass
+        // line state machine. We deliberately avoid pulling in a markdown
+        // library to keep this module light.
+        //
+        // Structured AI brief lines get card styling:
+        //   ✅/⚠️/🔴 ...            → .brief-conclusion
+        //   ⚖️ **体重** — body ...  → .brief-point (head + body in one card)
+        //   🎯 ...                 → .brief-point--action
+        // The model sometimes puts the point title on its own line and the
+        // body on the following line(s) — the state machine keeps the card
+        // open across blank lines and merges following text into the body.
         _formatCombinedText(text) {
-            // Convert headings + paragraphs + bold into HTML. We deliberately
-            // avoid pulling in a markdown library to keep this module light.
-            const escaped = this._escape(text);
-            return escaped
+            const escaped = this._escape(text)
                 .replace(/^### (.+)$/gm, '<h4>$1</h4>')
                 .replace(/^## (.+)$/gm, '<h3>$1</h3>')
                 .replace(/^# (.+)$/gm, '<h2>$1</h2>')
-                .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-                .replace(/^\s*[-•]\s+(.+)$/gm, '<li>$1</li>')
-                .replace(/(?:<li>.*?<\/li>(?:\s*<li>.*?<\/li>)*)/g, m => `<ul>${m}</ul>`)
-                .split(/\n\n+/)
-                .map(blk => this._wrapBriefBlock(blk))
-                .join('\n');
-        }
-
-        // Detect structured brief lines and wrap them in card styles.
-        // Works line-by-line so it also handles blocks where a heading and
-        // brief points are joined by single newlines (no blank line).
-        _wrapBriefBlock(blk) {
-            const trimmed = blk.trim();
-            if (!trimmed) return blk;
+                .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
 
             const out = [];
             let plain = [];
+            let card = null;      // {emoji, label, action, body: []}
+            let listOpen = false;
+
             const flushPlain = () => {
-                if (plain.length) {
-                    out.push(`<p>${plain.join('<br>')}</p>`);
-                    plain = [];
-                }
+                if (plain.length) { out.push(`<p>${plain.join('<br>')}</p>`); plain = []; }
             };
-            for (const rawLine of trimmed.split('\n')) {
+            const flushCard = () => {
+                if (!card) return;
+                const cls = card.action ? 'brief-point brief-point--action' : 'brief-point';
+                const head = `<div class="brief-point__head">${card.emoji}${card.label ? ` <strong>${card.label}</strong>` : ''}</div>`;
+                const body = card.body.length ? `<div class="brief-point__body">${card.body.join('<br>')}</div>` : '';
+                out.push(`<div class="${cls}">${head}${body}</div>`);
+                card = null;
+            };
+            const closeList = () => { if (listOpen) { out.push('</ul>'); listOpen = false; } };
+
+            const POINT_EMOJI = '⚖️|🍚|💧|😴|💊|📈|🎯';
+            const reBold = new RegExp(`^(${POINT_EMOJI})\\s*<strong>([^<]*)</strong>\\s*[—–\\-:：]?\\s*(.*)$`);
+            const rePlain = new RegExp(`^(${POINT_EMOJI})\\s*([^—–\\-:：\\s]{1,12})\\s*[—–\\-:：]\\s*(.*)$`);
+            const reHeadOnly = new RegExp(`^(${POINT_EMOJI})\\s*(.{0,12}?)$`);
+
+            for (const rawLine of escaped.split('\n')) {
                 const l = rawLine.trim();
-                if (!l) continue;
-                if (/^<(h\d|ul|li|ol)/.test(l)) {
-                    flushPlain();
-                    out.push(l);
+                if (!l) { closeList(); flushPlain(); continue; }   // card survives blank lines
+                if (/^<h[2-4]>/.test(l)) { closeList(); flushCard(); flushPlain(); out.push(l); continue; }
+                const li = l.match(/^[-•]\s+(.+)$/);
+                if (li) {
+                    flushCard(); flushPlain();
+                    if (!listOpen) { out.push('<ul>'); listOpen = true; }
+                    out.push(`<li>${li[1]}</li>`);
                     continue;
                 }
+                closeList();
                 if (/^(✅|⚠️|🔴)/.test(l) || l.includes('一句话结论')) {
-                    flushPlain();
+                    flushCard(); flushPlain();
                     out.push(`<div class="brief-conclusion">${l}</div>`);
-                } else if (/^(⚖️|🍚|💧|😴|💊|📈|🎯)/.test(l)) {
-                    flushPlain();
-                    const cls = l.startsWith('🎯')
-                        ? 'brief-point brief-point--action'
-                        : 'brief-point';
-                    out.push(`<div class="${cls}">${l}</div>`);
-                } else {
-                    plain.push(l);
+                    continue;
                 }
+                let m = l.match(reBold) || l.match(rePlain) || l.match(reHeadOnly);
+                if (m) {
+                    flushCard(); flushPlain();
+                    card = { emoji: m[1], label: (m[2] || '').trim(), action: m[1] === '🎯', body: [] };
+                    if (m[3]) card.body.push(m[3]);
+                    continue;
+                }
+                if (card) { card.body.push(l); continue; }
+                plain.push(l);
             }
-            flushPlain();
+            closeList(); flushCard(); flushPlain();
             return out.join('\n');
         }
 
