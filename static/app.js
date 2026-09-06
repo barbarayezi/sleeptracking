@@ -42,6 +42,18 @@ const App = {
             this.timeline.setDays(parseInt(e.target.value));
         });
 
+        // Tab 导航提前注册：原先排在下方 4 个串行 await 之后，页面加载的前几秒
+        // 点击 Tab 无监听可响应（只改了 hash），要等 init 走完才"补跳"，体感很卡。
+        // 监听器全是同步 DOM 操作，先挂上，网络加载放后面。
+        this._initCategoryNav();
+
+        // Backup: export / import
+        this._initBackup();
+
+        // Register Service Worker & PWA install
+        this._registerServiceWorker();
+        this._initInstallPrompt();
+
         // Load today's data
         this.currentDate = this._todayStr();
         this._updateDateLabel();
@@ -50,7 +62,7 @@ const App = {
         await this.period.loadDate(this.currentDate);
         await this.medication.loadDate(this.currentDate);
 
-        // 图表分析 Tab 的重模块（时间线/科研看板/健康总览）改为首进该 Tab 时懒加载，
+        // 图表分析 Tab 的重模块（时间线/科研看板/健康总览）首进该 Tab 时懒加载，
         // 见 _loadChartsTab()——首屏只保证概览页秒开。
 
         // Load Hero 首页概览（昨晚睡眠 + 指标芯片 + 本周/Whoop 总览）
@@ -59,14 +71,34 @@ const App = {
         // Initialize Whoop integration
         this._initWhoop();
 
-        // Register Service Worker & PWA install
-        this._registerServiceWorker();
-        this._initInstallPrompt();
-        // Tab 导航（含根据 hash 决定是否立即加载图表 Tab）
-        this._initCategoryNav();
+        // 空闲预取图表 Tab 数据（只拉数据进 ApiCache，不渲染）：
+        // 首屏就绪后趁浏览器空闲把 7 个接口拉进缓存，首次点击图表分析时
+        // load() 全部命中缓存就地渲染，不再等 ~3s 网络（Turso 东京 RTT）。
+        // 注意不能在这里直接 _loadChartsTab() 渲染——timeline 是 canvas，
+        // 隐藏容器 clientWidth=0，会渲染成空画布且 _chartsTabLoaded 阻止重渲。
+        const prefetchCharts = () => this._prefetchChartsData();
+        if ('requestIdleCallback' in window) {
+            requestIdleCallback(prefetchCharts, { timeout: 6000 });
+        } else {
+            setTimeout(prefetchCharts, 3000);
+        }
+    },
 
-        // Backup: export / import
-        this._initBackup();
+    /** Fire the charts-tab GETs through ApiCache (dedup + persist), no rendering. */
+    _prefetchChartsData() {
+        if (!window.ApiCache) return;
+        const to = this._todayStr();
+        const from = this._addDays(to, -29);   // 与 research/health 的 range=30 保持一致，URL 完全相同才会去重
+        const urls = [
+            '/api/records',
+            '/api/meals',
+            '/api/periods',
+            '/api/periods/summary',
+            '/api/whoop/daily',
+            '/api/healthkit/metrics?type=steps',
+            `/api/health-overview?from=${from}&to=${to}`,
+        ];
+        urls.forEach((u) => ApiCache.fetch(u).catch(() => {}));
     },
 
     /** Fetch with a timeout so a wedged backend does not leave the UI hanging forever. */
