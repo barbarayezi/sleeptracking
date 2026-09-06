@@ -121,52 +121,30 @@ const HeroOverview = {
         return null;
     },
 
-    // ── 方案 B：合成 + 输入分组 ──
-    // 恢复是合成结果（上行大格），睡眠分/深睡是成分指标（下行两小格）。
-    // 视觉上主从分明：大格用恢复分区色，小格用中性蓝/灰。
+    // ── 右栏：恢复（合成）+ 睡眠分/深睡（成分）轻量内联版 ──
+    // 无边框无底色，大数字 + 标签，和左侧「恢复 95 · 良好」pill 一套扁平语言。
     _renderScoreGroup(el, recovery, sleepScore, deepPct) {
         if (!el) return;
-        const parts = [];
+        const zoneCls = recovery == null ? '' : (recovery >= 67 ? 'good' : recovery >= 34 ? 'warn' : 'bad');
+        const zoneWord = { good: '良好', warn: '一般', bad: '偏低' };
 
-        // 上行：恢复（合成结果）
-        if (recovery != null) {
-            const zone = recovery >= 67 ? 'good' : recovery >= 34 ? 'warn' : 'bad';
-            const zoneWord = { good: '良好', warn: '一般', bad: '偏低' };
-            parts.push(
-                `<div class="hsg-row hsg-row--synth hsg-synth--${zone}">` +
-                `<div class="hsg-synth-label">恢复</div>` +
-                `<div class="hsg-synth-num">${Math.round(recovery)}<small> · ${zoneWord[zone]}</small></div>` +
-                `<div class="hsg-synth-sub">合成 · 今晨状态</div>` +
-                `</div>`
-            );
-        }
+        const recHtml = recovery == null ? '' :
+            `<div class="hsg-rec">` +
+            `<span class="hsg-rec-label">恢复</span>` +
+            `<span class="hsg-rec-num hsg-rec-num--${zoneCls}">${Math.round(recovery)}</span>` +
+            `<span class="hsg-rec-word hsg-rec-word--${zoneCls}">${zoneWord[zoneCls]}</span>` +
+            `</div>`;
 
-        // 下行：睡眠分 + 深睡（成分输入）
-        const inputs = [];
-        if (sleepScore != null) {
-            inputs.push(
-                `<div class="hsg-cell hsg-cell--sleep">` +
-                `<div class="hsg-cell-label">睡眠分</div>` +
-                `<div class="hsg-cell-num">${Math.round(sleepScore)}</div>` +
-                `<div class="hsg-cell-sub">成分</div>` +
-                `</div>`
-            );
-        }
-        if (deepPct != null) {
-            inputs.push(
-                `<div class="hsg-cell hsg-cell--deep">` +
-                `<div class="hsg-cell-label">深睡占比</div>` +
-                `<div class="hsg-cell-num">${Math.round(deepPct)}<small>%</small></div>` +
-                `<div class="hsg-cell-sub">成分</div>` +
-                `</div>`
-            );
-        }
-        if (inputs.length) {
-            parts.push(`<div class="hsg-row hsg-row--inputs">${inputs.join('')}</div>`);
-        }
+        const compBits = [];
+        if (sleepScore != null) compBits.push(
+            `<div class="hsg-comp"><span class="hsg-comp-label">睡眠分</span>` +
+            `<span class="hsg-comp-num hsg-comp-num--sleep">${Math.round(sleepScore)}</span></div>`);
+        if (deepPct != null) compBits.push(
+            `<div class="hsg-comp"><span class="hsg-comp-label">深睡占比</span>` +
+            `<span class="hsg-comp-num">${Math.round(deepPct)}<small>%</small></span></div>`);
 
-        el.innerHTML = parts.length
-            ? parts.join('<div class="hsg-connector" aria-hidden="true"></div>')
+        el.innerHTML = (recHtml || compBits.length)
+            ? recHtml + (compBits.length ? `<div class="hsg-comps">${compBits.join('<span class="hsg-sep">·</span>')}</div>` : '')
             : '<div class="hsg-empty">暂无数据</div>';
     },
 
