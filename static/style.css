@@ -1570,6 +1570,28 @@ i.algo-lg-line { background: transparent; border-left: 1px solid var(--gray-400)
 .algo-note { font-size: 12px; color: var(--gray-500); background: var(--gray-50); border: 1px dashed var(--gray-300); border-radius: var(--radius); padding: 8px 12px; margin-bottom: 12px; line-height: 1.7; }
 .algo-note b { color: var(--primary); font-weight: 600; }
 
+/* ── 恢复分输入总览（一屏看全 4 项真实输入 + 深睡占比） ── */
+.algo-overview {
+    display: flex; gap: 8px; flex-wrap: wrap;
+    margin: 0 0 12px; padding: 10px 12px;
+    border: 1px solid var(--gray-200); border-radius: var(--radius); background: #fff;
+}
+.aoc {
+    flex: 1; min-width: 108px;
+    display: flex; flex-direction: column; align-items: center; gap: 1px;
+    padding: 8px 8px 7px; border-radius: 10px;
+    border: 1px solid var(--gray-200); background: var(--gray-50);
+    font-variant-numeric: tabular-nums;
+}
+.aoc--skip { border-style: dashed; opacity: .72; }   /* 不参与恢复分（深睡占比）：虚线区分 */
+.aoc-label { font-size: 11px; font-weight: 600; color: var(--gray-500); }
+.aoc-cur { font-size: 18px; font-weight: 700; color: var(--gray-800); line-height: 1.15; }
+.aoc-cur small { font-size: 11px; font-weight: 600; color: var(--gray-500); margin-left: 1px; }
+.aoc-base { font-size: 11px; color: var(--gray-400); }
+.aoc-base--good { color: var(--success); }
+.aoc-base--bad { color: var(--danger); }
+.aoc-base--neu { color: var(--gray-400); }
+
 .algo-row { display: grid; grid-template-columns: 200px minmax(0, 1fr) 160px; gap: 14px; align-items: center; padding: 16px 12px 24px; border-radius: var(--radius); }
 .algo-row:hover { background: var(--gray-50); }
 .algo-m-name { font-size: 13px; font-weight: 700; color: var(--gray-900); }

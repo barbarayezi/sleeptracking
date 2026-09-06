@@ -304,6 +304,24 @@ const HeroOverview = {
         const baseRHR = bl(daily, 'resting_heart_rate');
         const baseEff = bl(nightOnly, 'sleep_efficiency');
         const baseResp = bl(nightOnly, 'respiratory_rate');
+        // 深睡占比：当前值用与顶部分组一致的 _deepPct(night)，基线按 nightOnly 逐条重算占比
+        const deep = this._deepPct(cycle) ?? this._deepPct(night);
+        const baseDeep = (() => {
+            const vals = nightOnly.filter(o => o.record_date < anchorDate).slice(-28)
+                .map(o => this._deepPct(o)).filter(v => v != null);
+            return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+        })();
+
+        // ── 恢复分输入总览（一屏看全：4 项真实输入 + 深睡占比，标注是否参与计算） ──
+        // chips 结构：{ label, cur, base, unit, dec, higherBetter, involved }
+        // involved=false 表示该指标不汇入恢复分（深睡占比），用虚线边框区别于真实输入。
+        const overviewChips = [
+            { label: 'HRV', cur: hrv, base: baseHRV, unit: 'ms', dec: 0, higherBetter: true, involved: true },
+            { label: '静息心率', cur: rhr, base: baseRHR, unit: '', dec: 0, higherBetter: false, involved: true },
+            { label: '睡眠效率', cur: eff, base: baseEff, unit: '%', dec: 0, higherBetter: true, involved: true },
+            { label: '呼吸率', cur: resp, base: baseResp, unit: '', dec: 1, higherBetter: false, involved: true },
+            { label: '深睡占比', cur: deep, base: baseDeep, unit: '%', dec: 0, higherBetter: true, involved: false },
+        ];
 
         const rows = [
             this._algoRow('HRV 心率变异性', '自主神经恢复力 · 越高越好', 3, 'ms', hrv, baseHRV, 0, true, null,
@@ -329,6 +347,27 @@ const HeroOverview = {
             <span class="rel-rec">恢复分 <span class="rel-num">${Math.round(recovery)}</span></span>
             <span class="rel-sep">· 今晨状态（HRV 主导）</span>
         </div>`;
+
+        // 渲染输入总览条（一屏看全，无需下滚）
+        const overviewHtml = '<div class="algo-overview">' +
+            overviewChips.map(c => {
+                const curFmt = c.cur == null ? '—' : (c.dec === 1 ? Number(c.cur).toFixed(1) : String(Math.round(c.cur)));
+                const baseFmt = c.base == null ? '—' : (c.dec === 1 ? Number(c.base).toFixed(1) : String(Math.round(c.base)));
+                let arrow = '', arrowCls = 'neu';
+                if (c.cur != null && c.base != null) {
+                    const diff = Number(c.cur) - Number(c.base);
+                    const good = c.higherBetter ? diff > 0 : diff < 0;
+                    if (Math.abs(diff / c.base) < 0.02) { arrow = '≈'; arrowCls = 'neu'; }
+                    else if (good) { arrow = diff > 0 ? '↑' : '↓'; arrowCls = 'good'; }
+                    else { arrow = diff > 0 ? '↑' : '↓'; arrowCls = 'bad'; }
+                }
+                return `<div class="aoc${c.involved ? '' : ' aoc--skip'}" title="${c.involved ? '参与恢复分计算' : '不参与恢复分计算'}">` +
+                    `<span class="aoc-label">${c.label}</span>` +
+                    `<span class="aoc-cur">${curFmt}<small>${c.unit}</small></span>` +
+                    `<span class="aoc-base aoc-base--${arrowCls}">${arrow} 基线 ${baseFmt}${c.unit}</span>` +
+                    `</div>`;
+            }).join('') +
+            '</div>';
 
         const zone = recovery >= 67 ? 'green' : recovery >= 34 ? 'yellow' : 'red';
         const zoneLbl = {
@@ -367,7 +406,7 @@ const HeroOverview = {
         </div>
         <div class="algo-foot">* 权重仅作方向示意：HRV 为第一主导项，精确配比为 Whoop 专有算法；基线 = 本地近 28 天均值（不含当日）。本地库无 Whoop 的 sleep_need，故用同步到的「睡眠效率」近似其睡眠通道，方向逻辑一致。</div>`;
 
-        body.innerHTML = relHtml + '<div class="algo-rows">' + rows.join('') + '</div>' + sumHtml;
+        body.innerHTML = relHtml + overviewHtml + '<div class="algo-rows">' + rows.join('') + '</div>' + sumHtml;
     },
 
     _algoRow(name, desc, wgt, unit, cur, base, dec, highBetter, fromTag, effectTxt, lowTxt, highTxt) {
