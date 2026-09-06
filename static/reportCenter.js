@@ -304,6 +304,8 @@
             for (const rawLine of escaped.split('\n')) {
                 const l = rawLine.trim();
                 if (!l) { closeList(); flushPlain(); continue; }   // card survives blank lines
+                // markdown separators the model sometimes inserts — skip entirely
+                if (/^(-{3,}|\*{3,}|_{3,})$/.test(l)) continue;
                 if (/^<h[2-4]>/.test(l)) { closeList(); flushCard(); flushPlain(); out.push(l); continue; }
                 const li = l.match(/^[-•]\s+(.+)$/);
                 if (li) {
@@ -313,6 +315,9 @@
                     continue;
                 }
                 closeList();
+                // standalone conclusion label (e.g. "✅ **一句话结论**") — the real
+                // conclusion sentence follows on its own line; drop the bare label
+                if (/^(✅|⚠️|🔴)\s*<strong>[^<]{0,12}<\/strong>\s*$/.test(l)) continue;
                 if (/^(✅|⚠️|🔴)/.test(l) || l.includes('一句话结论')) {
                     flushCard(); flushPlain();
                     out.push(`<div class="brief-conclusion">${l}</div>`);
