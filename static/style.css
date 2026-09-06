@@ -1483,7 +1483,7 @@ i.algo-lg-line { background: transparent; border-left: 1px solid var(--gray-400)
 .algo-wdots i.on { background: var(--primary); }
 .algo-fromsleep { display: inline-block; font-size: 11px; color: var(--primary); border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent); border-radius: 4px; padding: 0 4px; margin-top: 3px; }
 
-.algo-meter { position: relative; padding: 16px 2px 6px; min-height: 50px; }
+.algo-meter { position: relative; padding: 26px 2px 6px; min-height: 50px; }
 .algo-axis { display: flex; justify-content: space-between; font-size: 11px; color: var(--gray-400); margin-bottom: 3px; padding: 0 4px; }
 .algo-bar { position: relative; height: 10px; border-radius: 5px; background: var(--gray-100); overflow: hidden; }
 .algo-bar .lo { position: absolute; left: 0; top: 0; bottom: 0; width: 50%; }
@@ -1499,24 +1499,20 @@ i.algo-lg-line { background: transparent; border-left: 1px solid var(--gray-400)
 .algo-dot--mild { background: var(--warning); }
 .algo-dot--good { background: var(--success); }
 .algo-dot--neu { background: var(--gray-400); }
-/* dotval chip: solid white background + border + z-index above bar, so it
-   can't be visually read as "background-less floating text" against the
-   colored zone shading, and labels won't run into each other when rows pack
-   tightly. top bumped so it clears the dot entirely. */
+/* dotval chip: transparent background + bold text, so it reads as a label
+   (not a "white box occluding the bar"). Positioned slightly above the bar
+   to avoid overlapping with the baseline tag. */
 .algo-dotval {
     position: absolute;
     transform: translateX(-50%);
-    top: 22px;
+    top: -6px;
     font-size: 12px;
     font-weight: 700;
     white-space: nowrap;
-    background: var(--bg-card);
-    border: 1px solid var(--gray-200);
-    border-radius: 4px;
-    padding: 2px 8px;
+    color: var(--gray-800);
     z-index: 4;
-    box-shadow: var(--shadow-sm);
     font-variant-numeric: tabular-nums;
+    text-shadow: 0 0 3px var(--bg-card), 0 0 3px var(--bg-card), 0 0 3px var(--bg-card);
 }
 .algo-dotval small { font-weight: 500; color: var(--gray-500); font-size: 11px; margin-left: 4px; }
 
