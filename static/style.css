@@ -401,6 +401,16 @@ body {
     font-family: inherit;
 }
 .meal-option-add:hover { border-color: var(--primary); background: var(--primary-50, rgba(37,99,235,.06)); }
+.meal-option-pill { position: relative; }
+.meal-option-del {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 14px; height: 14px; margin-left: 2px;
+    border: none; border-radius: 50%;
+    background: transparent; color: var(--gray-400);
+    font-size: 13px; line-height: 1; cursor: pointer;
+    padding: 0; transition: all var(--transition);
+}
+.meal-option-del:hover { background: var(--red, #ef4444); color: #fff; }
 .meal-card__tag {
     font-size: 12px;
     color: var(--gray-600);

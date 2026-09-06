@@ -124,9 +124,12 @@ class MealManager {
             const resp = await fetch('/api/meal-options');
             if (!resp.ok) return;
             const data = await resp.json();
+            // API returns [{id, value}...]; tolerate legacy plain-string shape.
+            const norm = (arr) => (Array.isArray(arr) ? arr : []).map(o =>
+                (typeof o === 'string') ? { id: null, value: o } : o);
             this._mealOptions = {
-                location: Array.isArray(data.location) ? data.location : [],
-                method: Array.isArray(data.method) ? data.method : [],
+                location: norm(data.location),
+                method: norm(data.method),
             };
             this._renderMealOptions();
         } catch (err) {
@@ -145,20 +148,25 @@ class MealManager {
     }
 
     /**
-     * Render one radio group + its "＋ 添加" control.
-     * typeLabel is used in the prompt when adding a custom option.
+     * Render one radio group + its "＋ 添加" control. Each option pill gets a
+     * "×" delete button so the user can remove options from the page.
+     * typeLabel is used in the prompt/confirm dialogs.
      */
     _renderRadioGroup(container, name, values, selected, typeLabel) {
         if (!container) return;
-        let html = values.map(v => `
-            <label class="radio-label">
-                <input type="radio" name="${name}" value="${this._escapeHtml(v)}"${v === selected ? ' checked' : ''}>
+        const valueList = values.map(o => o.value);
+        let html = values.map(o => `
+            <label class="radio-label meal-option-pill">
+                <input type="radio" name="${name}" value="${this._escapeHtml(o.value)}"${o.value === selected ? ' checked' : ''}>
                 <span class="radio-custom"></span>
-                ${this._escapeHtml(v)}
+                ${this._escapeHtml(o.value)}
+                ${o.id !== null && o.id !== undefined
+                    ? `<button type="button" class="meal-option-del" data-id="${o.id}" data-value="${this._escapeHtml(o.value)}" title="删除「${this._escapeHtml(o.value)}」">×</button>`
+                    : ''}
             </label>`).join('');
         // Legacy records may hold a value no longer in the option list —
         // keep it selectable so editing doesn't silently drop it.
-        if (selected && !values.includes(selected)) {
+        if (selected && !valueList.includes(selected)) {
             html += `
             <label class="radio-label">
                 <input type="radio" name="${name}" value="${this._escapeHtml(selected)}" checked>
@@ -172,6 +180,31 @@ class MealManager {
         container.querySelector('.meal-option-add').addEventListener('click', () => {
             this._promptAddOption(name === 'dining_location' ? 'location' : 'method', typeLabel);
         });
+        container.querySelectorAll('.meal-option-del').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this._deleteOption(parseInt(e.currentTarget.dataset.id, 10), e.currentTarget.dataset.value);
+            });
+        });
+    }
+
+    /** Delete an option by id (after confirm) and re-render. */
+    async _deleteOption(optionId, value) {
+        if (!optionId) return;
+        if (!confirm(`删除选项「${value}」？\n已保存的历史记录不受影响。`)) return;
+        try {
+            const resp = await fetch(`/api/meal-options/${optionId}`, { method: 'DELETE' });
+            if (resp.ok || resp.status === 204) {
+                await this._loadMealOptions();
+                this._showMessage(`已删除选项「${value}」`, 'success');
+            } else {
+                const err = await resp.json().catch(() => ({}));
+                this._showMessage('❌ ' + (err.error || '删除失败'), 'error');
+            }
+        } catch (err) {
+            this._showMessage('❌ 网络错误: ' + err.message, 'error');
+        }
     }
 
     /** Ask the user for a custom option and persist it via the API. */

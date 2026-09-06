@@ -355,19 +355,20 @@ def replace_meal_images(meal_id, images):
 def get_meal_options():
     """Return all meal radio options grouped by type.
 
-    Returns: {'location': [...values...], 'method': [...values...]}
-    ordered by sort_order then id.
+    Returns: {'location': [{'id','value'}...], 'method': [{'id','value'}...]}
+    ordered by sort_order then id. The id is needed so the UI can delete a
+    specific option.
     """
     conn = get_connection()
     cursor = conn.execute(
-        "SELECT option_type, option_value FROM meal_options "
+        "SELECT id, option_type, option_value FROM meal_options "
         "ORDER BY option_type, sort_order, id"
     )
     result = {'location': [], 'method': []}
     for row in cursor.fetchall():
         t = row['option_type']
         if t in result:
-            result[t].append(row['option_value'])
+            result[t].append({'id': row['id'], 'value': row['option_value']})
     conn.close()
     return result
 
