@@ -49,9 +49,9 @@ const App = {
         await this.meal.loadDate(this.currentDate);
         await this.period.loadDate(this.currentDate);
         await this.medication.loadDate(this.currentDate);
-        await this._refreshTimeline();
-        await this.health.load();
-        await this.research.load();
+
+        // 图表分析 Tab 的重模块（时间线/科研看板/健康总览）改为首进该 Tab 时懒加载，
+        // 见 _loadChartsTab()——首屏只保证概览页秒开。
 
         // Load Hero 首页概览（昨晚睡眠 + 指标芯片 + 本周/Whoop 总览）
         if (window.HeroOverview) HeroOverview.refresh();
@@ -62,10 +62,8 @@ const App = {
         // Register Service Worker & PWA install
         this._registerServiceWorker();
         this._initInstallPrompt();
+        // Tab 导航（含根据 hash 决定是否立即加载图表 Tab）
         this._initCategoryNav();
-
-        // Lazily load heavy sections (health overview) when scrolled into view
-        this._initLazyHealth();
 
         // Backup: export / import
         this._initBackup();
@@ -582,44 +580,55 @@ const App = {
         });
     },
 
-    /* ── Category Nav (scroll-spy) ──────────── */
+    /* ── Category Nav (Tab 单页切换) ──────────── */
     _initCategoryNav() {
-        const navItems = Array.from(document.querySelectorAll('.cat-nav-item'));
-        if (!navItems.length || !('IntersectionObserver' in window)) return;
-        const groups = navItems
-            .map((a) => document.querySelector(a.getAttribute('href')))
-            .filter(Boolean);
-        if (!groups.length) return;
+        this._catNavItems = Array.from(document.querySelectorAll('.cat-nav-item'));
+        if (!this._catNavItems.length) return;
 
-        const setActive = (id) => {
-            navItems.forEach((a) =>
-                a.classList.toggle('active', a.getAttribute('href') === '#' + id)
-            );
-        };
+        this._catNavItems.forEach((a) => {
+            a.addEventListener('click', (e) => {
+                e.preventDefault();
+                const id = a.getAttribute('href').slice(1);
+                this._showGroup(id, /*updateHash*/ true);
+            });
+        });
 
-        const observer = new IntersectionObserver(
-            (entries) => {
-                entries.forEach((e) => {
-                    if (e.isIntersecting) setActive(e.target.id);
-                });
-            },
-            { rootMargin: '-140px 0px -60% 0px', threshold: 0 }
-        );
-        groups.forEach((g) => observer.observe(g));
+        // Deep-link: honour #group-xxx on load, fall back to 概览.
+        const initial = (location.hash || '').replace('#', '');
+        const valid = this._catNavItems.some((a) => a.getAttribute('href') === '#' + initial);
+        this._showGroup(valid ? initial : 'group-overview', /*updateHash*/ valid);
+
+        // Back/forward buttons follow the hash.
+        window.addEventListener('hashchange', () => {
+            const id = (location.hash || '').replace('#', '');
+            if (this._catNavItems.some((a) => a.getAttribute('href') === '#' + id)) {
+                this._showGroup(id, false);
+            }
+        });
     },
 
-    _initLazyHealth() {
-        const section = document.querySelector('.health-overview-section');
-        if (!section || !this.health) return;
-        const observer = new IntersectionObserver((entries) => {
-            entries.forEach((e) => {
-                if (e.isIntersecting) {
-                    this.health.load();
-                    observer.disconnect();
-                }
-            });
-        }, { rootMargin: '200px 0px' });
-        observer.observe(section);
+    /** Show one category group, hide the rest, mark nav + lazily load heavy tabs. */
+    _showGroup(id, updateHash) {
+        document.querySelectorAll('.category-group').forEach((g) =>
+            g.classList.toggle('active', g.id === id)
+        );
+        (this._catNavItems || []).forEach((a) =>
+            a.classList.toggle('active', a.getAttribute('href') === '#' + id)
+        );
+        if (updateHash) {
+            // replace (not push) so tab switches don't spam the history stack
+            history.replaceState(null, '', '#' + id);
+        }
+        if (id === 'group-display') this._loadChartsTab();
+    },
+
+    /** Lazily load the heavy chart modules the first time 图表分析 is opened. */
+    _loadChartsTab() {
+        if (this._chartsTabLoaded) return;
+        this._chartsTabLoaded = true;
+        if (this.timeline) this._refreshTimeline();
+        if (this.research) this.research.load();
+        if (this.health) this.health.load();
     },
 
     _initBackup() {

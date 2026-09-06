@@ -11,7 +11,7 @@
     <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="/static/icon.svg">
     <title>量化健康 — QHealth</title>
-    <link rel="stylesheet" href="/static/style.css?v=28">
+    <link rel="stylesheet" href="/static/style.css?v=29">
 </head>
 <body>
 
@@ -36,9 +36,10 @@
         </header>
 
         <nav class="category-nav">
-            <a href="#group-display" class="cat-nav-item active">📊 图表展示</a>
-            <a href="#group-actions" class="cat-nav-item">🔗 数据同步</a>
-            <a href="#group-forms" class="cat-nav-item">✍️ 手动记录</a>
+            <a href="#group-overview" class="cat-nav-item active">🏠 概览</a>
+            <a href="#group-display" class="cat-nav-item">📊 图表分析</a>
+            <a href="#group-forms" class="cat-nav-item">✍️ 记录</a>
+            <a href="#group-actions" class="cat-nav-item">🔗 同步</a>
         </nav>
     </div>
 
@@ -50,11 +51,10 @@
         <div id="whoop-gap-alert" class="whoop-gap-alert" style="display:none;"></div>
 
         <!-- ═══════════════════════════════════════ -->
-        <!--  TODAY AT A GLANCE (top card)             -->
+        <!--  CATEGORY 0: 概览（hero + 恢复算法拆解）     -->
         <!-- ═══════════════════════════════════════ -->
-        <!-- ═══════════════════════════════════════ -->
+        <div class="category-group active" id="group-overview">
         <!--  HERO · 昨晚睡眠（设计稿首页重构）          -->
-        <!-- ═══════════════════════════════════════ -->
         <section class="card hero-overview" id="hero-overview">
             <div class="hero-card">
                 <div class="hero-left">
@@ -111,6 +111,7 @@
                 <span id="backup-msg" class="form-message"></span>
             </div>
         </section>
+        </div><!-- /group-overview -->
 
         <!-- ═══════════════════════════════════════ -->
         <!--  CATEGORY 1: 图表与展示                   -->
@@ -884,7 +885,7 @@
     <script src="/static/researchDashboard.js?v=1"></script>
     <script src="/static/hero.js?v=19"></script>
     <script src="/static/reportCenter.js?v=1"></script>
-    <script src="/static/app.js?v=12"></script>
+    <script src="/static/app.js?v=13"></script>
     <script>
         (function () {
             var btn = document.getElementById('btn-quick-record');
