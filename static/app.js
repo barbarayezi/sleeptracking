@@ -54,6 +54,11 @@ const App = {
         this._registerServiceWorker();
         this._initInstallPrompt();
 
+        // Whoop 状态检查不依赖今日数据，与下方 4 个串行加载并发发出——
+        // 否则同步 Tab 的「检查中...」要等饮食/睡眠等 4 个接口（各 1+ 次
+        // Turso 东京往返）全部走完才开始请求，凭空多转好几秒。
+        this._initWhoop();
+
         // Load today's data
         this.currentDate = this._todayStr();
         this._updateDateLabel();
@@ -67,9 +72,6 @@ const App = {
 
         // Load Hero 首页概览（昨晚睡眠 + 指标芯片 + 本周/Whoop 总览）
         if (window.HeroOverview) HeroOverview.refresh();
-
-        // Initialize Whoop integration
-        this._initWhoop();
 
         // 空闲预取图表 Tab 数据（只拉数据进 ApiCache，不渲染）：
         // 首屏就绪后趁浏览器空闲把 7 个接口拉进缓存，首次点击图表分析时

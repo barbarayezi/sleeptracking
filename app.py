@@ -1849,20 +1849,39 @@ def whoop_callback():
         return redirect(f'/?whoop=error&msg={error_msg}')
 
 
+# Whoop 连接状态进程内短缓存。状态读的是 Turso 云库（每次 2 次东京往返：
+# SELECT 1 探活 + token 查询），而连接状态本身极少变化——60s 内复用结果，
+# 让同步 Tab 的「检查中...」不再每次付网络往返。授权回调/断开时主动失效。
+_whoop_status_cache = {"at": 0.0, "result": None}
+_WHOOP_STATUS_TTL_SECONDS = 60
+
+
+def _invalidate_whoop_status_cache():
+    _whoop_status_cache["at"] = 0.0
+    _whoop_status_cache["result"] = None
+
+
 @app.route('/api/whoop/status')
 def whoop_status():
     """Check Whoop connection status."""
+    now = time.time()
+    cached = _whoop_status_cache["result"]
+    if cached is not None and (now - _whoop_status_cache["at"]) < _WHOOP_STATUS_TTL_SECONDS:
+        return jsonify(dict(cached))
     try:
         from whoop.client import WhoopClient
         client = WhoopClient()
         authenticated = client.is_authenticated()
     except Exception as e:
         # DB (Turso) hiccup should not be reported as "not connected"
+        # 注意：失败结果不写缓存，下次请求立即重试。
         return jsonify({'authenticated': False, 'db_error': True, 'error': str(e)})
     result = {'authenticated': authenticated}
     if authenticated:
         # Show masked client ID for reference
         result['client_id'] = client.client_id[:8] + '...'
+    _whoop_status_cache["at"] = now
+    _whoop_status_cache["result"] = dict(result)
     return jsonify(result)
 
 
@@ -2253,6 +2272,7 @@ def whoop_disconnect():
     from whoop.client import WhoopClient
     client = WhoopClient()
     client.disconnect()
+    _invalidate_whoop_status_cache()  # 连接状态已翻转，丢掉旧缓存
     return jsonify({'message': 'Whoop disconnected.'})
 
 
