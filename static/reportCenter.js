@@ -272,8 +272,48 @@
                 .replace(/^\s*[-•]\s+(.+)$/gm, '<li>$1</li>')
                 .replace(/(?:<li>.*?<\/li>(?:\s*<li>.*?<\/li>)*)/g, m => `<ul>${m}</ul>`)
                 .split(/\n\n+/)
-                .map(blk => /^<(h\d|ul|li|ol)/.test(blk.trim()) ? blk : `<p>${blk.replace(/\n/g, '<br>')}</p>`)
+                .map(blk => this._wrapBriefBlock(blk))
                 .join('\n');
+        }
+
+        // Detect structured brief lines and wrap them in card styles.
+        // Works line-by-line so it also handles blocks where a heading and
+        // brief points are joined by single newlines (no blank line).
+        _wrapBriefBlock(blk) {
+            const trimmed = blk.trim();
+            if (!trimmed) return blk;
+
+            const out = [];
+            let plain = [];
+            const flushPlain = () => {
+                if (plain.length) {
+                    out.push(`<p>${plain.join('<br>')}</p>`);
+                    plain = [];
+                }
+            };
+            for (const rawLine of trimmed.split('\n')) {
+                const l = rawLine.trim();
+                if (!l) continue;
+                if (/^<(h\d|ul|li|ol)/.test(l)) {
+                    flushPlain();
+                    out.push(l);
+                    continue;
+                }
+                if (/^(✅|⚠️|🔴)/.test(l) || l.includes('一句话结论')) {
+                    flushPlain();
+                    out.push(`<div class="brief-conclusion">${l}</div>`);
+                } else if (/^(⚖️|🍚|💧|😴|💊|📈|🎯)/.test(l)) {
+                    flushPlain();
+                    const cls = l.startsWith('🎯')
+                        ? 'brief-point brief-point--action'
+                        : 'brief-point';
+                    out.push(`<div class="${cls}">${l}</div>`);
+                } else {
+                    plain.push(l);
+                }
+            }
+            flushPlain();
+            return out.join('\n');
         }
 
         _escape(text) {

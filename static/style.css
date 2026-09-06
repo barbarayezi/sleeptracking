@@ -1381,6 +1381,37 @@ body {
 .report-center-body ul { margin: 6px 0 10px 20px; padding: 0; }
 .report-center-body li { margin: 4px 0; }
 .report-center-body strong { color: var(--gray-900); }
+
+/* ── Structured AI brief cards ── */
+.brief-conclusion {
+  padding: 10px 14px;
+  margin: 0 0 12px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-left: 4px solid var(--primary);
+  border-radius: var(--radius-sm);
+  font-size: 14.5px;
+  font-weight: 600;
+  line-height: 1.6;
+  color: var(--gray-900);
+}
+.brief-point {
+  padding: 8px 12px;
+  margin: 0 0 8px;
+  background: #fff;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-sm);
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: var(--gray-800);
+}
+.brief-point strong { color: var(--gray-900); }
+.brief-point--action {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+  border-left: 4px solid var(--success);
+  font-weight: 600;
+}
 .report-center-chat { margin-top: 14px; padding: 14px 16px; background: #fff; border: 1px solid var(--gray-200); border-radius: var(--radius); }
 .report-center-chat.hidden { display: none; }
 .report-center-chat__hint { font-size: 12.5px; color: var(--gray-500); margin-bottom: 10px; }
