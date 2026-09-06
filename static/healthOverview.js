@@ -336,17 +336,23 @@ class HealthOverview {
         const firstDate = medDays[0].date;
         const lastDate = medDays[medDays.length - 1].date;
         const lastDay = days[days.length - 1] || {};
+        // 今天还没过完，不能把"已记 < 目标"当作漏服/断档的依据。
+        // streak 从昨天往前数；缺服计数也只统计到昨天为止。
+        const todayStr = lastDay.date;
 
-        // Consecutive complete days counting back from the window end
+        // Consecutive complete days counting back from yesterday (today excluded)
         let streak = 0;
         for (let i = days.length - 1; i >= 0; i--) {
+            if (days[i].date === todayStr) continue;   // 跳过今天
             const t = days[i].medication_taken_total || 0;
             if (t >= mode) { streak += 1; }
             else { break; }
         }
 
-        // Missing / under-recorded days inside the med era (log 0..mode-1)
+        // Missing / under-recorded days inside the med era (log 0..mode-1),
+        // today excluded — 今天还没结束，不计入"漏服"
         const missing = days.filter((d) => d.date >= firstDate && d.date <= lastDate
+            && d.date !== todayStr
             && (d.medication_taken_total || 0) < mode);
         const missingTxt = missing.length > 0
             ? ` · <span class="ho2-med-warn">缺服/漏记 ${missing.length} 天`
