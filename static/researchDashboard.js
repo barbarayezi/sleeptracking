@@ -347,11 +347,18 @@ class ResearchDashboard {
                 trendHtml = `<span class="rd-trend" style="color:${color}">${arrow} ${Math.abs(pctDiff).toFixed(0)}% 周环比</span>`;
             }
 
-            // Status badge
+            // Status badge —— 判断方向取决于指标是"越高越好"还是"越低越好"。
+            // higher=true（睡眠分/恢复分等）：>= goodAt 为优，< badAt 为偏低；
+            // higher=false（静息心率，越低越好）：<= goodAt 为优，> badAt 为偏高。
+            // 旧逻辑对所有指标一律用 current >= goodAt / current < badAt，
+            // 导致静息心率 59 bpm（明明是好值）被误判为「偏低」。
             let badge = '';
             if (current != null) {
-                if (m.goodAt != null && current >= m.goodAt) badge = '<span class="rd-badge rd-badge--good">优</span>';
-                else if (m.badAt != null && current < m.badAt) badge = '<span class="rd-badge rd-badge--bad">偏低</span>';
+                const lowerBetter = (m.higher === false);
+                const good = m.goodAt != null && (lowerBetter ? current <= m.goodAt : current >= m.goodAt);
+                const bad = m.badAt != null && (lowerBetter ? current > m.badAt : current < m.badAt);
+                if (good) badge = '<span class="rd-badge rd-badge--good">优</span>';
+                else if (bad) badge = `<span class="rd-badge rd-badge--bad">${lowerBetter ? '偏高' : '偏低'}</span>`;
                 else badge = '<span class="rd-badge rd-badge--mid">中</span>';
             }
 
