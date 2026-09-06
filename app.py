@@ -280,6 +280,15 @@ def _validate_meal_data(data):
         except (ValueError, TypeError):
             errors.append('health_score must be a number')
 
+    # dining_location / cooking_method (v15): free text from radio groups,
+    # just cap the length so a rogue client can't stuff megabytes in.
+    for field in ('dining_location', 'cooking_method'):
+        if field in data and data[field] is not None:
+            if not isinstance(data[field], str):
+                errors.append(f'{field} must be a string')
+            elif len(data[field]) > 50:
+                errors.append(f'{field} must be at most 50 characters')
+
     return errors
 
 
@@ -396,6 +405,44 @@ def delete_meal(meal_id):
     deleted = meal_models.delete_meal_by_id(meal_id)
     if not deleted:
         return jsonify({'error': 'Meal record not found'}), 404
+    return '', 204
+
+
+# ── Meal options (v15): user-extensible 用餐地点/制作方式 radio options ──
+
+
+@app.route('/api/meal-options', methods=['GET'])
+def list_meal_options():
+    """Return the radio options for the meal form, grouped by type."""
+    return jsonify(meal_models.get_meal_options())
+
+
+@app.route('/api/meal-options', methods=['POST'])
+def create_meal_option():
+    """Add a custom option to one of the two radio groups.
+
+    Body: {"option_type": "location"|"method", "option_value": "..."}
+    Idempotent: posting an existing value returns 200 with the existing row.
+    """
+    data = request.get_json(silent=True) or {}
+    option_type = (data.get('option_type') or '').strip()
+    option_value = (data.get('option_value') or '').strip()
+    if option_type not in ('location', 'method'):
+        return jsonify({'error': 'option_type must be "location" or "method"'}), 400
+    if not option_value:
+        return jsonify({'error': 'option_value is required'}), 400
+    if len(option_value) > 50:
+        return jsonify({'error': 'option_value must be at most 50 characters'}), 400
+    option, created = meal_models.add_meal_option(option_type, option_value)
+    return jsonify(option), (201 if created else 200)
+
+
+@app.route('/api/meal-options/<int:option_id>', methods=['DELETE'])
+def delete_meal_option(option_id):
+    """Delete a custom option by ID."""
+    deleted = meal_models.delete_meal_option(option_id)
+    if not deleted:
+        return jsonify({'error': 'Option not found'}), 404
     return '', 204
 
 

@@ -11,7 +11,7 @@
     <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="/static/icon.svg">
     <title>量化健康 — QHealth</title>
-    <link rel="stylesheet" href="/static/style.css?v=25">
+    <link rel="stylesheet" href="/static/style.css?v=26">
 </head>
 <body>
 
@@ -477,11 +477,22 @@
                             <label class="form-label" for="meal-time">用餐时间</label>
                             <input type="time" id="meal-time" class="form-input" required>
                         </div>
-                        <div class="form-group">
-                            <label class="form-label" for="meal-name">用餐方式</label>
-                            <input type="text" id="meal-name" class="form-input"
-                                placeholder="如：燕麦粥、三明治...">
-                        </div>
+                    </div>
+
+                    <!-- 用餐地点 + 制作方式 (v15): user-extensible radio groups -->
+                    <div class="form-row form-row-2col">
+                        <fieldset class="form-fieldset meal-radio-fieldset">
+                            <legend class="form-label">用餐地点</legend>
+                            <div class="radio-group radio-group-wrap" id="meal-location-group">
+                                <!-- radios rendered by meal.js -->
+                            </div>
+                        </fieldset>
+                        <fieldset class="form-fieldset meal-radio-fieldset">
+                            <legend class="form-label">制作方式</legend>
+                            <div class="radio-group radio-group-wrap" id="meal-method-group">
+                                <!-- radios rendered by meal.js -->
+                            </div>
+                        </fieldset>
                     </div>
 
                     <!-- Meal Content -->
@@ -863,7 +874,7 @@
     </footer>
 
     <script src="/static/form.js?v=16"></script>
-    <script src="/static/meal.js?v=16"></script>
+    <script src="/static/meal.js?v=17"></script>
     <script src="/static/period.js?v=16"></script>
     <script src="/static/medication.js?v=2"></script>
     <script src="/static/calendar.js?v=16"></script>

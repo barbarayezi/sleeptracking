@@ -516,6 +516,12 @@ def _migrate(conn):
     if version < 14:
         _migrate_v14(conn)
 
+    # v15: meal_records gains dining_location/cooking_method; meal_options table
+    #      holds user-extensible radio options for both groups.
+    version = _get_schema_version(conn)
+    if version < 15:
+        _migrate_v15(conn)
+
 
 def _migrate_v12(conn):
     """Migrate from v11 to v12: add medication_records table for daily medication log.
@@ -639,6 +645,59 @@ def _migrate_v14(conn):
     """)
     _set_schema_version(conn, 14)
     print("  Migration v13 -> v14 completed.")
+
+
+# Default radio options for the meal form. Seeded into meal_options at v15;
+# users can add more from the UI later.
+MEAL_LOCATION_SEEDS = ['公司', '自家', '爸妈家', '饭店', '外婆家', '朋友家']
+MEAL_METHOD_SEEDS = ['空气炸锅', '外卖', '电饭煲']
+
+
+def _seed_meal_options(conn):
+    """Insert default meal radio options if the table is empty."""
+    cnt = conn.execute("SELECT COUNT(*) AS c FROM meal_options").fetchone()['c']
+    if cnt:
+        return
+    for i, v in enumerate(MEAL_LOCATION_SEEDS):
+        conn.execute(
+            "INSERT INTO meal_options (option_type, option_value, sort_order) VALUES ('location', ?, ?)",
+            (v, i),
+        )
+    for i, v in enumerate(MEAL_METHOD_SEEDS):
+        conn.execute(
+            "INSERT INTO meal_options (option_type, option_value, sort_order) VALUES ('method', ?, ?)",
+            (v, i),
+        )
+
+
+def _migrate_v15(conn):
+    """Migrate from v14 to v15: meal dining_location / cooking_method + meal_options.
+
+    Adds two free-text columns to meal_records (values come from radio groups,
+    but custom user-added options are stored as plain text so no CHECK enum).
+    meal_options holds the selectable options per group so the user can extend
+    them from the page later.
+    """
+    print("  Running migration v14 -> v15 ...")
+    cols = [row[1] for row in conn.execute("PRAGMA table_info('meal_records')").fetchall()]
+    if 'dining_location' not in cols:
+        conn.execute("ALTER TABLE meal_records ADD COLUMN dining_location TEXT DEFAULT ''")
+    if 'cooking_method' not in cols:
+        conn.execute("ALTER TABLE meal_records ADD COLUMN cooking_method TEXT DEFAULT ''")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS meal_options (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            option_type  TEXT NOT NULL
+                         CHECK(option_type IN ('location', 'method')),
+            option_value TEXT NOT NULL,
+            sort_order   INTEGER NOT NULL DEFAULT 0,
+            created_at   TEXT DEFAULT (datetime('now', 'localtime')),
+            UNIQUE(option_type, option_value)
+        )
+    """)
+    _seed_meal_options(conn)
+    _set_schema_version(conn, 15)
+    print("  Migration v14 -> v15 completed.")
 
 
 def _migrate_v6(conn):
@@ -907,6 +966,8 @@ def init_db():
             ai_cons         TEXT DEFAULT '',
             ai_suggestion   TEXT DEFAULT '',
             ai_analyzed_at  TEXT DEFAULT NULL,
+            dining_location TEXT DEFAULT '',
+            cooking_method  TEXT DEFAULT '',
             created_at      TEXT DEFAULT (datetime('now', 'localtime')),
             updated_at      TEXT DEFAULT (datetime('now', 'localtime'))
         )
@@ -919,6 +980,20 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_meal_records_type
         ON meal_records(meal_type)
     """)
+
+    # Meal radio options table (v15) — user-extensible 用餐地点/制作方式 options
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS meal_options (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            option_type  TEXT NOT NULL
+                         CHECK(option_type IN ('location', 'method')),
+            option_value TEXT NOT NULL,
+            sort_order   INTEGER NOT NULL DEFAULT 0,
+            created_at   TEXT DEFAULT (datetime('now', 'localtime')),
+            UNIQUE(option_type, option_value)
+        )
+    """)
+    _seed_meal_options(conn)
 
     # Whoop tokens table (v7)
     conn.execute("""

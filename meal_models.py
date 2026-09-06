@@ -115,8 +115,9 @@ def create_meal(data):
             (meal_date, meal_type, meal_time, meal_name, meal_content,
              meal_quantity, health_rating, notes, allergy_reaction,
              calorie_kcal, protein_g, fat_g, carbs_g, health_score,
-             items_json, ai_pros, ai_cons, ai_suggestion, ai_analyzed_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             items_json, ai_pros, ai_cons, ai_suggestion, ai_analyzed_at,
+             dining_location, cooking_method)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             data["meal_date"],
@@ -138,6 +139,8 @@ def create_meal(data):
             data.get("ai_cons", ""),
             data.get("ai_suggestion", ""),
             data.get("ai_analyzed_at"),
+            data.get("dining_location", ""),
+            data.get("cooking_method", ""),
         ),
     )
 
@@ -205,7 +208,8 @@ def update_meal_by_id(meal_id, data):
         fields.append("items_json = ?")
         params.append(_dump_items(data["items_json"]))
 
-    for text_field in ("ai_pros", "ai_cons", "ai_suggestion", "ai_analyzed_at"):
+    for text_field in ("ai_pros", "ai_cons", "ai_suggestion", "ai_analyzed_at",
+                       "dining_location", "cooking_method"):
         if text_field in data:
             fields.append(f"{text_field} = ?")
             params.append(data[text_field])
@@ -343,3 +347,68 @@ def replace_meal_images(meal_id, images):
     if not images:
         return []
     return add_meal_images(meal_id, images)
+
+
+# ── Meal options (v15) — user-extensible 用餐地点/制作方式 radio options ──
+
+
+def get_meal_options():
+    """Return all meal radio options grouped by type.
+
+    Returns: {'location': [...values...], 'method': [...values...]}
+    ordered by sort_order then id.
+    """
+    conn = get_connection()
+    cursor = conn.execute(
+        "SELECT option_type, option_value FROM meal_options "
+        "ORDER BY option_type, sort_order, id"
+    )
+    result = {'location': [], 'method': []}
+    for row in cursor.fetchall():
+        t = row['option_type']
+        if t in result:
+            result[t].append(row['option_value'])
+    conn.close()
+    return result
+
+
+def add_meal_option(option_type, option_value):
+    """Add a custom option. Returns (option_dict, created_flag).
+
+    If the same value already exists for the type, returns the existing row
+    with created_flag=False instead of raising on the UNIQUE constraint.
+    """
+    option_type = (option_type or '').strip()
+    option_value = (option_value or '').strip()
+    conn = get_connection()
+    cursor = conn.execute(
+        "SELECT * FROM meal_options WHERE option_type = ? AND option_value = ?",
+        (option_type, option_value),
+    )
+    existing = cursor.fetchone()
+    if existing:
+        conn.close()
+        return row_to_dict(existing), False
+    max_order = conn.execute(
+        "SELECT COALESCE(MAX(sort_order), -1) AS m FROM meal_options WHERE option_type = ?",
+        (option_type,),
+    ).fetchone()['m']
+    cursor = conn.execute(
+        "INSERT INTO meal_options (option_type, option_value, sort_order) VALUES (?, ?, ?)",
+        (option_type, option_value, max_order + 1),
+    )
+    new_id = cursor.lastrowid
+    conn.commit()
+    row = conn.execute("SELECT * FROM meal_options WHERE id = ?", (new_id,)).fetchone()
+    conn.close()
+    return row_to_dict(row), True
+
+
+def delete_meal_option(option_id):
+    """Delete a custom option by id. Returns True if deleted."""
+    conn = get_connection()
+    cursor = conn.execute("DELETE FROM meal_options WHERE id = ?", (option_id,))
+    deleted = cursor.rowcount > 0
+    conn.commit()
+    conn.close()
+    return deleted

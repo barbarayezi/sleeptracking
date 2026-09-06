@@ -41,11 +41,17 @@ class MealManager {
         // It's been removed — see /api/daily-brief and /api/daily-brief/chat in
         // static/agent.js for the canonical implementation.
 
+        // ── 用餐地点 / 制作方式 radio options (v15) ──
+        this.locationGroupEl = document.getElementById('meal-location-group');
+        this.methodGroupEl = document.getElementById('meal-method-group');
+        this._mealOptions = { location: [], method: [] };
+
         this._selectedDate = this._todayStr();
         this._mealsForDate = [];     // All meals for current date
         this._editingMealId = null;  // ID being edited, null = new record
 
         this._initEvents();
+        this._loadMealOptions();
     }
 
     /* ── Public API ───────────────────────── */
@@ -110,6 +116,115 @@ class MealManager {
         });
     }
 
+    /* ── 用餐地点 / 制作方式 options (v15) ─────────── */
+
+    /** Fetch the option lists and render both radio groups. */
+    async _loadMealOptions() {
+        try {
+            const resp = await fetch('/api/meal-options');
+            if (!resp.ok) return;
+            const data = await resp.json();
+            this._mealOptions = {
+                location: Array.isArray(data.location) ? data.location : [],
+                method: Array.isArray(data.method) ? data.method : [],
+            };
+            this._renderMealOptions();
+        } catch (err) {
+            // Options are decorative — a failure leaves the groups empty but
+            // never breaks the rest of the form.
+            console.warn('[meal] options load failed', err);
+        }
+    }
+
+    /** Render both radio groups from this._mealOptions, preserving selections. */
+    _renderMealOptions() {
+        const prevLoc = this._checkedValue('dining_location');
+        const prevMeth = this._checkedValue('cooking_method');
+        this._renderRadioGroup(this.locationGroupEl, 'dining_location', this._mealOptions.location, prevLoc, '地点');
+        this._renderRadioGroup(this.methodGroupEl, 'cooking_method', this._mealOptions.method, prevMeth, '方式');
+    }
+
+    /**
+     * Render one radio group + its "＋ 添加" control.
+     * typeLabel is used in the prompt when adding a custom option.
+     */
+    _renderRadioGroup(container, name, values, selected, typeLabel) {
+        if (!container) return;
+        let html = values.map(v => `
+            <label class="radio-label">
+                <input type="radio" name="${name}" value="${this._escapeHtml(v)}"${v === selected ? ' checked' : ''}>
+                <span class="radio-custom"></span>
+                ${this._escapeHtml(v)}
+            </label>`).join('');
+        // Legacy records may hold a value no longer in the option list —
+        // keep it selectable so editing doesn't silently drop it.
+        if (selected && !values.includes(selected)) {
+            html += `
+            <label class="radio-label">
+                <input type="radio" name="${name}" value="${this._escapeHtml(selected)}" checked>
+                <span class="radio-custom"></span>
+                ${this._escapeHtml(selected)}
+            </label>`;
+        }
+        html += `<button type="button" class="meal-option-add" data-type="${name}" title="添加自定义${typeLabel}">＋ 添加</button>`;
+        container.innerHTML = html;
+
+        container.querySelector('.meal-option-add').addEventListener('click', () => {
+            this._promptAddOption(name === 'dining_location' ? 'location' : 'method', typeLabel);
+        });
+    }
+
+    /** Ask the user for a custom option and persist it via the API. */
+    async _promptAddOption(optionType, typeLabel) {
+        const value = (prompt(`添加自定义${typeLabel}（如：${optionType === 'location' ? '奶奶家' : '微波炉'}）`) || '').trim();
+        if (!value) return;
+        if (value.length > 50) {
+            this._showMessage('❌ 选项最长 50 个字符', 'error');
+            return;
+        }
+        try {
+            const resp = await fetch('/api/meal-options', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ option_type: optionType, option_value: value }),
+            });
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({}));
+                this._showMessage('❌ ' + (err.error || '添加失败'), 'error');
+                return;
+            }
+            await this._loadMealOptions();
+            // Auto-select the freshly added option
+            const name = optionType === 'location' ? 'dining_location' : 'cooking_method';
+            const radio = this.form.querySelector(`input[name="${name}"][value="${value.replace(/"/g, '&quot;')}"]`);
+            if (radio) radio.checked = true;
+        } catch (err) {
+            this._showMessage('❌ 网络错误: ' + err.message, 'error');
+        }
+    }
+
+    /** Currently checked value of a radio group, or '' when none. */
+    _checkedValue(name) {
+        const r = this.form.querySelector(`input[name="${name}"]:checked`);
+        return r ? r.value : '';
+    }
+
+    /** Check a radio by value; no-op when the value isn't rendered. */
+    _checkRadio(name, value) {
+        if (!value) return;
+        const r = this.form.querySelector(`input[name="${name}"][value="${value.replace(/"/g, '&quot;')}"]`);
+        if (r) r.checked = true;
+    }
+
+    /**
+     * Compose the legacy meal_name string from the two radio groups.
+     * Kept so the AI estimate + nutrition prompts keep working unchanged.
+     */
+    _deriveMealName() {
+        return [this._checkedValue('dining_location'), this._checkedValue('cooking_method')]
+            .filter(Boolean).join(' · ');
+    }
+
     /* ── AI Nutrition Estimation ─────────── */
 
     /**
@@ -120,7 +235,7 @@ class MealManager {
      * the vision path instead of asking for text.
      */
     async _analyzeMeal() {
-        const name = (document.getElementById('meal-name').value || '').trim();
+        const name = this._deriveMealName();
         const content = (document.getElementById('meal-content').value || '').trim();
 
         // Vision path takes priority when a photo is present.
@@ -136,7 +251,7 @@ class MealManager {
         }
 
         if (!name && !content) {
-            this._showAiMessage('请先填写「餐食名称」或「详细内容」，AI 需要知道吃了什么；或上传餐食照片直接识别。', 'error');
+            this._showAiMessage('请先选择「用餐地点/制作方式」或填写「详细内容」，AI 需要知道吃了什么；或上传餐食照片直接识别。', 'error');
             return;
         }
 
@@ -303,7 +418,7 @@ class MealManager {
 
         const typeRadio = this.form.querySelector('input[name="meal_type"]:checked');
         const qtyRadio = this.form.querySelector('input[name="meal_quantity"]:checked');
-        const name = (document.getElementById('meal-name').value || '').trim();
+        const name = this._deriveMealName();
 
         const mode = after.length ? '前后对比' : '仅餐前';
         this._showAiMessage(`正在分析餐食照片（${mode}），约需 15–30 秒…`, '');
@@ -565,7 +680,13 @@ class MealManager {
             html += '<div class="record-card__body">';
             html += `<span class="record-type-badge meal-type-badge meal-type--${m.meal_type}">${typeLabel}</span>`;
             html += `<span class="record-card__time">${m.meal_time}</span>`;
-            if (m.meal_name) {
+            if (m.dining_location) {
+                html += `<span class="meal-card__tag" title="用餐地点">📍 ${this._escapeHtml(m.dining_location)}</span>`;
+            }
+            if (m.cooking_method) {
+                html += `<span class="meal-card__tag" title="制作方式">🍳 ${this._escapeHtml(m.cooking_method)}</span>`;
+            }
+            if (m.meal_name && !m.dining_location && !m.cooking_method) {
                 html += `<span class="meal-card__name">${this._escapeHtml(m.meal_name)}</span>`;
             }
             html += `<span class="meal-card__quantity">${quantLabels[m.meal_quantity] || m.meal_quantity}</span>`;
@@ -692,8 +813,10 @@ class MealManager {
         // Reset health rating to average
         const avgRadio = this.form.querySelector('input[name="meal_health_rating"][value="average"]');
         if (avgRadio) avgRadio.checked = true;
+        // Clear 用餐地点/制作方式 selections (v15 radio groups)
+        this.form.querySelectorAll('input[name="dining_location"]:checked, input[name="cooking_method"]:checked')
+            .forEach(r => { r.checked = false; });
         // Clear text inputs
-        document.getElementById('meal-name').value = '';
         document.getElementById('meal-content').value = '';
         document.getElementById('meal-notes').value = '';
         document.getElementById('meal-allergy').value = '';
@@ -730,8 +853,20 @@ class MealManager {
         // Meal time
         document.getElementById('meal-time').value = meal.meal_time || '';
 
-        // Meal name
-        document.getElementById('meal-name').value = meal.meal_name || '';
+        // 用餐地点 / 制作方式 (v15) — a stored value missing from the current
+        // option list is re-rendered as a legacy option so it isn't dropped.
+        if (meal.dining_location && !this._mealOptions.location.includes(meal.dining_location)) {
+            this._renderRadioGroup(this.locationGroupEl, 'dining_location',
+                this._mealOptions.location, meal.dining_location, '地点');
+        } else {
+            this._checkRadio('dining_location', meal.dining_location);
+        }
+        if (meal.cooking_method && !this._mealOptions.method.includes(meal.cooking_method)) {
+            this._renderRadioGroup(this.methodGroupEl, 'cooking_method',
+                this._mealOptions.method, meal.cooking_method, '方式');
+        } else {
+            this._checkRadio('cooking_method', meal.cooking_method);
+        }
 
         // Meal content
         document.getElementById('meal-content').value = meal.meal_content || '';
@@ -888,11 +1023,18 @@ class MealManager {
         const mealQty = this.form.querySelector('input[name="meal_quantity"]:checked');
         const healthRating = this.form.querySelector('input[name="meal_health_rating"]:checked');
 
+        const location = this._checkedValue('dining_location');
+        const method = this._checkedValue('cooking_method');
+
         return {
             meal_date: this._selectedDate,
             meal_type: mealType?.value || 'breakfast',
             meal_time: document.getElementById('meal-time').value,
-            meal_name: document.getElementById('meal-name').value.trim(),
+            // meal_name is derived from the two radio groups so the AI
+            // estimate / nutrition prompt pipelines keep working unchanged.
+            meal_name: [location, method].filter(Boolean).join(' · '),
+            dining_location: location,
+            cooking_method: method,
             meal_content: document.getElementById('meal-content').value.trim(),
             meal_quantity: mealQty?.value || 'normal',
             health_rating: healthRating?.value || 'average',
