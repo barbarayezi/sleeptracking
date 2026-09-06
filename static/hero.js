@@ -28,7 +28,6 @@ const HeroOverview = {
         const $ = (id) => document.getElementById(id);
         this._refs = {
             label: $('hero-label'), duration: $('hero-duration'), sub: $('hero-sub'),
-            stats: $('hero-stats'),
             scoreGroup: $('hero-score-group'),
             weekStrip: $('hero-week-strip'), recStrip: $('hero-rec-strip'),
             whoopMeta: $('hero-whoop-meta'), weekHint: $('hero-week-hint'),
@@ -78,27 +77,12 @@ const HeroOverview = {
             r.sub.textContent = '还没有记录，点上方「记录睡眠」';
         }
 
-        // ── Hero 主卡指标行：恢复 · 深睡占比（与同义 pill/芯片去重后合并到这里） ──
+        // ── 恢复/深睡占比已并入右栏 _renderScoreGroup，左侧 pill 行不再渲染（去重） ──
         const whoopSorted = [...whoop].sort((a, b) => (a.record_date < b.record_date ? -1 : 1));
         const latestWhoop = whoopSorted.length ? whoopSorted[whoopSorted.length - 1] : null;
         const recovery = (latestWhoop && latestWhoop.recovery_score != null) ? latestWhoop.recovery_score
             : (night && night.recovery_score != null ? night.recovery_score : null);
         const deep = this._deepPct(night);
-        const recZone = (recovery == null) ? null : (recovery >= 67 ? 'high' : recovery >= 34 ? 'mid' : 'low');
-        const recZoneWord = { high: '良好', mid: '一般', low: '偏低' };
-        const recZoneCls = { high: 'good', mid: 'warn', low: 'bad' };
-        const statBits = [];
-        if (recovery != null) {
-            statBits.push(`<span class="hero-stat hero-stat--${recZoneCls[recZone]}">
-                <span class="hs-label">恢复</span><b>${Math.round(recovery)}</b><small>· ${recZoneWord[recZone]}</small></span>`);
-        }
-        if (deep != null) {
-            statBits.push(`<span class="hero-stat">
-                <span class="hs-label">深睡占比</span><b>${Math.round(deep)}<span class="hs-unit">%</span></b></span>`);
-        }
-        r.stats.innerHTML = statBits.length
-            ? statBits.join('<span class="hero-stat-sep">·</span>')
-            : '<span class="hero-stat-empty">尚无恢复/深睡数据</span>';
 
         // 评分环：手环评分(device_score) → recovery_score → 无
         const score = (night && night.device_score != null) ? night.device_score
