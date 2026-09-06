@@ -6,14 +6,17 @@ const HeroOverview = {
 
     async load() {
         this._cache();
+        // 数据在东京 Turso，单次请求 ~150ms+ 往返；概览页每次进首页都要拉这两个接口，
+        // 走 ApiCache（改动即失效）后二次进入秒开。失效由 App._invalidateAndRefresh 统一触发。
+        const fetchJson = window.ApiCache
+            ? (url) => ApiCache.fetch(url).catch(() => null)
+            : (url) => fetch(url).then((r) => (r.ok ? r.json() : null)).catch(() => null);
         try {
-            const [recResp, whoopResp] = await Promise.all([
-                fetch('/api/records'),
-                fetch('/api/whoop/daily')
+            const [records, whoop] = await Promise.all([
+                fetchJson('/api/records'),
+                fetchJson('/api/whoop/daily')
             ]);
-            const records = recResp.ok ? await recResp.json() : [];
-            const whoop = whoopResp.ok ? await whoopResp.json() : [];
-            this._render(records, whoop);
+            this._render(Array.isArray(records) ? records : [], Array.isArray(whoop) ? whoop : []);
         } catch (e) {
             console.error('hero load failed', e);
         }
