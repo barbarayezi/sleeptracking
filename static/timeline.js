@@ -300,7 +300,7 @@ class Timeline {
 
         const stageItems = [
             ['深睡', this.stageColors.deep],
-            ['REM', this.stageColors.rem],
+            ['快速眼动期(REM)', this.stageColors.rem],
             ['浅睡', this.stageColors.light],
             ['清醒', this.stageColors.awake]
         ];
