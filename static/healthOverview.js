@@ -39,6 +39,106 @@ const _HO_GLOSSARY = [
       desc: '该日没有数据（漏记 / 同步失败 / 设备未佩戴），不是真的健康问题。' },
 ];
 
+// ── 指标详情百科：每张卡点击后弹出的完整说明。
+//    与 coreMetrics / physioMetrics 的 key 一一对应。
+//    meaning = 指标含义（它是什么）；purpose = 用途（为什么关注它）；
+//    tiers = 优/中/差三档的区间与解读。颜色统一走语义色。
+const _HO_METRIC_DETAILS = {
+    // —— 核心三卡 ——
+    device_score: {
+        meaning: 'Whoop/手环给出的单值睡眠质量评分，把「睡眠时长、睡眠效率、深睡与 REM 结构比例、入睡潜伏期、夜间中断次数」等多个维度压缩成一个 0–100 的分数。',
+        purpose: '比「只看睡了几小时」更全面——有的人睡够 8 小时但效率不到 70%，评分依然偏低。用它判断「睡得够不够好」，而非「睡了多久」。',
+        higher: true,
+        tiers: [
+            { level: '优', range: '≥ 80', desc: '睡眠结构健康，时长与效率兼顾，恢复充分。' },
+            { level: '中', range: '50 – 79', desc: '基本达标，但时长/效率/深睡结构至少有一项欠佳，有改善空间。' },
+            { level: '差', range: '< 50', desc: '睡眠质量明显不足，优先排查入睡时间、夜间中断或深睡不足。' },
+        ],
+    },
+    recovery_score: {
+        meaning: 'Whoop 综合 HRV（心率变异性）、静息心率、呼吸率与睡眠表现，估算出的「身体今天恢复了多少」的 0–100 评分，是判断当日身体可承受负荷的核心信号。',
+        purpose: '决定「今天能练多猛 / 工作加多少码」。恢复分高说明身体已回充，可安排中高强度；低则说明还有疲劳/炎症/压力残留，应减量、以恢复为主。',
+        higher: true,
+        tiers: [
+            { level: '优', range: '67 – 100（绿区）', desc: '状态良好，可安排中等偏上的训练或工作冲刺。' },
+            { level: '中', range: '34 – 66（黄区）', desc: '状态一般，训练与工作控制在五成负荷，避免连续加码。' },
+            { level: '差', range: '< 34（红区）', desc: '状态偏低，以恢复为主：低强度活动、早睡，不给身体加码。' },
+        ],
+    },
+    meal_health_score: {
+        meaning: '当日所有餐食 AI 营养评分的平均值（0–10），综合蔬菜占比、荤素搭配、烹饪油盐、精制碳水比例四项估算。',
+        purpose: '把「感觉吃得很健康」变成可量化的分数，抓出那些「看似正常、实则高油盐或缺蔬菜」的日子，便于长期复盘饮食结构。',
+        higher: true,
+        tiers: [
+            { level: '优', range: '≥ 7', desc: '蔬菜充足、荤素搭配合理，油盐与精制碳水控制得当。' },
+            { level: '中', range: '4 – 6.9', desc: '整体合格，但油盐偏高、蔬菜不足或精制主食占比偏大。' },
+            { level: '差', range: '< 4', desc: '高油盐/高糖/高精制碳水或蔬菜严重不足，建议调整点餐结构。' },
+        ],
+    },
+
+    // —— 生理指标 ——
+    strain: {
+        meaning: 'Whoop 的心血管负荷评分（0–21），综合全天心率与活动强度，量化「今天身体总共承担了多少负荷」。',
+        purpose: '与恢复分配套看：恢复分决定「能不能」，Strain 记录「已经用了多少」。两者长期失衡（Strain 高 + 恢复低）是过度疲劳的信号。',
+        higher: null,
+        tiers: [
+            { level: '休息日', range: '< 10', desc: '轻度负荷：散步、居家、恢复性活动。' },
+            { level: '中等', range: '10 – 14', desc: '中等负荷：常规训练或忙碌工作日。' },
+            { level: '高负荷', range: '> 14', desc: '高强度：大训练量或高压日，之后需更充分的恢复。' },
+        ],
+    },
+    hrv: {
+        meaning: '心率变异性：相邻两次心跳之间时间间隔的微小波动（单位 ms）。它不看你心跳有多快，而是看每次心跳间隔「变化有多大」。',
+        purpose: 'HRV 是自主神经系统状态的核心窗口——越高通常代表副交感（恢复、放松）占主导、压力低；持续走低往往提示疲劳、炎症或睡眠不足。它是相对的，要和「你自己的基线」比，而不是和别人的绝对值比。',
+        higher: true,
+        tiers: [
+            { level: '优', range: '高于个人基线', desc: '自主神经恢复良好，压力处在低位。' },
+            { level: '中', range: '接近个人基线', desc: '状态平稳，属正常波动范围。' },
+            { level: '差', range: '显著低于基线', desc: '提示疲劳/压力/炎症负荷上升，注意休息与睡眠。' },
+        ],
+    },
+    resting_heart_rate: {
+        meaning: '完全静息状态下的心率（bpm），通常在清晨醒来、尚未起床时测得最准。',
+        purpose: '反映心肺功能与长期恢复的「慢变量」：静息心率越低，通常代表心脏每次泵血越高效、心肺越好；持续升高（高于自身基线 5bpm 以上）常是过度疲劳或疾病的前兆。',
+        higher: false,
+        tiers: [
+            { level: '优', range: '≤ 60', desc: '心肺功能良好，恢复充分。' },
+            { level: '中', range: '61 – 75', desc: '正常范围，但仍有优化空间。' },
+            { level: '差', range: '> 75', desc: '偏高，需关注是否疲劳累积、睡眠不足或炎症。' },
+        ],
+    },
+    spo2_percentage: {
+        meaning: '血氧饱和度：血液中血红蛋白被氧结合的比例（%），反映呼吸与循环系统给全身供氧的能力。',
+        purpose: '睡眠中的血氧尤其关键——打鼾、睡眠呼吸暂停会让血氧间歇性下降而本人无感。持续低于 92% 是需要就医排查的红线。',
+        higher: true,
+        tiers: [
+            { level: '优', range: '≥ 96', desc: '正常，供氧充足。' },
+            { level: '中', range: '92 – 95', desc: '轻微偏低，观察为主，关注睡眠中是否更低。' },
+            { level: '差', range: '< 92', desc: '明显偏低，建议就医做血氧/睡眠呼吸评估。' },
+        ],
+    },
+    skin_temp_celsius: {
+        meaning: '皮肤温度（°C）。它没有统一的「正常值」，关键看「相对你自己基线的偏移」。',
+        purpose: '皮温偏离基线（尤其是入睡后升高）是灵敏的健康信号：常伴随炎症、感染前兆，或与女性经期黄体期的体温升高相关。',
+        higher: null,
+        tiers: [
+            { level: '正常', range: '接近自身基线 ±0.5°C', desc: '状态平稳，无明显炎症或周期波动。' },
+            { level: '轻微偏离', range: '偏离基线 0.5 – 1.5°C', desc: '可能处于经期黄体期或轻度炎症，留意伴随症状。' },
+            { level: '明显升高', range: '> 基线 +1.5°C', desc: '警惕感染/炎症前兆，结合精神状态判断是否就医。' },
+        ],
+    },
+    steps: {
+        meaning: '全天累计步数，来自手环/健康 App，衡量基础身体活动量。',
+        purpose: '最低成本的「有没有在动」信号。长期每日步数过低与代谢、心血管健康相关；但它是底线指标——步数达标不等于训练有效。',
+        higher: true,
+        tiers: [
+            { level: '优', range: '≥ 8000', desc: '达到推荐活动量（8k–12k 为理想区间）。' },
+            { level: '中', range: '3000 – 7999', desc: '有活动但偏少，可通过通勤步行、饭后散步补足。' },
+            { level: '差', range: '< 3000', desc: '久坐明显，主动安排活动，降低久坐风险。' },
+        ],
+    },
+};
+
 class HealthOverview {
     constructor() {
         this.el = document.getElementById('health-overview');
@@ -147,11 +247,13 @@ class HealthOverview {
         if (medStrip) html += medStrip;
 
         // ════ TIER 1: CORE SCORE TRIO ════
-        // Register metric explanations so the "?" help button can look them up
-        // without stuffing them into data-attributes (cleaner + no escape risk).
-        for (const m of coreMetrics) {
+        // Register metric explanations + detail specs so the "?" help button
+        // AND full-card click can both look them up without stuffing them
+        // into data-attributes (cleaner + no escape risk).
+        for (const m of coreMetrics.concat(physioMetrics)) {
             _HO_METRIC_HELP[m.key] = {
                 label: m.label, sub: m.sub, unit: m.unit, explain: m.explain || '',
+                detail: _HO_METRIC_DETAILS[m.key] || null,
             };
         }
         html += '<div class="ho2-core-row">';
@@ -210,6 +312,10 @@ class HealthOverview {
                 <div class="ho2-card__head">
                     <div>
                         <span class="ho2-card__label" title="${m.explain}">${m.label}</span>
+                        <button type="button" class="ho-help-btn ho-help-btn--physio"
+                            title="查看指标详情"
+                            data-help-key="${m.key}"
+                            aria-label="查看指标详情">?</button>
                         <span class="ho2-card__sub">${m.sub}</span>
                     </div>
                     <span class="ho2-card__val" id="ho-val-${m.key}">—</span>
@@ -247,29 +353,41 @@ class HealthOverview {
     }
 
     /**
-     * Wire all .ho-help-btn buttons inside the dashboard to a single shared
-     * click handler. Use event delegation on the dashboard root so re-renders
-     * don't leak handlers.
+     * Wire metric-card clicks (core trio + physio cards) + the "?" buttons to
+     * the shared detail modal. Event delegation on the dashboard root so
+     * re-renders don't leak handlers. Clicking anywhere on a metric card opens
+     * its full detail page; the "?" is just a visual affordance.
      */
     _wireHelpButtons() {
         if (!this.el) return;
         if (!this._helpDelegateBound) {
             this._helpDelegateBound = true;
             this.el.addEventListener('click', (e) => {
+                // 1) explicit "?" button
                 const btn = e.target.closest('.ho-help-btn');
-                if (!btn) return;
-                const key = btn.dataset.helpKey;
-                if (key) this._openHelp(key);
+                if (btn) {
+                    const key = btn.dataset.helpKey;
+                    if (key) { this._openHelp(key); return; }
+                }
+                // 2) anywhere on a metric card (core or physio)
+                const card = e.target.closest('[data-metric]');
+                if (card) {
+                    const key = card.dataset.metric;
+                    if (key && _HO_METRIC_HELP[key]) this._openHelp(key);
+                }
             });
         }
     }
 
     /**
-     * Open the help modal with both the metric-specific explain and the
-     * generic visual-element glossary. Lazy-creates the DOM node once.
+     * Open the help modal: shows the metric's full detail (meaning / purpose /
+     * good-mid-bad tier bands) plus a flat list of "how to read the chart"
+     * hints. Falls back to the one-line explain + generic glossary when a
+     * metric has no detailed spec yet. Lazy-creates the DOM node once.
      */
     _openHelp(key) {
         const info = _HO_METRIC_HELP[key] || {};
+        const detail = info.detail || null;
         let m = document.getElementById('ho-help-modal');
         if (!m) {
             m = document.createElement('div');
@@ -283,9 +401,7 @@ class HealthOverview {
                     <button type="button" class="ho-help-modal__close" aria-label="关闭">×</button>
                     <h3 class="ho-help-modal__title"></h3>
                     <p class="ho-help-modal__sub"></p>
-                    <p class="ho-help-modal__explain"></p>
-                    <h4 class="ho-help-modal__h4">📖 图表元素速查（小白友好）</h4>
-                    <dl class="ho-help-modal__glossary"></dl>
+                    <div class="ho-help-modal__body"></div>
                 </div>
             `;
             document.body.appendChild(m);
@@ -300,14 +416,56 @@ class HealthOverview {
             `${info.label || '指标'} ${info.sub ? '· ' + info.sub : ''}`;
         m.querySelector('.ho-help-modal__sub').textContent =
             info.unit ? `单位：${info.unit}` : '';
-        m.querySelector('.ho-help-modal__explain').textContent =
-            info.explain || '（暂无专项说明，请结合下方的视觉元素速查表阅读）';
 
-        const glossary = m.querySelector('.ho-help-modal__glossary');
-        glossary.innerHTML = _HO_GLOSSARY.map(g => `
-            <dt>${g.title}</dt>
-            <dd>${g.desc}</dd>
-        `).join('');
+        const body = m.querySelector('.ho-help-modal__body');
+
+        if (detail) {
+            // ── 三档区间徽章配色（优绿 / 中黄 / 差红）──
+            const tierBadge = (level) => {
+                const l = level || '';
+                const tone = l.includes('优') || (l.includes('正常') && !l.includes('轻微'))
+                    ? 'good'
+                    : (l.includes('差') || l.includes('明显') || l.includes('高负荷')) ? 'bad' : 'mid';
+                return `<span class="ho-detail-tier__badge ho-detail-tier__badge--${tone}">${l}</span>`;
+            };
+            const tiersHtml = detail.tiers.map(t => `
+                <div class="ho-detail-tier">
+                    <div class="ho-detail-tier__head">
+                        ${tierBadge(t.level)}
+                        <span class="ho-detail-tier__range">${t.range}</span>
+                    </div>
+                    <p class="ho-detail-tier__desc">${t.desc}</p>
+                </div>
+            `).join('');
+
+            body.innerHTML = `
+                <section class="ho-detail-section">
+                    <h4 class="ho-detail-section__h">📌 它是什么（含义）</h4>
+                    <p class="ho-detail-section__p">${detail.meaning}</p>
+                </section>
+                <section class="ho-detail-section">
+                    <h4 class="ho-detail-section__h">🎯 用来干什么（用途）</h4>
+                    <p class="ho-detail-section__p">${detail.purpose}</p>
+                </section>
+                <section class="ho-detail-section">
+                    <h4 class="ho-detail-section__h">📏 怎么评判（区间）</h4>
+                    <div class="ho-detail-tiers">${tiersHtml}</div>
+                </section>
+            `;
+        } else {
+            // Legacy fallback: one-line explain + the visual-element glossary.
+            body.innerHTML = `
+                <section class="ho-detail-section">
+                    <h4 class="ho-detail-section__h">📌 说明</h4>
+                    <p class="ho-detail-section__p">${info.explain || '（暂无专项说明）'}</p>
+                </section>
+                <h4 class="ho-help-modal__h4">📖 图表元素速查（小白友好）</h4>
+                <dl class="ho-help-modal__glossary">${_HO_GLOSSARY.map(g => `
+                    <dt>${g.title}</dt>
+                    <dd>${g.desc}</dd>
+                `).join('')}</dl>
+            `;
+        }
         m.classList.remove('hidden');
     }
 

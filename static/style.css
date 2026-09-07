@@ -1289,6 +1289,39 @@ body {
     .ho-help-modal__glossary { grid-template-columns: 1fr; }
 }
 
+/* ── 指标详情页（整卡点击弹出）── */
+.ho-detail-section { margin-bottom: 18px; }
+.ho-detail-section:last-child { margin-bottom: 0; }
+.ho-detail-section__h {
+    font-size: 13px; font-weight: 700; color: var(--gray-700);
+    margin: 0 0 8px; display: flex; align-items: center; gap: 6px;
+}
+.ho-detail-section__p { font-size: 14px; line-height: 1.75; color: var(--gray-800); margin: 0; }
+
+.ho-detail-tiers { display: flex; flex-direction: column; gap: 10px; }
+.ho-detail-tier {
+    border: 1px solid var(--gray-200); border-radius: var(--radius-sm);
+    padding: 12px 14px; background: var(--bg-tint);
+}
+.ho-detail-tier__head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.ho-detail-tier__range { font-size: 13px; font-weight: 700; color: var(--gray-900); font-variant-numeric: tabular-nums; }
+.ho-detail-tier__desc { margin: 0; font-size: 13px; line-height: 1.65; color: var(--gray-600); }
+
+.ho-detail-tier__badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 40px; padding: 2px 9px; border-radius: var(--radius-pill);
+    font-size: 12px; font-weight: 700; line-height: 1.5;
+}
+.ho-detail-tier__badge--good { background: var(--success-soft); color: #166534; }
+.ho-detail-tier__badge--mid  { background: var(--warning-soft); color: #92400e; }
+.ho-detail-tier__badge--bad  { background: var(--danger-soft);  color: #991b1b; }
+
+/* 整卡可点击：给指标卡一个 pointer 手型 + 轻 hover 反馈 */
+.ho2-core-card, .ho2-card { cursor: pointer; transition: box-shadow .15s ease, border-color .15s ease; }
+.ho2-core-card:hover, .ho2-card:hover { border-color: var(--primary); }
+.ho2-core-card:hover { box-shadow: 0 4px 16px rgba(37, 99, 235, .10); }
+.ho-help-btn--physio { width: 16px; height: 16px; font-size: 10px; margin-left: 4px; }
+
 .ho2-section-title { margin: 16px 0 8px; font-size: 12px; font-weight: 700; color: var(--gray-400); text-transform: uppercase; letter-spacing: .06em; }
 .ho2-section-title span { position: relative; padding-right: 10px; }
 
