@@ -22,8 +22,9 @@ class Timeline {
         this.PAD_RIGHT = 10;
         this.TITLE_A_Y = 22;
         this.A_PLOT_TOP = 38;
-        this.A_PLOT_H = 158;            // 0–10h 量程
-        this.A_MAX_HOURS = 10;
+        this.A_PLOT_H = 158;            // 上区绘图区高度
+        this.A_MIN_HOURS = 8;           // 量程下限（数据小也不至于顶满）
+        this.A_CAP_HOURS = 16;          // 量程上限（防极端错误数据撑爆布局）
         this.LEGEND_Y = 222;
         this.TITLE_B_Y = 246;
         this.B_PLOT_TOP = 258;
@@ -191,8 +192,17 @@ class Timeline {
     _drawSectionA(ctx, dates, cx, pitch, colW, W) {
         const top = this.A_PLOT_TOP;
         const plotH = this.A_PLOT_H;
-        const maxH = this.A_MAX_HOURS;
         const base = top + plotH;
+
+        // 自适应量程：取本窗口最大在床时长，向上取整到 2h 倍数；下限 8h、上限 16h。
+        // 诚实显示完整柱，不截断——有 14h 那周量程就放 14h，正常柱略矮但对比关系不变。
+        let dataMax = 0;
+        for (const date of dates) {
+            const p = this._pickPrimary(this._grouped[date] || []);
+            if (p) dataMax = Math.max(dataMax, this._durationMin(p) / 60);
+        }
+        const maxH = Math.min(this.A_CAP_HOURS,
+            Math.max(this.A_MIN_HOURS, Math.ceil(dataMax / 2) * 2));
         const pxH = plotH / maxH;
 
         ctx.textAlign = 'left';
@@ -222,8 +232,7 @@ class Timeline {
 
             const x = cx(i) - colW / 2;
             const hours = this._durationMin(primary) / 60;
-            const shownH = Math.min(hours, maxH);
-            const colH = shownH * pxH;
+            const colH = hours * pxH;
             const colTop = base - colH;
 
             if (this._hasStages(primary)) {
@@ -251,9 +260,6 @@ class Timeline {
                 ctx.globalAlpha = 1.0;
             }
 
-            // 超过 10h：轴截断双斜线标记
-            if (hours > maxH) this._drawBreakCap(ctx, x, colTop, colW);
-
             // 质量点：柱够高放柱内顶部，太矮放柱顶左上
             const qc = this.qualityColors[primary.sleep_quality];
             if (qc) {
@@ -267,8 +273,8 @@ class Timeline {
                 ctx.stroke();
             }
 
-            // 时长标签（超量程的用琥珀色呼应截断标记）
-            ctx.fillStyle = hours > maxH ? '#854F0B' : '#444441';
+            // 时长标签
+            ctx.fillStyle = '#444441';
             ctx.font = '11px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
             ctx.textAlign = 'center';
             ctx.fillText(hours.toFixed(1), cx(i), colTop - 6);
@@ -282,18 +288,6 @@ class Timeline {
                 ctx.fill();
             }
         });
-    }
-
-    /** 轴截断标记：柱顶两条白色斜杠。 */
-    _drawBreakCap(ctx, x, topY, w) {
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(x - 1, topY + 2);
-        ctx.lineTo(x + w + 1, topY + 8);
-        ctx.moveTo(x - 1, topY + 8);
-        ctx.lineTo(x + w + 1, topY + 14);
-        ctx.stroke();
     }
 
     /* ── Legend ── */
