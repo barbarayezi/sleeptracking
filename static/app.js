@@ -59,13 +59,18 @@ const App = {
         // Turso 东京往返）全部走完才开始请求，凭空多转好几秒。
         this._initWhoop();
 
-        // Load today's data
+        // Load today's data — 4 个接口互相独立，并行发出。
+        // 原来串行 await（睡眠→饮食→经期→用药各 ~1.0-1.5s 打一次东京 Turso）
+        // 叠加 = 4-6s，导致打开页面后立刻点「记录」Tab 时表单/列表迟迟不填充。
+        // 并行后首屏填充 = 最慢一个接口的耗时（~1.5s 封顶）。
         this.currentDate = this._todayStr();
         this._updateDateLabel();
-        await this.form.loadDate(this.currentDate);
-        await this.meal.loadDate(this.currentDate);
-        await this.period.loadDate(this.currentDate);
-        await this.medication.loadDate(this.currentDate);
+        await Promise.all([
+            this.form.loadDate(this.currentDate),
+            this.meal.loadDate(this.currentDate),
+            this.period.loadDate(this.currentDate),
+            this.medication.loadDate(this.currentDate),
+        ]);
 
         // 图表分析 Tab 的重模块（时间线/科研看板/健康总览）首进该 Tab 时懒加载，
         // 见 _loadChartsTab()——首屏只保证概览页秒开。
@@ -248,6 +253,8 @@ const App = {
         if (!dateStr || dateStr === this.currentDate) return;
         this.currentDate = dateStr;
         this._updateDateLabel();
+        // 4 个模块并行加载，避免切日期时串行打 4 次东京 Turso 卡 4-6s。
+        // loadDate 各自内置 try/catch，不会互相拖垮。
         this.form.loadDate(dateStr);
         this.meal.loadDate(dateStr);
         this.period.loadDate(dateStr);
