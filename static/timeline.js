@@ -32,6 +32,10 @@ class Timeline {
         this.BAR_Y_OFFSET = 8;
         this.MEAL_DOT_RADIUS = 4.5;
 
+        // 夜间参考带：22:00 – 06:00（次日），辅助判断入睡/醒来的"理想窗口"
+        this.NIGHT_BAND_START = 22;   // 22:00
+        this.NIGHT_BAND_END = 6;      // 06:00（次日）
+
         // Color mapping（DS 语义色）
         this.colors = {
             good: '#16a34a',
@@ -39,13 +43,9 @@ class Timeline {
             poor: '#dc2626'
         };
 
-        // Meal type colors（DS 折线数据色：低饱和区分度）
-        this.mealColors = {
-            breakfast: '#d97706',  // amber
-            lunch: '#16a34a',      // green
-            dinner: '#2563eb',     // blue
-            snack: '#dc2626'       // red
-        };
+        // Meal markers: single neutral color (quality owns RAG channel);
+        // meal type is encoded by SHAPE instead of color.
+        this.mealColor = '#94a3b8';
 
         // Type-specific alpha
         this.typeAlpha = {
@@ -246,6 +246,9 @@ class Timeline {
         // Clear
         ctx.clearRect(0, 0, containerWidth, totalHeight);
 
+        // 夜间参考带（先铺底，再画网格，避免遮住网格线）
+        this._drawNightBand(ctx, pxPerMinute, totalHeight);
+
         // Draw grid lines & hour labels
         ctx.fillStyle = '#64748b';
         ctx.font = '11px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
@@ -313,6 +316,28 @@ class Timeline {
         this._drawMealLegend(ctx, containerWidth);
     }
 
+    _drawNightBand(ctx, pxPerMinute, totalHeight) {
+        // 22:00 → 06:00 铺浅灰底
+        const startOffset = (this.NIGHT_BAND_START - 18) * 60;      // 240 min
+        let endOffset = (this.NIGHT_BAND_END - 18) * 60;            // -720 → +1440 = 720
+        if (endOffset <= startOffset) endOffset += 1440;
+        const x = this.LEFT_MARGIN + startOffset * pxPerMinute;
+        const w = (endOffset - startOffset) * pxPerMinute;
+        ctx.fillStyle = 'rgba(100,116,139,0.07)';
+        ctx.fillRect(x, this.TOP_OFFSET - 8, w, totalHeight - this.TOP_OFFSET + 8);
+
+        // 0 点基准虚线（18:00 后 6 小时 = 360 分钟）
+        const mx = this.LEFT_MARGIN + 360 * pxPerMinute;
+        ctx.strokeStyle = 'rgba(100,116,139,0.35)';
+        ctx.lineWidth = 0.5;
+        ctx.setLineDash([2, 4]);
+        ctx.beginPath();
+        ctx.moveTo(mx, this.TOP_OFFSET - 8);
+        ctx.lineTo(mx, totalHeight);
+        ctx.stroke();
+        ctx.setLineDash([]);
+    }
+
     _drawBar(ctx, record, rowY, pxPerMinute) {
         const sleepTime = this._parseTime(record.sleep_time);
         const wakeTime = this._parseTime(record.wake_time);
@@ -363,14 +388,25 @@ class Timeline {
 
         ctx.globalAlpha = 1.0;
 
-        // Duration text
+        // Duration text：优先放条右侧；条右端若逼近右边界（指标簇），改为内嵌白字防碰撞
         const durationHours = (wakeOffset - sleepOffset) / 60;
         const typeIndicator = { night: '', nap: '💤', segment: '🔄' }[record.record_type] || '';
-        ctx.fillStyle = '#0f172a';
-        ctx.textAlign = 'left';
-        ctx.font = '11px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
         const hoursText = durationHours.toFixed(1) + 'h' + (typeIndicator ? ' ' + typeIndicator : '');
-        ctx.fillText(hoursText, barX + barWidth + 6, barY + 15);
+        ctx.font = '11px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
+        // 条右侧文字需约 52px 空间；右侧指标簇从 chartWidth+LEFT_MARGIN 之后开始
+        const rightEdgeLimit = this.canvas.style.width ? parseFloat(this.canvas.style.width) - this.RIGHT_MARGIN - 8 : 0;
+        const textOutsideX = barX + barWidth + 6;
+        const textWidth = ctx.measureText(hoursText).width;
+        if (rightEdgeLimit && textOutsideX + textWidth > rightEdgeLimit) {
+            // 内嵌：白字居中于条内
+            ctx.fillStyle = '#ffffff';
+            ctx.textAlign = 'center';
+            ctx.fillText(hoursText, barX + barWidth / 2, barY + 15);
+        } else {
+            ctx.fillStyle = '#0f172a';
+            ctx.textAlign = 'left';
+            ctx.fillText(hoursText, textOutsideX, barY + 15);
+        }
 
         // Store hit region for click detection
         record._hitRegion = {
@@ -385,12 +421,6 @@ class Timeline {
 
     _drawMealMarkers(ctx, meals, rowY, pxPerMinute) {
         const dotY = rowY + this.ROW_HEIGHT - 4;  // Bottom of row
-        const mealIcons = {
-            breakfast: '\u{1F305}',
-            lunch: '\u{2600}\u{FE0F}',
-            dinner: '\u{1F307}',
-            snack: '\u{1F36A}'
-        };
 
         meals.forEach((meal) => {
             const time = this._parseMealTime(meal.meal_time);
@@ -399,49 +429,94 @@ class Timeline {
             if (offset < 0) offset += 1440;
 
             const dotX = this.LEFT_MARGIN + offset * pxPerMinute;
-            const color = this.mealColors[meal.meal_type] || '#94a3b8';
 
-            // Draw colored dot
-            ctx.fillStyle = color;
+            // 统一灰点（质量通道独占 RAG 色），餐类型靠形状区分：早=空心圆、午=实心圆、晚=实心三角、加=空心三角
+            ctx.fillStyle = this.mealColor;
             ctx.globalAlpha = 0.9;
-            ctx.beginPath();
-            ctx.arc(dotX, dotY, this.MEAL_DOT_RADIUS, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.globalAlpha = 1.0;
-
-            // Draw tiny icon next to dot (only if there's room)
-            const icon = mealIcons[meal.meal_type] || '';
-            if (icon && meals.length <= 4) {
-                ctx.font = '9px sans-serif';
-                ctx.textAlign = 'left';
-                ctx.fillText(icon, dotX + 6, dotY + 4);
+            const mt = meal.meal_type;
+            const r = this.MEAL_DOT_RADIUS;
+            if (mt === 'lunch') {
+                // 实心圆
+                ctx.beginPath();
+                ctx.arc(dotX, dotY, r, 0, Math.PI * 2);
+                ctx.fill();
+            } else if (mt === 'dinner') {
+                // 实心向下三角
+                ctx.beginPath();
+                ctx.moveTo(dotX, dotY - r);
+                ctx.lineTo(dotX + r * 1.1, dotY + r * 0.9);
+                ctx.lineTo(dotX - r * 1.1, dotY + r * 0.9);
+                ctx.closePath();
+                ctx.fill();
+            } else if (mt === 'snack') {
+                // 空心三角
+                ctx.beginPath();
+                ctx.moveTo(dotX, dotY - r);
+                ctx.lineTo(dotX + r * 1.1, dotY + r * 0.9);
+                ctx.lineTo(dotX - r * 1.1, dotY + r * 0.9);
+                ctx.closePath();
+                ctx.lineWidth = 1.2;
+                ctx.strokeStyle = this.mealColor;
+                ctx.stroke();
+            } else {
+                // breakfast / 默认：空心圆
+                ctx.beginPath();
+                ctx.arc(dotX, dotY, r, 0, Math.PI * 2);
+                ctx.lineWidth = 1.2;
+                ctx.strokeStyle = this.mealColor;
+                ctx.stroke();
             }
+            ctx.globalAlpha = 1.0;
         });
     }
 
     _drawMealLegend(ctx, containerWidth) {
         const legendX = containerWidth - this.RIGHT_MARGIN + 4;
         const legendY = this.TOP_OFFSET - 4;
+        const c = this.mealColor;
         const items = [
-            { label: '早', color: this.mealColors.breakfast },
-            { label: '午', color: this.mealColors.lunch },
-            { label: '晚', color: this.mealColors.dinner },
-            { label: '加', color: this.mealColors.snack }
+            { label: '早', shape: 'hollow' },
+            { label: '午', shape: 'solid' },
+            { label: '晚', shape: 'tri' },
+            { label: '加', shape: 'hollowTri' }
         ];
 
         ctx.font = '10px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
         ctx.textAlign = 'left';
+        ctx.fillStyle = c;
+        ctx.strokeStyle = c;
 
         items.forEach((item, i) => {
             const itemX = legendX + i * 38;
-            // Dot
-            ctx.fillStyle = item.color;
-            ctx.beginPath();
-            ctx.arc(itemX, legendY, 3.5, 0, Math.PI * 2);
-            ctx.fill();
-            // Label
+            const r = 3.5;
+            if (item.shape === 'solid') {
+                ctx.beginPath();
+                ctx.arc(itemX, legendY, r, 0, Math.PI * 2);
+                ctx.fill();
+            } else if (item.shape === 'hollow') {
+                ctx.beginPath();
+                ctx.arc(itemX, legendY, r, 0, Math.PI * 2);
+                ctx.lineWidth = 1.2;
+                ctx.stroke();
+            } else if (item.shape === 'tri') {
+                ctx.beginPath();
+                ctx.moveTo(itemX, legendY - r);
+                ctx.lineTo(itemX + r * 1.1, legendY + r * 0.9);
+                ctx.lineTo(itemX - r * 1.1, legendY + r * 0.9);
+                ctx.closePath();
+                ctx.fill();
+            } else {
+                ctx.beginPath();
+                ctx.moveTo(itemX, legendY - r);
+                ctx.lineTo(itemX + r * 1.1, legendY + r * 0.9);
+                ctx.lineTo(itemX - r * 1.1, legendY + r * 0.9);
+                ctx.closePath();
+                ctx.lineWidth = 1.2;
+                ctx.stroke();
+            }
             ctx.fillStyle = '#94a3b8';
             ctx.fillText(item.label, itemX + 6, legendY + 3);
+            ctx.fillStyle = c;
         });
     }
 
@@ -482,10 +557,8 @@ class Timeline {
     /* ── Daily metrics cluster (right margin) ── */
 
     _recoveryColor(score) {
-        if (score == null) return null;
-        if (score >= 67) return '#16a34a';   // green
-        if (score >= 34) return '#d97706';   // amber
-        return '#dc2626';                     // red
+        // 恢复分统一用靛蓝（与首页评分环/Whoop 语义色对齐），不再复用红黄绿
+        return '#6366f1';
     }
 
     _drawMetricCluster(ctx, date, rowY, containerWidth) {
@@ -525,10 +598,10 @@ class Timeline {
             ctx.fillText('S' + daily.strain.toFixed(1), baseX + maxW + 4, barY + 6);
         }
 
-        // Steps glyph + number
+        // Steps glyph + number（去掉 emoji 鞋，用「步」前缀纯文本，视觉更干净）
         if (steps != null) {
             ctx.fillStyle = '#38bdf8';
-            ctx.fillText('\u{1F45F}' + this._fmtSteps(steps), baseX + 58, rowY + 14);
+            ctx.fillText('步 ' + this._fmtSteps(steps), baseX + 58, rowY + 14);
         }
     }
 
