@@ -103,8 +103,60 @@ def get_whoop_daily(from_date=None, to_date=None):
             params.append(to_date)
     q += " ORDER BY record_date"
     rows = conn.execute(q, params).fetchall()
+
+    # 回退填充：后台定时同步只拉最近 2 天，whoop_daily_metrics 里更早日期
+    # 的 recovery_score / RHR / HRV 可能为 None（sync_daily_metrics 只写有值
+    # 的日期），但同一天在 sleep_records 里已由当晚同步写入了恢复分。
+    # 两张表数据漂移会让 hero 首页的「近 7 天恢复分」和「恢复分算法解读」
+    # 拿到 null → 显示成「无恢复分/体征数据不足」。这里按日期用睡眠表的
+    # recovery_score / resting_heart_rate / hrv 回填缺失项。
+    fy_from = from_date if from_date else (rows[0]["record_date"] if rows else None)
+    fy_to = to_date if to_date else None
+    fallback = {}
+    if fy_from:
+        fy_q = ("SELECT record_date, recovery_score, resting_heart_rate, hrv "
+                "FROM sleep_records WHERE record_type IN ('night','segment')"
+                " AND recovery_score IS NOT NULL"
+                + (" AND record_date >= ?" if fy_from else "")
+                + (" AND record_date <= ?" if fy_to and fy_from else ""))
+        fy_params = []
+        if fy_from:
+            fy_params.append(fy_from)
+        if fy_to and fy_from:
+            fy_params.append(fy_to)
+        for r in conn.execute(fy_q, fy_params).fetchall():
+            d = r["record_date"]
+            prev = fallback.get(d)
+            if prev is None:
+                fallback[d] = {
+                    "recovery_score": r["recovery_score"],
+                    "resting_heart_rate": r["resting_heart_rate"],
+                    "hrv": r["hrv"],
+                }
+            else:
+                # 同一天多条夜间记录：保留第一条有值的（与 overview 逻辑一致）
+                if prev["recovery_score"] is None and r["recovery_score"] is not None:
+                    prev["recovery_score"] = r["recovery_score"]
+                if prev["resting_heart_rate"] is None and r["resting_heart_rate"] is not None:
+                    prev["resting_heart_rate"] = r["resting_heart_rate"]
+                if prev["hrv"] is None and r["hrv"] is not None:
+                    prev["hrv"] = r["hrv"]
+
     conn.close()
-    return [_row_to_dict(r) for r in rows]
+
+    out = []
+    for r in rows:
+        d = _row_to_dict(r)
+        fb = fallback.get(d["record_date"])
+        if fb:
+            if d.get("recovery_score") is None:
+                d["recovery_score"] = fb["recovery_score"]
+            if d.get("resting_heart_rate") is None:
+                d["resting_heart_rate"] = fb["resting_heart_rate"]
+            if d.get("hrv") is None:
+                d["hrv"] = fb["hrv"]
+        out.append(d)
+    return out
 
 
 def get_workouts(from_date=None, to_date=None):

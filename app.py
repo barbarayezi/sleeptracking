@@ -552,8 +552,19 @@ def serve_meal_image(meal_id, image_id):
         'Cache-Control': 'private, max-age=600',
     }
     if original_filename:
-        # inline display rather than download
-        headers['Content-Disposition'] = f'inline; filename="{original_filename}"'
+        # 原始文件名可能是中文（如「粘贴-131506-1.jpg」）。waitress 发送 header
+        # 时按 latin-1 编码，中文无法编码会直接抛 UnicodeEncodeError → 500，
+        # 导致整条图片响应失败、前端裂图。用 RFC 5987 的 filename*=UTF-8''...
+        # 编码携带原始名，同时给一个 ASCII 兜底文件名。
+        from urllib.parse import quote
+        try:
+            ascii_fn = original_filename.encode('ascii')
+        except (UnicodeEncodeError, AttributeError):
+            ascii_fn = b'image.jpg'
+        filename_star = quote(original_filename, safe='')
+        headers['Content-Disposition'] = (
+            f"inline; filename=\"{ascii_fn.decode('ascii')}\"; filename*=UTF-8''{filename_star}"
+        )
     return Response(blob, headers=headers)
 
 
