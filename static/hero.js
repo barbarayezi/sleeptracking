@@ -8,8 +8,9 @@ const HeroOverview = {
         this._cache();
         // 数据在东京 Turso，单次请求 ~150ms+ 往返；概览页每次进首页都要拉这两个接口，
         // 走 ApiCache（改动即失效）后二次进入秒开。失效由 App._invalidateAndRefresh 统一触发。
+        // 首页最在意新鲜度：覆盖默认 5 分钟 TTL 为 60s，避免切回/打开时显示昨夜旧数据
         const fetchJson = window.ApiCache
-            ? (url) => ApiCache.fetch(url).catch(() => null)
+            ? (url) => ApiCache.fetch(url, { ttlMs: 60 * 1000 }).catch(() => null)
             : (url) => fetch(url).then((r) => (r.ok ? r.json() : null)).catch(() => null);
         try {
             const [records, whoop] = await Promise.all([

@@ -52,7 +52,9 @@ const ApiCache = {
         const entry = this._getEntry(key);
         if (entry === undefined) return undefined;
         const ttl = ttlMs != null ? ttlMs : this._defaultTtlMs;
-        if (ttl > 0 && Date.now() - entry.t >= ttl) {
+        const age = Date.now() - entry.t;
+        // 过期 或 缓存时间戳在未来（系统时钟回拨）→ 视为失效重拉，避免永久命中旧数据
+        if (ttl > 0 && (age >= ttl || age < -10000)) {
             this.invalidate(key);
             return undefined;
         }

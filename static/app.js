@@ -54,6 +54,20 @@ const App = {
         this._registerServiceWorker();
         this._initInstallPrompt();
 
+        // 切回标签页时强制核销缓存再刷新首页/时间线：PWA 可长时间挂在后台，
+        // 仅靠 5 分钟定时同步 + 5 分钟 TTL 会出现"切回来还是旧数据"的窗口；
+        // 切回即拉一次，保证看到的是最新（30s 内重复切回不重复打 Tokyo 库）。
+        let _lastVisibleRefresh = 0;
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState !== 'visible') return;
+            const now = Date.now();
+            if (now - _lastVisibleRefresh < 30000) return;
+            _lastVisibleRefresh = now;
+            if (window.ApiCache) ApiCache.invalidateAll();
+            if (window.HeroOverview) HeroOverview.refresh();
+            this._refreshTimeline().catch(() => {});
+        });
+
         // Whoop 状态检查不依赖今日数据，与下方 4 个串行加载并发发出——
         // 否则同步 Tab 的「检查中...」要等饮食/睡眠等 4 个接口（各 1+ 次
         // Turso 东京往返）全部走完才开始请求，凭空多转好几秒。
