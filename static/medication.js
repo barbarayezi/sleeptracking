@@ -36,20 +36,26 @@ class MedicationManager {
         this._resetForm();
         this._updateFormMode();
 
+        // 并行拉取列表 + 日汇总，并接入 ApiCache：
+        // 切换日期/Tab 时命中缓存即可秒开，改动后由 _save/_delete 调用 invalidateAll() 失效。
+        const fetcher = window.ApiCache
+            ? (url) => window.ApiCache.fetch(url, { ttlMs: 30000 })
+            : (url) => fetch(url).then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))));
+
         try {
-            const resp = await fetch(`/api/medications?date=${dateStr}`);
-            if (resp.ok) {
-                this._medicationsForDate = await resp.json();
-            } else {
-                this._medicationsForDate = [];
-            }
+            const [records, summary] = await Promise.all([
+                fetcher(`/api/medications?date=${dateStr}`),
+                fetcher(`/api/medications/summary?date=${encodeURIComponent(dateStr)}`),
+            ]);
+            this._medicationsForDate = records || [];
+            this._renderList();
+            this._renderDaySummary((summary && summary.summary) || {});
         } catch (err) {
             this._medicationsForDate = [];
+            this._renderList();
+            this._renderDaySummary({});
             this._showMessage('加载失败: ' + err.message, 'error');
         }
-
-        this._renderList();
-        await this._loadDaySummary();
     }
 
     /* ── Event Wiring ─────────────────────── */
@@ -103,14 +109,23 @@ class MedicationManager {
         }
 
         const originalLabel = btn.textContent;
-        btn.disabled = true;
-        btn.textContent = '⏳ 记录中…';
+        const labels = new Map();
+        // 请求期间禁用全部快速按钮，避免用户连点造成多个 POST 并发、所有按钮都卡在"记录中…"
+        this._quickfillButtons.forEach((b) => {
+            labels.set(b, b.textContent);
+            b.disabled = true;
+            if (b === btn) b.textContent = '⏳ 记录中…';
+        });
+
         try {
-            const resp = await fetch('/api/medications', {
+            const fetchWithTimeout = (window.App && window.App._fetchWithTimeout)
+                ? (url, opts, ms) => window.App._fetchWithTimeout(url, opts, ms)
+                : (url, opts) => fetch(url, opts);
+            const resp = await fetchWithTimeout('/api/medications', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
-            });
+            }, 8000);
             const data = await resp.json();
             if (!resp.ok) {
                 this._showMessage('❌ ' + (data.error || '记录失败'), 'error');
@@ -118,14 +133,20 @@ class MedicationManager {
             }
             this._medicationsForDate.push(data);
             this._renderList();
+            // 新记录写入后立刻让药物相关缓存失效，保证汇总和列表是最新值
+            if (window.ApiCache) {
+                window.ApiCache.invalidatePrefix('/api/medications');
+            }
             await this._loadDaySummary();
             const slotTxt = {morning:'早',noon:'午',evening:'晚',night:'睡前'}[slot] || '早';
             this._showMessage('✅ 已记录 ' + payload.medication_name + '（' + slotTxt + '）', 'success');
         } catch (err) {
-            this._showMessage('❌ 网络错误: ' + err.message, 'error');
+            this._showMessage('❌ ' + (err.name === 'AbortError' ? '请求超时，请稍后重试' : '网络错误: ' + err.message), 'error');
         } finally {
-            btn.disabled = false;
-            btn.textContent = originalLabel;
+            this._quickfillButtons.forEach((b) => {
+                b.disabled = false;
+                b.textContent = labels.get(b);
+            });
         }
     }
 
@@ -133,13 +154,11 @@ class MedicationManager {
 
     async _loadDaySummary() {
         if (!this.daySummaryEl) return;
+        const fetcher = window.ApiCache
+            ? (url) => window.ApiCache.fetch(url, { ttlMs: 30000 })
+            : (url) => fetch(url).then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))));
         try {
-            const resp = await fetch(`/api/medications/summary?date=${encodeURIComponent(this._selectedDate)}`);
-            if (!resp.ok) {
-                this.daySummaryEl.classList.add('hidden');
-                return;
-            }
-            const data = await resp.json();
+            const data = await fetcher(`/api/medications/summary?date=${encodeURIComponent(this._selectedDate)}`);
             this._renderDaySummary(data.summary || {});
         } catch (err) {
             this.daySummaryEl.classList.add('hidden');
@@ -377,6 +396,7 @@ class MedicationManager {
                 this._resetForm();
                 this._updateFormMode();
                 this._renderList();
+                if (window.ApiCache) window.ApiCache.invalidatePrefix('/api/medications');
                 await this._loadDaySummary();
                 if (window.ApiCache) ApiCache.invalidateAll();
             } else {
@@ -409,6 +429,7 @@ class MedicationManager {
                     this._updateFormMode();
                 }
                 this._renderList();
+                if (window.ApiCache) window.ApiCache.invalidatePrefix('/api/medications');
                 await this._loadDaySummary();
                 if (window.ApiCache) ApiCache.invalidateAll();
                 this._showMessage('已删除。', 'success');
