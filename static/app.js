@@ -408,6 +408,7 @@ const App = {
                 await this._fetchWithTimeout(`/api/whoop/sync?days=${days}`, { method: 'POST' }, 8000);
                 const st = await this._pollSyncUntilDone(null);
                 if (st && !st.error) {
+                    if (window.ApiCache) ApiCache.invalidateAll(); // 同步可能写入新数据，缓存必须失效后重拉
                     await this._refreshTimeline();
                     await this.form.loadDate(this.currentDate);
                     this._checkSyncHealth();
@@ -450,6 +451,7 @@ const App = {
                         resultEl.textContent = '✅ 已是最新（Whoop 暂无新睡眠数据）';
                     }
                     resultEl.className = 'form-message success';
+                    if (window.ApiCache) ApiCache.invalidateAll(); // 手动同步成功同样失效缓存
                     await this._refreshTimeline();
                     await this.form.loadDate(this.currentDate);
                     this._checkSyncHealth();

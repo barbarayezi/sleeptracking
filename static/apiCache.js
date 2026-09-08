@@ -17,6 +17,10 @@ const ApiCache = {
     _mem: new Map(),          // key -> { data, t }
     _inflight: new Map(),     // key -> Promise
     _ns: 'qhcache:',
+    // 默认 TTL：5 分钟。后台 Whoop 同步（本机或另一台设备）写入的新数据
+    // 不会触发"改动即失效"，没有 TTL 时 sessionStorage 里的旧数据会一直命中，
+    // 表现为"数据已上传但首页不显示今晨睡眠"。TTL 兜底限制最大陈旧窗口。
+    _defaultTtlMs: 5 * 60 * 1000,
 
     _readSession(key) {
         try {
@@ -32,15 +36,27 @@ const ApiCache = {
         } catch (e) { /* 超出配额等情况静默降级为仅内存 */ }
     },
 
-    /** 取缓存（内存优先，其次 sessionStorage）。未命中返回 undefined。 */
-    get(key) {
-        if (this._mem.has(key)) return this._mem.get(key).data;
+    /** 取缓存条目（内存优先，其次 sessionStorage）。未命中返回 undefined。 */
+    _getEntry(key) {
+        if (this._mem.has(key)) return this._mem.get(key);
         const s = this._readSession(key);
         if (s) {
             this._mem.set(key, s);
-            return s.data;
+            return s;
         }
         return undefined;
+    },
+
+    /** 取缓存数据（含 TTL 检查）。未命中或已过期返回 undefined。 */
+    get(key, ttlMs) {
+        const entry = this._getEntry(key);
+        if (entry === undefined) return undefined;
+        const ttl = ttlMs != null ? ttlMs : this._defaultTtlMs;
+        if (ttl > 0 && Date.now() - entry.t >= ttl) {
+            this.invalidate(key);
+            return undefined;
+        }
+        return entry.data;
     },
 
     set(key, data) {
@@ -83,13 +99,14 @@ const ApiCache = {
     },
 
     /**
-     * 带缓存的 GET JSON。命中缓存立即返回；否则发请求（并发去重）并写缓存。
+     * 带缓存的 GET JSON。命中且未过期立即返回；否则发请求（并发去重）并写缓存。
      * @param {string} url 请求地址（含 query），同时作为缓存 key。
-     * @param {object} opts { force: true 时跳过缓存强制刷新 }
+     * @param {object} opts { force: true 时跳过缓存强制刷新; ttlMs: 覆盖默认 TTL }
      */
     async fetch(url, opts = {}) {
+        const ttlMs = opts.ttlMs;
         if (!opts.force) {
-            const hit = this.get(url);
+            const hit = this.get(url, ttlMs);
             if (hit !== undefined) return hit;
         }
         if (this._inflight.has(url)) return this._inflight.get(url);
