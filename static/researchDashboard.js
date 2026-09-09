@@ -306,20 +306,25 @@ class ResearchDashboard {
     /* ── 科研级指标卡（当前值 + Z + 趋势 + 百分位） ─── */
 
     _renderMetricCards(days) {
+        // dir 评级方向：
+        //   hi   越高越好：优 ≥ goodAt / 偏低 < badAt
+        //   lo   越低越好：优 ≤ goodAt / 偏高 > badAt
+        //   zone 区间型  ：优 ∈ [goodAt, goodMax] / 偏低 < badAt / 偏高 > badHigh
+        //   dyn  动态基线：与自身均值 ±0.5σ 比较（样本 ≥7 天才评级）
         const metrics = [
-            { key: 'device_score', label: '睡眠分', unit: '', higher: true, goodAt: 80, badAt: 50 },
-            { key: 'recovery_score', label: '恢复分', unit: '', higher: true, goodAt: 70, badAt: 40 },
-            { key: 'meal_health_score', label: '饮食健康分', unit: '/10', higher: true, goodAt: 7, badAt: 4 },
-            { key: 'hrv', label: 'HRV', unit: 'ms', higher: true },
-            { key: 'resting_heart_rate', label: '静息心率', unit: 'bpm', higher: false, goodAt: 60, badAt: 75 },
-            { key: 'strain', label: 'Strain', unit: '', higher: null },
-            { key: 'steps', label: '步数', unit: '', higher: true, goodAt: 8000, badAt: 3000 },
+            { key: 'device_score', label: '睡眠分', unit: '', dir: 'hi', goodAt: 80, badAt: 50 },
+            { key: 'recovery_score', label: '恢复分', unit: '', dir: 'hi', goodAt: 70, badAt: 40 },
+            { key: 'meal_health_score', label: '饮食健康分', unit: '/10', dir: 'hi', goodAt: 7, badAt: 4 },
+            { key: 'hrv', label: 'HRV', unit: 'ms', dir: 'dyn' },
+            { key: 'resting_heart_rate', label: '静息心率', unit: 'bpm', dir: 'lo', goodAt: 60, badAt: 75 },
+            { key: 'strain', label: 'Strain', unit: '', dir: 'zone', goodAt: 14, goodMax: 18, badAt: 10, badHigh: 18 },
+            { key: 'steps', label: '步数', unit: '', dir: 'hi', goodAt: 8000, badAt: 3000 },
         ];
 
         const last = days[days.length - 1] || {};
         let html = '<div class="rd-cards-wrap">';
         html += '<h3 class="rd-section-title">关键指标快照</h3>';
-        html += '<p class="rd-section-hint">基于最近 ' + days.length + ' 天数据。点击卡片可跳转到该日期。</p>';
+        html += '<p class="rd-section-hint">基于最近 ' + days.length + ' 天数据。评级口径：越高越好型（睡眠/恢复/饮食/步数）与越低越好型（静息心率）用固定阈值；HRV 相对自身基线判定；Strain 用训练学刺激区间。悬停徽章可见阈值。点击卡片可跳转到该日期。</p>';
         html += '<div class="rd-cards-grid">';
 
         for (const m of metrics) {
@@ -341,25 +346,21 @@ class ResearchDashboard {
                 const eAvg = earlier.reduce((a, b) => a + b, 0) / earlier.length;
                 const diff = rAvg - eAvg;
                 const pctDiff = eAvg !== 0 ? (diff / eAvg * 100) : 0;
-                const isGood = m.higher === false ? diff < 0 : diff > 0;
-                const color = isGood ? '#16a34a' : '#dc2626';
+                // 趋势好坏按方向解释：hi 涨好跌坏 / lo 跌好涨坏 / zone 中性灰（Strain 升或降不等于好坏）
+                let isGood = null;
+                if (m.dir === 'lo') isGood = diff < 0;
+                else if (m.dir === 'hi') isGood = diff > 0;
+                const color = isGood === true ? '#16a34a' : isGood === false ? '#dc2626' : '#94a3b8';
                 const arrow = diff > 0 ? '↑' : diff < 0 ? '↓' : '→';
                 trendHtml = `<span class="rd-trend" style="color:${color}">${arrow} ${Math.abs(pctDiff).toFixed(0)}% 周环比</span>`;
             }
 
-            // Status badge —— 判断方向取决于指标是"越高越好"还是"越低越好"。
-            // higher=true（睡眠分/恢复分等）：>= goodAt 为优，< badAt 为偏低；
-            // higher=false（静息心率，越低越好）：<= goodAt 为优，> badAt 为偏高。
-            // 旧逻辑对所有指标一律用 current >= goodAt / current < badAt，
-            // 导致静息心率 59 bpm（明明是好值）被误判为「偏低」。
+            // Status badge — 统一经 _judgeRating 判定，支持 hi/lo/zone/dyn 四类方向
+            // （本地重构版：覆盖远程 higher 布尔修复，静息心率 lo 向、Strain zone 型、HRV 动态基线一并处理）
             let badge = '';
             if (current != null) {
-                const lowerBetter = (m.higher === false);
-                const good = m.goodAt != null && (lowerBetter ? current <= m.goodAt : current >= m.goodAt);
-                const bad = m.badAt != null && (lowerBetter ? current > m.badAt : current < m.badAt);
-                if (good) badge = '<span class="rd-badge rd-badge--good">优</span>';
-                else if (bad) badge = `<span class="rd-badge rd-badge--bad">${lowerBetter ? '偏高' : '偏低'}</span>`;
-                else badge = '<span class="rd-badge rd-badge--mid">中</span>';
+                const rating = this._judgeRating(m, current, series);
+                if (rating) badge = `<span class="rd-badge rd-badge--${rating.cls}" title="${rating.title || ''}">${rating.text}</span>`;
             }
 
             const valStr = current != null ? (m.key === 'meal_health_score' ? current.toFixed(1) : Math.round(current)) : '—';
@@ -417,6 +418,51 @@ class ResearchDashboard {
     }
 
     /* ── Helpers ────────────────────────────────────── */
+
+    /**
+     * 指标评级判定（优/中/偏高或偏低）
+     * 按指标方向 dir 解释阈值：
+     *   hi   越高越好 → 优 ≥ goodAt，偏低 < badAt
+     *   lo   越低越好 → 优 ≤ goodAt，偏高 > badAt（注意 badAt 是"偏高"起点）
+     *   zone 区间最佳 → 优 ∈ [goodAt, goodMax]，<badAt 偏低，>badHigh 偏高
+     *   dyn  自适应   → 相对自身基线：|z| ≥ 0.5 分档（样本 ≥7 天，否则不评级）
+     * @returns {{cls:string,text:string,title:string}|null} 无法判定（无数据/样本不足）时返回 null
+     */
+    _judgeRating(m, current, series) {
+        const U = m.unit || '';
+
+        if (m.dir === 'dyn') {
+            // 基线 = 近 N 天中排除今天的历史值（series 按时间序，末位即当前值）
+            const hist = series.slice(0, -1);
+            if (hist.length < 7) return null; // 历史样本不足，不误导性评级
+            const mean = hist.reduce((a, b) => a + b, 0) / hist.length;
+            const sd = Math.sqrt(hist.map(v => (v - mean) ** 2).reduce((a, b) => a + b, 0) / hist.length);
+            if (sd === 0) return { cls: 'mid', text: '中', title: '近期数值恒定，暂无法与基线比较' };
+            const z = (current - mean) / sd;
+            const half = sd / 2;
+            if (z >= 0.5) return { cls: 'good', text: '优', title: '高于自身近期基线 ' + half.toFixed(0) + U + ' 以上（基线均值 ' + mean.toFixed(0) + U + '）' };
+            if (z <= -0.5) return { cls: 'bad', text: '偏低', title: '低于自身近期基线 ' + half.toFixed(0) + U + ' 以上（基线均值 ' + mean.toFixed(0) + U + '）' };
+            return { cls: 'mid', text: '中', title: '处于自身近期基线 ±' + half.toFixed(0) + U + ' 内（基线均值 ' + mean.toFixed(0) + U + '）' };
+        }
+
+        if (m.dir === 'lo') {
+            if (current <= m.goodAt) return { cls: 'good', text: '优', title: m.label + ' ≤ ' + m.goodAt + U + ' 视为优（越低越好）' };
+            if (current > m.badAt) return { cls: 'bad', text: '偏高', title: m.label + ' > ' + m.badAt + U + ' 视为偏高' };
+            return { cls: 'mid', text: '中', title: m.goodAt + U + ' < ' + m.label + ' ≤ ' + m.badAt + U + ' 为中' };
+        }
+
+        if (m.dir === 'zone') {
+            if (current >= m.goodAt && current <= m.goodMax) return { cls: 'good', text: '优', title: '最佳刺激区间 ' + m.goodAt + U + '–' + m.goodMax + U };
+            if (current < m.badAt) return { cls: 'bad', text: '偏低', title: m.label + ' < ' + m.badAt + U + '：训练刺激不足' };
+            if (current > m.badHigh) return { cls: 'bad', text: '偏高', title: m.label + ' > ' + m.badHigh + U + '：警惕过度训练' };
+            return { cls: 'mid', text: '中', title: m.label + ' 处于刺激过渡带（优区间 ' + m.goodAt + U + '–' + m.goodMax + U + ' 之外但未触界）' };
+        }
+
+        // hi（默认，越高越好）
+        if (current >= m.goodAt) return { cls: 'good', text: '优', title: m.label + ' ≥ ' + m.goodAt + U + ' 视为优' };
+        if (current < m.badAt) return { cls: 'bad', text: '偏低', title: m.label + ' < ' + m.badAt + U + ' 视为偏低' };
+        return { cls: 'mid', text: '中', title: m.badAt + U + ' ≤ ' + m.label + ' < ' + m.goodAt + U + ' 为中' };
+    }
 
     _todayStr() {
         const d = new Date();
