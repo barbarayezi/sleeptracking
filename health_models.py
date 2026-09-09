@@ -340,11 +340,12 @@ def get_health_overview(from_date, to_date):
             day["sports"] = wk["sports"]
         hm = health_by_date.get(d)
         if hm:
-            day["steps"] = hm.get("steps")
             day["active_energy_kj"] = hm.get("active_energy_kj")
             day["distance_km"] = hm.get("distance_km")
-        # Fallback to manually-entered steps from sleep records when Apple Health is absent
-        if day.get("steps") is None and s and s.get("steps"):
+        # 步数:唯一源 = sleep_records.steps(用户每次新建/编辑睡眠记录时手动录入)。
+        # health_metrics.steps(苹果健康快捷指令 / 任何外部同步)明确忽略 —— 即便有也不读。
+        # 若当天睡眠记录里没填步数,day["steps"] 保持 None(前端显示 "—"),不取任何外部来源补齐。
+        if s and s.get("steps"):
             day["steps"] = s["steps"]
         pd = period_by_date.get(d)
         if pd:
