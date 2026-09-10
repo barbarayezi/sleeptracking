@@ -11,7 +11,7 @@
     <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="/static/icon.svg">
     <title>量化健康 — QHealth</title>
-    <link rel="stylesheet" href="/static/style.css?v=36">
+    <link rel="stylesheet" href="/static/style.css?v=37">
 </head>
 <body>
 
@@ -73,6 +73,7 @@
                     </div>
                     <div class="hero-week-strip" id="hero-week-strip"></div>
                     <div class="hero-rec-strip" id="hero-rec-strip"></div>
+                    <div class="hero-wk-strip" id="hero-wk-strip"></div>
                     <div class="hero-whoop-meta" id="hero-whoop-meta" hidden></div>
                     <div class="hero-week-legend">
                         <span><i class="dot dot--good"></i>良好</span>
@@ -82,6 +83,8 @@
                         <span><i class="dot dot--rec-high"></i>恢复 ≥67</span>
                         <span><i class="dot dot--rec-mid"></i>34–66</span>
                         <span><i class="dot dot--rec-low"></i>&lt;34</span>
+                        <span class="hw-sep">｜</span>
+                        <span><i class="dot dot--wk"></i>运动打卡</span>
                     </div>
                 </div>
             </div>
@@ -224,6 +227,18 @@
                     <button id="btn-health-refresh" class="btn">🔄 刷新</button>
                 </div>
                 <div id="health-overview" class="health-overview">
+                    <p class="report-placeholder">加载中…</p>
+                </div>
+            </section>
+
+            <!-- SECTION: WORKOUT ANALYTICS -->
+            <section class="card workout-analytics-section">
+                <h2>💃 运动分析</h2>
+                <p class="section-hint">
+                    舞蹈课打卡的 30 天统计（次数 / 时长 / 类型分布），以及「跳舞当晚 vs 非运动日」的
+                    睡眠时长、深睡占比、次日恢复分对比。打卡在「✍️ 记录」Tab。
+                </p>
+                <div id="workout-analytics">
                     <p class="report-placeholder">加载中…</p>
                 </div>
             </section>
@@ -777,6 +792,87 @@
                 </form>
             </section>
 
+            <!-- SECTION: WORKOUT CHECK-IN -->
+            <section class="card workout-section">
+                <h2>💃 运动打卡</h2>
+                <p class="section-hint">
+                    下班后的舞蹈课点一下就打卡（默认 60 分钟 / 中等强度）。
+                    当天 Whoop 捕获的 Strain、心率、消耗会自动挂到打卡上；
+                    积累几天后「图表分析」里会出现「跳舞当晚 vs 非运动日」的睡眠/恢复对比。
+                </p>
+
+                <!-- Daily summary chips -->
+                <div id="workout-day-summary" class="medication-day-summary hidden"></div>
+
+                <!-- Quick-fill buttons: evening dance classes -->
+                <div class="medication-quickfill">
+                    <div class="form-label">⚡ 一键打卡（课后点一下）</div>
+                    <div class="medication-quick-buttons">
+                        <button type="button" class="btn-quick-med btn-quick-workout"
+                            data-type="jazz" data-duration="60"
+                            title="Jazz 新手入门 · 60 分钟">💃 Jazz · 60min</button>
+                        <button type="button" class="btn-quick-med btn-quick-workout"
+                            data-type="hiphop" data-duration="60"
+                            title="Hiphop 新手入门 · 60 分钟">🕺 Hiphop · 60min</button>
+                    </div>
+                    <div class="medication-quickfill-hint">默认记到当前选中日期；学了什么（几个八拍）可在下方补充。</div>
+                </div>
+
+                <!-- Workout list for current date -->
+                <div id="workouts-list" class="records-list">
+                    <p id="workouts-empty" class="report-placeholder" style="padding:16px 0;">该日期暂无运动打卡，点上方一键打卡或在下方手动添加。</p>
+                </div>
+
+                <form id="workout-form" novalidate>
+                    <div class="form-row form-row-2col">
+                        <div class="form-group">
+                            <label class="form-label" for="workout-type">运动类型</label>
+                            <select id="workout-type" class="form-input" required>
+                                <option value="jazz" selected>💃 Jazz</option>
+                                <option value="hiphop">🕺 Hiphop</option>
+                                <option value="kpop">🎤 K-pop</option>
+                                <option value="urban">🌆 Urban</option>
+                                <option value="breaking">🌀 Breaking</option>
+                                <option value="other">🏃 其他</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="workout-intensity">强度感受</label>
+                            <select id="workout-intensity" class="form-input" required>
+                                <option value="low">😌 轻松</option>
+                                <option value="medium" selected>💦 中等</option>
+                                <option value="high">🔥 高强度</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <label class="form-label" for="workout-duration">时长（分钟）</label>
+                        <input type="number" id="workout-duration" class="form-input"
+                            min="5" max="600" step="5" value="60" required>
+                    </div>
+
+                    <div class="form-row">
+                        <label class="form-label" for="workout-content">学了什么</label>
+                        <input type="text" id="workout-content" class="form-input"
+                            placeholder="如：2 个八拍、isolation 组合、新 routine 前半段...">
+                    </div>
+
+                    <div class="form-row">
+                        <label class="form-label" for="workout-notes">备注</label>
+                        <input type="text" id="workout-notes" class="form-input"
+                            placeholder="如：膝盖有点酸、今天跟上了节奏...">
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="submit" id="btn-workout-save" class="btn btn-primary">💾 保存运动</button>
+                        <button type="button" id="btn-workout-cancel" class="btn btn-secondary hidden">取消编辑</button>
+                        <button type="button" id="btn-workout-delete" class="btn btn-danger hidden">🗑️ 删除</button>
+                        <span id="workout-form-message" class="form-message"></span>
+                    </div>
+                </form>
+            </section>
+
             <!-- SECTION: PERIOD TRACKING -->
             <section class="card period-section">
                 <h2>🌸 经期记录</h2>
@@ -879,13 +975,14 @@
     <script src="/static/meal.js?v=20"></script>
     <script src="/static/period.js?v=16"></script>
     <script src="/static/medication.js?v=4"></script>
+    <script src="/static/workout.js?v=1"></script>
     <script src="/static/calendar.js?v=16"></script>
     <script src="/static/timeline.js?v=20"></script>
     <script src="/static/healthOverview.js?v=20"></script>
     <script src="/static/researchDashboard.js?v=3"></script>
-    <script src="/static/hero.js?v=25"></script>
+    <script src="/static/hero.js?v=26"></script>
     <script src="/static/reportCenter.js?v=4"></script>
-    <script src="/static/app.js?v=19"></script>
+    <script src="/static/app.js?v=20"></script>
     <script>
         (function () {
             var btn = document.getElementById('btn-quick-record');

@@ -632,3 +632,147 @@ def medication_correlation(from_date=None, to_date=None):
         "incomplete_dates": [d["date"] for d in incomplete_days][-10:],
         "interpretation": notes,
     }
+
+
+def workout_correlation(from_date=None, to_date=None):
+    """Workout check-in vs same-night sleep / next-morning recovery.
+
+    Dance classes happen in the evening, so the physiological effect lands on
+    the night that STARTS on day D. Since this app groups sleep by WAKE date,
+    the relevant sleep + Whoop recovery rows carry record_date = D+1.
+
+    Groups: days with >=1 workout_checkins row ("workout") vs days without
+    ("rest"). Metrics averaged per group (all shifted +1 day for pairing):
+    sleep_hours, deep-sleep %, recovery_score, HRV, RHR.
+
+    Rule-based interpretation, no LLM — endpoint stays fast.
+    Returns {"has_data": False, ...} when there are no check-ins yet.
+    """
+    from datetime import date as _d, timedelta as _td
+
+    today = _d.today().isoformat()
+    to_date = to_date or today
+    if not from_date:
+        from_date = (_d.fromisoformat(to_date) - _td(days=29)).isoformat()
+
+    conn = get_connection()
+    checkin_days = {}
+    for r in conn.execute(
+        "SELECT workout_date, workout_type, duration_min FROM workout_checkins "
+        "WHERE workout_date >= ? AND workout_date <= ?",
+        (from_date, to_date),
+    ).fetchall():
+        d = str(r["workout_date"])[:10]
+        agg = checkin_days.setdefault(d, {"count": 0, "minutes": 0, "types": []})
+        agg["count"] += 1
+        agg["minutes"] += r["duration_min"] or 0
+        if r["workout_type"]:
+            agg["types"].append(r["workout_type"])
+
+    if not checkin_days:
+        conn.close()
+        return {"has_data": False, "message": "暂无运动打卡记录，先在「记录」Tab 打卡几次再来看分析。"}
+
+    # Deep-sleep % per wake-date (not part of get_health_overview's day dict).
+    deep_by_date = {}
+    for r in conn.execute(
+        "SELECT record_date, deep_sleep_minutes, light_sleep_minutes, rem_sleep_minutes "
+        "FROM sleep_records WHERE record_date >= ? AND record_date <= ?",
+        (from_date, (_d.fromisoformat(to_date) + _td(days=1)).isoformat()),
+    ).fetchall():
+        d = str(r["record_date"])[:10]
+        deep, light, rem = r["deep_sleep_minutes"], r["light_sleep_minutes"], r["rem_sleep_minutes"]
+        if deep is not None and (light is not None or rem is not None):
+            total = (deep or 0) + (light or 0) + (rem or 0)
+            if total > 0:
+                deep_by_date[d] = round(deep / total * 100, 1)
+    conn.close()
+
+    # Extend window +1 day so the last workout day has a paired sleep/recovery row.
+    overview = get_health_overview(from_date, (_d.fromisoformat(to_date) + _td(days=1)).isoformat())
+    days = overview["days"]
+
+    def pair_for(workout_day):
+        """Health-overview day dict whose record_date = workout_day + 1."""
+        nxt = (_d.fromisoformat(workout_day) + _td(days=1)).isoformat()
+        return next((x for x in days if x["date"] == nxt), None)
+
+    workout_pairs, rest_pairs = [], []
+    for d in days:
+        day = d["date"]
+        if day > to_date:
+            continue  # only classify days inside the user's window
+        prev = (_d.fromisoformat(day) - _td(days=1)).isoformat()
+        if prev in checkin_days:
+            workout_pairs.append((prev, d))
+        else:
+            rest_pairs.append(d)
+
+    def agg(pairs):
+        """pairs: list of (workout_day, overview_day) or plain overview days."""
+        day_dicts = [p[1] for p in pairs] if pairs and isinstance(pairs[0], tuple) else pairs
+        wdays = [p[0] for p in pairs] if pairs and isinstance(pairs[0], tuple) else []
+        deep_vals = [deep_by_date[x["date"]] for x in day_dicts if x["date"] in deep_by_date]
+        return {
+            "days": len(day_dicts),
+            "workout_sessions": sum(checkin_days[w]["count"] for w in wdays),
+            "avg_duration_min": round(sum(checkin_days[w]["minutes"] for w in wdays)
+                                      / max(1, sum(checkin_days[w]["count"] for w in wdays))) if wdays else None,
+            "sleep_hours_mean": _avg([x.get("sleep_hours") for x in day_dicts]),
+            "deep_pct_mean": _avg(deep_vals),
+            "recovery_mean": _avg([x.get("recovery_score") for x in day_dicts]),
+            "hrv_mean": _avg([x.get("hrv") for x in day_dicts]),
+            "rhr_mean": _avg([x.get("resting_heart_rate") for x in day_dicts]),
+        }
+
+    seg_w = agg(workout_pairs)
+    seg_r = agg(rest_pairs)
+
+    # ── Rule-based interpretation ──
+    notes = []
+    if seg_w["days"] >= 3 and seg_r["days"] >= 3:
+        def _fmt_delta(b, a, unit="", invert=False):
+            if b is None or a is None:
+                return None
+            d = round(a - b, 1)
+            good = (d < 0) if invert else (d > 0)
+            arrow = "↑" if d > 0 else ("↓" if d < 0 else "→")
+            mark = "✅" if (good and abs(d) > 0.01) else ""
+            return f"{b}{unit} → {a}{unit}（{arrow} {abs(d)}{unit}）{mark}"
+
+        parts = []
+        p = _fmt_delta(seg_r["sleep_hours_mean"], seg_w["sleep_hours_mean"], "h")
+        if p: parts.append("睡眠时长 " + p)
+        p = _fmt_delta(seg_r["deep_pct_mean"], seg_w["deep_pct_mean"], "%")
+        if p: parts.append("深睡占比 " + p)
+        p = _fmt_delta(seg_r["recovery_mean"], seg_w["recovery_mean"])
+        if p: parts.append("次日恢复分 " + p)
+        p = _fmt_delta(seg_r["hrv_mean"], seg_w["hrv_mean"], "ms")
+        if p: parts.append("次日 HRV " + p)
+        p = _fmt_delta(seg_r["rhr_mean"], seg_w["rhr_mean"], "bpm", invert=True)
+        if p: parts.append("次日静息心率 " + p)
+        if parts:
+            notes.append(
+                f"运动日晚上的次日清晨（{seg_w['days']} 天）vs 非运动日（{seg_r['days']} 天）："
+                + "；".join(parts) + "。"
+            )
+    else:
+        notes.append(
+            f"样本还太少（运动日 {seg_w['days']} 天 / 非运动日 {seg_r['days']} 天，各需 ≥3 天），"
+            "再打卡几天就能看到对比结论。"
+        )
+
+    if seg_w["avg_duration_min"]:
+        notes.append(
+            f"窗口内共打卡 {seg_w['workout_sessions']} 次，平均每次 {seg_w['avg_duration_min']} 分钟。"
+        )
+    notes.append("以上是相关性观察而非因果结论——跳舞课在晚间，影响因素还包括当天工作负荷、饮食和入睡时间。")
+
+    return {
+        "has_data": True,
+        "from": from_date,
+        "to": to_date,
+        "pairing_note": "舞蹈课在晚间 → 效果落在当晚睡眠，按醒来日期 +1 天配对。",
+        "segments": {"workout_night": seg_w, "rest_night": seg_r},
+        "interpretation": notes,
+    }

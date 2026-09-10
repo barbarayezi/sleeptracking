@@ -22,6 +22,7 @@ const App = {
         this.meal = new MealManager();
         this.period = new PeriodManager();
         this.medication = new MedicationManager();
+        this.workout = new WorkoutManager();
         this.timeline = new Timeline('timeline-canvas', 'timeline-empty');
         this.calendar = new Calendar();
         this.health = new HealthOverview();
@@ -84,6 +85,7 @@ const App = {
             this.meal.loadDate(this.currentDate),
             this.period.loadDate(this.currentDate),
             this.medication.loadDate(this.currentDate),
+            this.workout.loadDate(this.currentDate),
         ]);
 
         // 图表分析 Tab 的重模块（时间线/科研看板/健康总览）首进该 Tab 时懒加载，
@@ -118,6 +120,8 @@ const App = {
             '/api/whoop/daily',
             '/api/healthkit/metrics?type=steps',
             `/api/health-overview?from=${from}&to=${to}`,
+            '/api/workouts/summary?days=30',
+            '/api/workout-correlation',
         ];
         urls.forEach((u) => ApiCache.fetch(u).catch(() => {}));
     },
@@ -267,12 +271,13 @@ const App = {
         if (!dateStr || dateStr === this.currentDate) return;
         this.currentDate = dateStr;
         this._updateDateLabel();
-        // 4 个模块并行加载，避免切日期时串行打 4 次东京 Turso 卡 4-6s。
+        // 5 个模块并行加载，避免切日期时串行打 5 次东京 Turso 卡 4-6s。
         // loadDate 各自内置 try/catch，不会互相拖垮。
         this.form.loadDate(dateStr);
         this.meal.loadDate(dateStr);
         this.period.loadDate(dateStr);
         this.medication.loadDate(dateStr);
+        this.workout.loadDate(dateStr);
         this.calendar.showDate(dateStr);
     },
 
@@ -673,6 +678,7 @@ const App = {
         if (this.timeline) this._refreshTimeline();
         if (this.research) this.research.load();
         if (this.health) this.health.load();
+        if (window.WorkoutAnalytics) WorkoutAnalytics.load();
     },
 
     _initBackup() {

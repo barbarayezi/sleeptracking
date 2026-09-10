@@ -1822,6 +1822,161 @@ def medication_correlation_route():
 
 
 # ──────────────────────────────────────────────
+#  Workout Check-ins (dance classes etc.)
+# ──────────────────────────────────────────────
+
+import workout_models
+
+_WORKOUT_TYPES = set(workout_models.WORKOUT_TYPES)
+_WORKOUT_INTENSITIES = set(workout_models.INTENSITIES)
+
+
+def _validate_workout_data(data, partial=False):
+    """Validate workout check-in input. Returns a list of error strings."""
+    errors = []
+    if not partial or 'workout_date' in data:
+        wd = (data.get('workout_date') or '').strip()
+        if not wd:
+            errors.append('请选择日期。')
+        else:
+            try:
+                from datetime import date as _d
+                _d.fromisoformat(wd)
+            except ValueError:
+                errors.append('日期格式应为 YYYY-MM-DD。')
+    if 'workout_type' in data and data['workout_type'] not in _WORKOUT_TYPES:
+        errors.append('运动类型取值无效。')
+    if 'intensity' in data and data['intensity'] not in _WORKOUT_INTENSITIES:
+        errors.append('强度取值无效。')
+    if 'duration_min' in data and data['duration_min'] is not None and data['duration_min'] != '':
+        try:
+            d = int(data['duration_min'])
+            if d < 5 or d > 600:
+                errors.append('时长必须在 5–600 分钟之间。')
+        except (ValueError, TypeError):
+            errors.append('时长必须是整数分钟。')
+    return errors
+
+
+@app.route('/api/workouts', methods=['GET'])
+def list_workouts():
+    """List workout check-ins (?date= / ?from=&to=). Each row carries the
+    same-day Whoop sessions under `whoop` for strain/HR display."""
+    from_date = request.args.get('from')
+    to_date = request.args.get('to')
+    date = request.args.get('date')
+    records = workout_models.get_all_workouts(from_date=from_date, to_date=to_date, date=date)
+    # 同一天可能既有手动打卡又有 Whoop 自动捕获的 session——一次查询按日期
+    # 分组挂到每条打卡上，避免 N+1（列表接口严禁循环内逐条查远程库）。
+    if records:
+        lo = min(r['workout_date'] for r in records)
+        hi = max(r['workout_date'] for r in records)
+        conn = workout_models.get_connection()
+        whoop_by_date = {}
+        for w in conn.execute(
+            "SELECT record_date, sport_name, strain, avg_heart_rate, max_heart_rate,"
+            "       kilojoule, start_time, end_time FROM whoop_workouts"
+            " WHERE record_date >= ? AND record_date <= ? ORDER BY start_time",
+            (lo, hi),
+        ).fetchall():
+            whoop_by_date.setdefault(w['record_date'], []).append(dict(w))
+        conn.close()
+        for r in records:
+            r['whoop'] = whoop_by_date.get(r['workout_date'], [])
+    return jsonify(records)
+
+
+@app.route('/api/workouts/summary', methods=['GET'])
+def workout_summary():
+    """Aggregate check-ins for the dashboard / hero strip (?days=30&date=)."""
+    from datetime import date as _date_cls
+    try:
+        days = int(request.args.get('days', 30))
+        days = max(1, min(days, 365))
+    except ValueError:
+        days = 30
+    anchor = (request.args.get('date') or _date_cls.today().isoformat()).strip()
+    try:
+        _date_cls.fromisoformat(anchor)
+    except ValueError:
+        return jsonify({'error': 'date 参数格式应为 YYYY-MM-DD'}), 400
+    return jsonify(workout_models.get_workout_summary(days=days, anchor=anchor))
+
+
+@app.route('/api/workouts/<int:wid>', methods=['GET'])
+def get_workout(wid):
+    record = workout_models.get_workout_by_id(wid)
+    if record is None:
+        return jsonify({'error': 'Workout record not found'}), 404
+    return jsonify(record)
+
+
+@app.route('/api/workouts', methods=['POST'])
+def create_workout():
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Request body must be JSON'}), 400
+    errors = _validate_workout_data(data)
+    if errors:
+        return jsonify({'error': errors[0]}), 400
+    record = workout_models.create_workout(data)
+    return jsonify(record), 201
+
+
+@app.route('/api/workouts/<int:wid>', methods=['PUT'])
+def update_workout(wid):
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Request body must be JSON'}), 400
+    errors = _validate_workout_data(data, partial=True)
+    if errors:
+        return jsonify({'error': errors[0]}), 400
+    record = workout_models.update_workout_by_id(wid, data)
+    if record is None:
+        return jsonify({'error': 'Workout record not found'}), 404
+    return jsonify(record)
+
+
+@app.route('/api/workouts/<int:wid>', methods=['DELETE'])
+def delete_workout(wid):
+    deleted = workout_models.delete_workout_by_id(wid)
+    if not deleted:
+        return jsonify({'error': 'Workout record not found'}), 404
+    return '', 204
+
+
+@app.route('/api/workout-correlation', methods=['GET'])
+def workout_correlation_route():
+    """Workout-day vs rest-day correlation (?from= ?to=, default last 30 days).
+
+    Evening dance class effect lands on the same night's sleep, which this app
+    files under the wake date — so pairing shifts +1 day. Rule-based reading.
+    """
+    from_date = request.args.get('from') or None
+    to_date = request.args.get('to') or None
+
+    def _valid(ds):
+        try:
+            from datetime import date as _d
+            _d.fromisoformat(ds)
+            return True
+        except (TypeError, ValueError):
+            return False
+
+    if from_date and not _valid(from_date):
+        return jsonify({'error': 'from 参数格式应为 YYYY-MM-DD'}), 400
+    if to_date and not _valid(to_date):
+        return jsonify({'error': 'to 参数格式应为 YYYY-MM-DD'}), 400
+
+    try:
+        from health_models import workout_correlation
+        result = workout_correlation(from_date=from_date, to_date=to_date)
+    except Exception as e:
+        return jsonify({'error': f'关联分析失败：{e}'}), 500
+    return jsonify(result)
+
+
+# ──────────────────────────────────────────────
 #  Whoop Integration (OAuth + Sync)
 # ──────────────────────────────────────────────
 

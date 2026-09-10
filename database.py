@@ -522,6 +522,11 @@ def _migrate(conn):
     if version < 15:
         _migrate_v15(conn)
 
+    # v16: workout_checkins — manual exercise/dance check-in log
+    version = _get_schema_version(conn)
+    if version < 16:
+        _migrate_v16(conn)
+
 
 def _migrate_v12(conn):
     """Migrate from v11 to v12: add medication_records table for daily medication log.
@@ -698,6 +703,32 @@ def _migrate_v15(conn):
     _seed_meal_options(conn)
     _set_schema_version(conn, 15)
     print("  Migration v14 -> v15 completed.")
+
+
+def _migrate_v16(conn):
+    """Migrate from v15 to v16: add workout_checkins table for manual exercise log."""
+    print("  Running migration v15 -> v16 ...")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS workout_checkins (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            workout_date    DATE NOT NULL,
+            workout_type    TEXT NOT NULL DEFAULT 'other'
+                            CHECK(workout_type IN ('jazz','hiphop','kpop','urban','breaking','other')),
+            duration_min    INTEGER NOT NULL DEFAULT 60,
+            intensity       TEXT NOT NULL DEFAULT 'medium'
+                            CHECK(intensity IN ('low','medium','high')),
+            content         TEXT DEFAULT '',
+            notes           TEXT DEFAULT '',
+            created_at      TEXT DEFAULT (datetime('now', 'localtime')),
+            updated_at      TEXT DEFAULT (datetime('now', 'localtime'))
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_workout_checkins_date
+        ON workout_checkins(workout_date)
+    """)
+    _set_schema_version(conn, 16)
+    print("  Migration v15 -> v16 completed.")
 
 
 def _migrate_v6(conn):
@@ -1172,6 +1203,29 @@ def init_db():
     conn.execute("""
         CREATE INDEX IF NOT EXISTS idx_meal_images_meal
         ON meal_images(meal_id)
+    """)
+
+    # Workout check-ins table (v16) — manual exercise log (dance classes etc.).
+    # Physiological load (strain/HR/kJ) comes from whoop_workouts; this table
+    # adds the human label: what class it was, how long, what was learned.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS workout_checkins (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            workout_date    DATE NOT NULL,
+            workout_type    TEXT NOT NULL DEFAULT 'other'
+                            CHECK(workout_type IN ('jazz','hiphop','kpop','urban','breaking','other')),
+            duration_min    INTEGER NOT NULL DEFAULT 60,
+            intensity       TEXT NOT NULL DEFAULT 'medium'
+                            CHECK(intensity IN ('low','medium','high')),
+            content         TEXT DEFAULT '',
+            notes           TEXT DEFAULT '',
+            created_at      TEXT DEFAULT (datetime('now', 'localtime')),
+            updated_at      TEXT DEFAULT (datetime('now', 'localtime'))
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_workout_checkins_date
+        ON workout_checkins(workout_date)
     """)
 
     # Now run pending migrations (ALTER TABLE for older schemas)

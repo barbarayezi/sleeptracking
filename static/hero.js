@@ -13,11 +13,15 @@ const HeroOverview = {
             ? (url) => ApiCache.fetch(url, { ttlMs: 60 * 1000 }).catch(() => null)
             : (url) => fetch(url).then((r) => (r.ok ? r.json() : null)).catch(() => null);
         try {
-            const [records, whoop] = await Promise.all([
+            const today = this._todayStr();
+            const from7 = this._dateStr(new Date(Date.now() - 6 * 86400000));
+            const [records, whoop, workouts] = await Promise.all([
                 fetchJson('/api/records'),
-                fetchJson('/api/whoop/daily')
+                fetchJson('/api/whoop/daily'),
+                fetchJson(`/api/workouts?from=${from7}&to=${today}`)
             ]);
-            this._render(Array.isArray(records) ? records : [], Array.isArray(whoop) ? whoop : []);
+            this._render(Array.isArray(records) ? records : [], Array.isArray(whoop) ? whoop : [],
+                Array.isArray(workouts) ? workouts : []);
         } catch (e) {
             console.error('hero load failed', e);
         }
@@ -58,7 +62,7 @@ const HeroOverview = {
         return h + 'h ' + String(m).padStart(2, '0') + 'm';
     },
 
-    _render(records, whoop) {
+    _render(records, whoop, workouts) {
         const sleeps = Array.isArray(records) ? records : [];
         const night = sleeps.find(r => r.record_type === 'night' || r.record_type === 'segment') || sleeps[0];
         const r = this._refs;
@@ -90,8 +94,8 @@ const HeroOverview = {
             : (night && night.recovery_score != null ? night.recovery_score : null);
         this._renderScoreGroup(r.scoreGroup, recovery, score, deep);
 
-        // ── 近 7 天健康：睡眠色块 + Whoop 恢复分（原「本周睡眠」「健康总览」两卡已合并） ──
-        this._renderWeekHealth(r, sleeps, whoopSorted);
+        // ── 近 7 天健康：睡眠色块 + Whoop 恢复分 + 运动打卡（三行合并卡） ──
+        this._renderWeekHealth(r, sleeps, whoopSorted, workouts);
         this._renderAlgo(r.algo, sleeps, whoopSorted, night);
     },
 
@@ -141,8 +145,8 @@ const HeroOverview = {
         return '#dc2626';
     },
 
-    // ── 近 7 天 · 睡眠 × 恢复（合并卡）：上排睡眠质量色块，下排 Whoop 恢复分 ──
-    _renderWeekHealth(r, sleeps, whoop) {
+    // ── 近 7 天 · 睡眠 × 恢复 × 运动（合并卡）：睡眠质量色块 / Whoop 恢复分 / 运动打卡 ──
+    _renderWeekHealth(r, sleeps, whoop, workouts) {
         const today = new Date();
         const days = [];
         for (let i = 6; i >= 0; i--) {
@@ -188,6 +192,29 @@ const HeroOverview = {
                 title="${x.ds}${x.v == null ? ' 无恢复分' : ' 恢复 ' + Math.round(x.v)}">${x.v == null ? '—' : Math.round(x.v)}</div>`;
         }).join('');
         r.recStrip.innerHTML = recHtml;
+
+        // 第三排：运动打卡（💃/🕺 等，点「记录」Tab 打卡；Whoop 生理负荷自动关联）
+        if (r.wkStrip) {
+            const WK_EMOJI = { jazz: '💃', hiphop: '🕺', kpop: '🎤', urban: '🌆', breaking: '🌀', other: '🏃' };
+            const wkByDate = {};
+            (workouts || []).forEach(w => {
+                if (!w || !w.workout_date) return;
+                const agg = wkByDate[w.workout_date] || { emojis: [], minutes: 0 };
+                agg.emojis.push(WK_EMOJI[w.workout_type] || '🏃');
+                agg.minutes += w.duration_min || 0;
+                wkByDate[w.workout_date] = agg;
+            });
+            r.wkStrip.innerHTML = days.map(d => {
+                const ds = this._dateStr(d);
+                const agg = wkByDate[ds];
+                const isToday = ds === todayStr ? ' hero-wk-cell--today' : '';
+                if (!agg) {
+                    return `<div class="hero-wk-cell hero-wk-cell--empty${isToday}" title="${ds} 无运动打卡">·</div>`;
+                }
+                return `<div class="hero-wk-cell hero-wk-cell--on${isToday}"
+                    title="${ds} ${agg.emojis.join('')} ${agg.minutes} 分钟">${agg.emojis.join('')}</div>`;
+            }).join('');
+        }
 
         // 头部提示 + 同步状态
         const base = '底色＝睡眠质量 · 下排＝恢复分';
