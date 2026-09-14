@@ -494,7 +494,7 @@
                         </div>
                     </div>
 
-                    <!-- 用餐地点 + 制作方式 (v15): user-extensible radio groups -->
+                    <!-- 用餐地点(单选) + 制作方式(多选, v21): user-extensible option groups -->
                     <div class="form-row form-row-2col">
                         <fieldset class="form-fieldset meal-radio-fieldset">
                             <legend class="form-label">用餐地点</legend>
@@ -503,9 +503,9 @@
                             </div>
                         </fieldset>
                         <fieldset class="form-fieldset meal-radio-fieldset">
-                            <legend class="form-label">制作方式</legend>
+                            <legend class="form-label">制作方式 <span style="font-weight:400;color:var(--gray-400);font-size:11px;">（可多选）</span></legend>
                             <div class="radio-group radio-group-wrap" id="meal-method-group">
-                                <!-- radios rendered by meal.js -->
+                                <!-- checkboxes rendered by meal.js -->
                             </div>
                         </fieldset>
                     </div>
@@ -972,7 +972,7 @@
 
     <script src="/static/apiCache.js?v=3"></script>
     <script src="/static/form.js?v=16"></script>
-    <script src="/static/meal.js?v=20"></script>
+    <script src="/static/meal.js?v=21"></script>
     <script src="/static/period.js?v=16"></script>
     <script src="/static/medication.js?v=4"></script>
     <script src="/static/workout.js?v=1"></script>

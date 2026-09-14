@@ -280,14 +280,16 @@ def _validate_meal_data(data):
         except (ValueError, TypeError):
             errors.append('health_score must be a number')
 
-    # dining_location / cooking_method (v15): free text from radio groups,
-    # just cap the length so a rogue client can't stuff megabytes in.
-    for field in ('dining_location', 'cooking_method'):
+    # dining_location / cooking_method (v15): free text from the option
+    # groups, just cap the length so a rogue client can't stuff megabytes in.
+    # cooking_method is multi-select since v21 (values joined by '、'), so it
+    # gets a wider cap than the single-select location.
+    for field, limit in (('dining_location', 50), ('cooking_method', 200)):
         if field in data and data[field] is not None:
             if not isinstance(data[field], str):
                 errors.append(f'{field} must be a string')
-            elif len(data[field]) > 50:
-                errors.append(f'{field} must be at most 50 characters')
+            elif len(data[field]) > limit:
+                errors.append(f'{field} must be at most {limit} characters')
 
     return errors
 

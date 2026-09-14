@@ -143,41 +143,56 @@ class MealManager {
         }
     }
 
-    /** Render both radio groups from this._mealOptions, preserving selections. */
+    /** Render both option groups from this._mealOptions, preserving selections. */
     _renderMealOptions() {
         const prevLoc = this._checkedValue('dining_location');
-        const prevMeth = this._checkedValue('cooking_method');
+        const prevMeths = this._checkedValues('cooking_method');
         this._renderRadioGroup(this.locationGroupEl, 'dining_location', this._mealOptions.location, prevLoc, '地点');
-        this._renderRadioGroup(this.methodGroupEl, 'cooking_method', this._mealOptions.method, prevMeth, '方式');
+        this._renderCheckGroup(this.methodGroupEl, 'cooking_method', this._mealOptions.method, prevMeths, '方式');
+    }
+
+    /** Single-select pill group (用餐地点). */
+    _renderRadioGroup(container, name, values, selected, typeLabel) {
+        this._renderOptionGroup(container, name, values, selected ? [selected] : [], typeLabel, false);
+    }
+
+    /** Multi-select pill group (制作方式, v21). `selectedArr` is an array. */
+    _renderCheckGroup(container, name, values, selectedArr, typeLabel) {
+        this._renderOptionGroup(container, name, values, selectedArr || [], typeLabel, true);
     }
 
     /**
-     * Render one radio group + its "＋ 添加" control. Each option pill gets a
+     * Render one pill group + its "＋ 添加" control. Each option pill gets a
      * "×" delete button so the user can remove options from the page.
+     * `multi=false` renders radios (single select), `multi=true` renders
+     * checkboxes; `selectedArr` holds the currently-selected values.
      * typeLabel is used in the prompt/confirm dialogs.
      */
-    _renderRadioGroup(container, name, values, selected, typeLabel) {
+    _renderOptionGroup(container, name, values, selectedArr, typeLabel, multi) {
         if (!container) return;
+        const inputType = multi ? 'checkbox' : 'radio';
+        const labelCls = multi ? 'checkbox-label' : 'radio-label';
+        const customCls = multi ? 'checkbox-custom' : 'radio-custom';
         const valueList = values.map(o => o.value);
         let html = values.map(o => `
-            <label class="radio-label meal-option-pill">
-                <input type="radio" name="${name}" value="${this._escapeHtml(o.value)}"${o.value === selected ? ' checked' : ''}>
-                <span class="radio-custom"></span>
+            <label class="${labelCls} meal-option-pill">
+                <input type="${inputType}" name="${name}" value="${this._escapeHtml(o.value)}"${selectedArr.includes(o.value) ? ' checked' : ''}>
+                <span class="${customCls}"></span>
                 ${this._escapeHtml(o.value)}
                 ${o.id !== null && o.id !== undefined
                     ? `<button type="button" class="meal-option-del" data-id="${o.id}" data-value="${this._escapeHtml(o.value)}" title="删除「${this._escapeHtml(o.value)}」">×</button>`
                     : ''}
             </label>`).join('');
-        // Legacy records may hold a value no longer in the option list —
-        // keep it selectable so editing doesn't silently drop it.
-        if (selected && !valueList.includes(selected)) {
+        // Legacy records may hold values no longer in the option list —
+        // keep them selectable so editing doesn't silently drop them.
+        selectedArr.filter(v => v && !valueList.includes(v)).forEach(v => {
             html += `
-            <label class="radio-label">
-                <input type="radio" name="${name}" value="${this._escapeHtml(selected)}" checked>
-                <span class="radio-custom"></span>
-                ${this._escapeHtml(selected)}
+            <label class="${labelCls}">
+                <input type="${inputType}" name="${name}" value="${this._escapeHtml(v)}" checked>
+                <span class="${customCls}"></span>
+                ${this._escapeHtml(v)}
             </label>`;
-        }
+        });
         html += `<button type="button" class="meal-option-add" data-type="${name}" title="添加自定义${typeLabel}">＋ 添加</button>`;
         container.innerHTML = html;
 
@@ -246,6 +261,12 @@ class MealManager {
         return r ? r.value : '';
     }
 
+    /** All checked values of a (multi-select) pill group. */
+    _checkedValues(name) {
+        return Array.from(this.form.querySelectorAll(`input[name="${name}"]:checked`))
+            .map(r => r.value);
+    }
+
     /** Check a radio by value; no-op when the value isn't rendered. */
     _checkRadio(name, value) {
         if (!value) return;
@@ -254,11 +275,20 @@ class MealManager {
     }
 
     /**
-     * Compose the legacy meal_name string from the two radio groups.
+     * Split a stored cooking_method string back into individual values.
+     * Multi-select values are stored joined by '、' (single legacy values
+     * contain no delimiter and pass through untouched).
+     */
+    _splitMethods(str) {
+        return (str || '').split(/[、,，]/).map(s => s.trim()).filter(Boolean);
+    }
+
+    /**
+     * Compose the legacy meal_name string from the option groups.
      * Kept so the AI estimate + nutrition prompts keep working unchanged.
      */
     _deriveMealName() {
-        return [this._checkedValue('dining_location'), this._checkedValue('cooking_method')]
+        return [this._checkedValue('dining_location'), this._checkedValues('cooking_method').join('、')]
             .filter(Boolean).join(' · ');
     }
 
@@ -926,12 +956,10 @@ class MealManager {
         } else {
             this._checkRadio('dining_location', meal.dining_location);
         }
-        if (meal.cooking_method && !this._mealOptions.method.includes(meal.cooking_method)) {
-            this._renderRadioGroup(this.methodGroupEl, 'cooking_method',
-                this._mealOptions.method, meal.cooking_method, '方式');
-        } else {
-            this._checkRadio('cooking_method', meal.cooking_method);
-        }
+        // 制作方式 (multi-select since v21): stored as '、'-joined string;
+        // split back and re-render so legacy/missing values stay checked.
+        this._renderCheckGroup(this.methodGroupEl, 'cooking_method',
+            this._mealOptions.method, this._splitMethods(meal.cooking_method), '方式');
 
         // Meal content
         document.getElementById('meal-content').value = meal.meal_content || '';
@@ -1091,13 +1119,14 @@ class MealManager {
         const healthRating = this.form.querySelector('input[name="meal_health_rating"]:checked');
 
         const location = this._checkedValue('dining_location');
-        const method = this._checkedValue('cooking_method');
+        // 制作方式 multi-select: stored as a '、'-joined string (v21)
+        const method = this._checkedValues('cooking_method').join('、');
 
         return {
             meal_date: this._selectedDate,
             meal_type: mealType?.value || 'breakfast',
             meal_time: document.getElementById('meal-time').value,
-            // meal_name is derived from the two radio groups so the AI
+            // meal_name is derived from the option groups so the AI
             // estimate / nutrition prompt pipelines keep working unchanged.
             meal_name: [location, method].filter(Boolean).join(' · '),
             dining_location: location,
