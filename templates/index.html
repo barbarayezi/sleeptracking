@@ -432,6 +432,22 @@
                                     <span class="input-unit">步</span>
                                 </div>
                             </div>
+                            <div class="health-metric-item">
+                                <label class="health-metric-label" for="activity-kcal">活动热量</label>
+                                <div class="input-with-unit">
+                                    <input type="number" id="activity-kcal" class="form-input" step="10" min="0" max="10000"
+                                        placeholder="-">
+                                    <span class="input-unit">kcal</span>
+                                </div>
+                            </div>
+                            <div class="health-metric-item">
+                                <label class="health-metric-label" for="distance-km">运动距离</label>
+                                <div class="input-with-unit">
+                                    <input type="number" id="distance-km" class="form-input" step="0.1" min="0" max="500"
+                                        placeholder="-">
+                                    <span class="input-unit">km</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -971,7 +987,7 @@
     </footer>
 
     <script src="/static/apiCache.js?v=3"></script>
-    <script src="/static/form.js?v=16"></script>
+    <script src="/static/form.js?v=17"></script>
     <script src="/static/meal.js?v=21"></script>
     <script src="/static/period.js?v=16"></script>
     <script src="/static/medication.js?v=4"></script>

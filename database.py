@@ -523,9 +523,16 @@ def _migrate(conn):
         _migrate_v15(conn)
 
     # v16: workout_checkins — manual exercise/dance check-in log
+    # v17: sleep_records gains manual-entry activity columns — activity_kcal
+    #      (movement energy, kcal) and distance_km (movement distance). These
+    #      are the ONLY source for those metrics; health_metrics is not read.
     version = _get_schema_version(conn)
     if version < 16:
         _migrate_v16(conn)
+
+    version = _get_schema_version(conn)
+    if version < 17:
+        _migrate_v17(conn)
 
 
 def _migrate_v12(conn):
@@ -729,6 +736,26 @@ def _migrate_v16(conn):
     """)
     _set_schema_version(conn, 16)
     print("  Migration v15 -> v16 completed.")
+
+
+def _migrate_v17(conn):
+    """Migrate from v16 to v17: manual-entry activity columns on sleep_records.
+
+    Adds activity_kcal (REAL, movement energy in kcal) and distance_km
+    (REAL, movement distance in km). Values are entered by hand alongside
+    weight / water_cups / steps in the night-sleep form. Per user rule these
+    manual columns are the only source — Apple Health / health_metrics rows
+    for activity are no longer consulted by get_health_overview.
+    """
+    print("  Running migration v16 -> v17 ...")
+    col_cursor = conn.execute("PRAGMA table_info('sleep_records')")
+    columns = [row[1] for row in col_cursor.fetchall()]
+    if 'activity_kcal' not in columns:
+        conn.execute("ALTER TABLE sleep_records ADD COLUMN activity_kcal REAL DEFAULT NULL")
+    if 'distance_km' not in columns:
+        conn.execute("ALTER TABLE sleep_records ADD COLUMN distance_km REAL DEFAULT NULL")
+    _set_schema_version(conn, 17)
+    print("  Migration v16 -> v17 completed.")
 
 
 def _migrate_v6(conn):

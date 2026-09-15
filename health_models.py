@@ -205,8 +205,10 @@ def get_health_overview(from_date, to_date):
     Each day dict may contain: date, sleep_hours, sleep_quality, device_score,
     recovery_score, resting_heart_rate, hrv, spo2_percentage, skin_temp_celsius,
     strain, kilojoule, avg_heart_rate, max_heart_rate, workout_count, workout_strain,
-    sports (list), steps, active_energy_kj, distance_km, is_period, phase,
+    sports (list), steps, activity_kcal, distance_km, is_period, phase,
     meal_health_score (0–10 daily avg), meal_health_rating (good/average/poor majority).
+    Manual-entry fields (steps / activity_kcal / distance_km) come ONLY from
+    sleep_records — Apple Health / health_metrics rows are ignored for them.
     """
     conn = get_connection()
 
@@ -218,7 +220,8 @@ def get_health_overview(from_date, to_date):
         agg = sleep_by_date.setdefault(d, {"sleep_hours": 0.0, "qualities": [], "device_scores": [],
                                            "recovery_score": None, "resting_heart_rate": None,
                                            "hrv": None, "spo2_percentage": None,
-                                           "skin_temp_celsius": None, "steps": 0})
+                                           "skin_temp_celsius": None, "steps": None,
+                                           "activity_kcal": None, "distance_km": None})
         hrs = _hours_between(r["sleep_time"], r["wake_time"])
         if hrs is not None:
             agg["sleep_hours"] += hrs
@@ -226,11 +229,16 @@ def get_health_overview(from_date, to_date):
             agg["qualities"].append(r["sleep_quality"])
         if r["device_score"] is not None:
             agg["device_scores"].append(r["device_score"])
-        if r["steps"] is not None and r["steps"] != '':
-            try:
-                agg["steps"] += float(r["steps"])
-            except (ValueError, TypeError):
-                pass
+        # Manual-entry activity fields — sum across records of the same day
+        # (a night + a nap can both carry steps / kcal / km). Missing stays None.
+        for col in ("steps", "activity_kcal", "distance_km"):
+            v = r[col]
+            if v is not None and v != '':
+                try:
+                    fv = float(v)
+                    agg[col] = fv if agg[col] is None else agg[col] + fv
+                except (ValueError, TypeError):
+                    pass
         for fld in ("recovery_score", "resting_heart_rate", "hrv", "spo2_percentage", "skin_temp_celsius"):
             if r[fld] is not None and agg[fld] is None:
                 agg[fld] = r[fld]
@@ -273,16 +281,7 @@ def get_health_overview(from_date, to_date):
         if r["sport_name"]:
             agg["sports"].append(r["sport_name"])
 
-    # 4) Health metrics (steps / active energy / distance) pivoted per date
-    health_by_date = {}
-    for r in conn.execute(
-        "SELECT metric_date, metric_type, value FROM health_metrics WHERE metric_date >= ? AND metric_date <= ?",
-        (from_date, to_date),
-    ).fetchall():
-        d = r["metric_date"]
-        health_by_date.setdefault(d, {})[r["metric_type"]] = r["value"]
-
-    # 5) Period days
+    # 4) Period days
     period_by_date = {}
     for p in get_period_days(from_date, to_date):
         period_by_date[p["date"]] = p
@@ -338,15 +337,13 @@ def get_health_overview(from_date, to_date):
             day["workout_count"] = wk["count"]
             day["workout_strain"] = round(wk["strain"], 1)
             day["sports"] = wk["sports"]
-        hm = health_by_date.get(d)
-        if hm:
-            day["active_energy_kj"] = hm.get("active_energy_kj")
-            day["distance_km"] = hm.get("distance_km")
-        # 步数:唯一源 = sleep_records.steps(用户每次新建/编辑睡眠记录时手动录入)。
-        # health_metrics.steps(苹果健康快捷指令 / 任何外部同步)明确忽略 —— 即便有也不读。
-        # 若当天睡眠记录里没填步数,day["steps"] 保持 None(前端显示 "—"),不取任何外部来源补齐。
-        if s and s.get("steps"):
+        # 手动录入字段 —— 唯一源 = sleep_records(用户每次新建/编辑睡眠记录时手填)。
+        # steps / activity_kcal / distance_km 一律不读 health_metrics(苹果健康/外部同步),即便有也不取。
+        # 当天没填则保持 None(前端显示 "—"),绝不用外部来源补齐。
+        if s:
             day["steps"] = s["steps"]
+            day["activity_kcal"] = s["activity_kcal"]
+            day["distance_km"] = s["distance_km"]
         pd = period_by_date.get(d)
         if pd:
             day["is_period"] = bool(pd["is_period_start"]) or (pd["flow"] not in (None, "", "none"))

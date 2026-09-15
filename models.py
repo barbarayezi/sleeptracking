@@ -111,10 +111,12 @@ def create_record(data):
         INSERT INTO sleep_records
             (record_date, record_type, sleep_time, wake_time, classification,
              sleep_quality, sleep_problems, dream_journal, weight, water_cups, steps, device_score,
+             activity_kcal, distance_km,
              respiratory_rate, sleep_efficiency, sleep_consistency,
              deep_sleep_minutes, light_sleep_minutes, rem_sleep_minutes, awake_minutes,
              disturbance_count, recovery_score, resting_heart_rate, hrv)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                ?, ?,
                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
@@ -130,6 +132,8 @@ def create_record(data):
             data.get("water_cups"),
             data.get("steps"),
             data.get("device_score"),
+            data.get("activity_kcal"),
+            data.get("distance_km"),
             data.get("respiratory_rate"),
             data.get("sleep_efficiency"),
             data.get("sleep_consistency"),
@@ -201,6 +205,12 @@ def update_record_by_id(record_id, data):
     if "steps" in data:
         fields.append("steps = ?")
         params.append(data["steps"])
+    if "activity_kcal" in data:
+        fields.append("activity_kcal = ?")
+        params.append(data["activity_kcal"])
+    if "distance_km" in data:
+        fields.append("distance_km = ?")
+        params.append(data["distance_km"])
     if "device_score" in data:
         fields.append("device_score = ?")
         params.append(data["device_score"])

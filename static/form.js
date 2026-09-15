@@ -106,6 +106,8 @@ class FormManager {
             document.getElementById('weight').value = '';
             document.getElementById('water-cups').value = '';
             document.getElementById('steps').value = '';
+            document.getElementById('activity-kcal').value = '';
+            document.getElementById('distance-km').value = '';
         }
     }
 
@@ -140,6 +142,16 @@ class FormManager {
             html += `<span class="record-card__quality" style="color:${qualColor}">● ${qualLabel}</span>`;
             if (r.device_score != null) {
                 html += `<span class="record-card__device-score" title="手环评分">⌚ ${r.device_score}</span>`;
+            }
+            // Manually-entered activity chips (weight / water / steps / kcal / km)
+            const manualChips = [];
+            if (r.weight != null) manualChips.push(`⚖️ ${r.weight}kg`);
+            if (r.water_cups != null) manualChips.push(`🥤 ${r.water_cups}杯`);
+            if (r.steps != null) manualChips.push(`🚶 ${Number(r.steps).toLocaleString()}步`);
+            if (r.activity_kcal != null) manualChips.push(`🔥 ${Math.round(r.activity_kcal)}kcal`);
+            if (r.distance_km != null) manualChips.push(`📏 ${Number(r.distance_km).toFixed(1)}km`);
+            if (manualChips.length > 0) {
+                html += `<span class="record-card__chips">${manualChips.join(' · ')}</span>`;
             }
             html += '</div>';
             html += '<div class="record-card__actions">';
@@ -269,6 +281,10 @@ class FormManager {
         if (waterInput) waterInput.value = '';
         const stepsInput = document.getElementById('steps');
         if (stepsInput) stepsInput.value = '';
+        const kcalInput = document.getElementById('activity-kcal');
+        if (kcalInput) kcalInput.value = '';
+        const distInput = document.getElementById('distance-km');
+        if (distInput) distInput.value = '';
         const deviceScoreInput = document.getElementById('device-score');
         if (deviceScoreInput) deviceScoreInput.value = '';
     }
@@ -322,11 +338,15 @@ class FormManager {
             document.getElementById('weight').value = record.weight != null ? record.weight : '';
             document.getElementById('water-cups').value = record.water_cups != null ? record.water_cups : '';
             document.getElementById('steps').value = record.steps != null ? record.steps : '';
+            document.getElementById('activity-kcal').value = record.activity_kcal != null ? record.activity_kcal : '';
+            document.getElementById('distance-km').value = record.distance_km != null ? record.distance_km : '';
         } else {
             this.healthMetricsGroup.style.display = 'none';
             document.getElementById('weight').value = '';
             document.getElementById('water-cups').value = '';
             document.getElementById('steps').value = '';
+            document.getElementById('activity-kcal').value = '';
+            document.getElementById('distance-km').value = '';
         }
     }
 
@@ -459,6 +479,12 @@ class FormManager {
             if (weightValue) data.weight = parseFloat(weightValue);
             if (waterValue) data.water_cups = parseFloat(waterValue);
             if (stepsValue) data.steps = parseInt(stepsValue, 10);
+            const kcalInput = document.getElementById('activity-kcal');
+            const kcalValue = kcalInput.value.trim();
+            if (kcalValue) data.activity_kcal = parseFloat(kcalValue);
+            const distInput = document.getElementById('distance-km');
+            const distValue = distInput.value.trim();
+            if (distValue) data.distance_km = parseFloat(distValue);
         }
 
         return data;

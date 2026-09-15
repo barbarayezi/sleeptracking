@@ -125,6 +125,24 @@ def _validate_record_data(data):
         except (ValueError, TypeError):
             errors.append('steps must be a valid integer')
 
+    # Validate activity_kcal (optional, manual entry — movement energy in kcal)
+    if 'activity_kcal' in data and data['activity_kcal'] is not None and data['activity_kcal'] != '':
+        try:
+            v = float(data['activity_kcal'])
+            if v < 0 or v > 10000:
+                errors.append('activity_kcal must be between 0 and 10000')
+        except (ValueError, TypeError):
+            errors.append('activity_kcal must be a valid number')
+
+    # Validate distance_km (optional, manual entry — movement distance in km)
+    if 'distance_km' in data and data['distance_km'] is not None and data['distance_km'] != '':
+        try:
+            v = float(data['distance_km'])
+            if v < 0 or v > 500:
+                errors.append('distance_km must be between 0 and 500')
+        except (ValueError, TypeError):
+            errors.append('distance_km must be a valid number')
+
     # Validate device_score (optional, smart bracelet sleep score, 0-100)
     if 'device_score' in data and data['device_score'] is not None and data['device_score'] != '':
         try:
