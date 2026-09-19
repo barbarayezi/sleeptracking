@@ -26,3 +26,5 @@ design-drafts/
 /debug_error.png
 /redesign_*.png
 /scripts/render_deploy.py
+# Whoop sync watchdog run output (machine-specific log, not source)
+scripts/whoop_watchdog_result.txt
