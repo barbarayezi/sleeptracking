@@ -358,10 +358,21 @@ def sync_daily_metrics(days_back=30):
     try:
         cycles = client.get_all_cycle_data(start_date=from_date, end_date=to_date)
         for c in cycles:
-            d = _date_from_ts(c.get("end"))
-            if not d:
-                # 进行中的周期 end 为 None → 归到今天（本地日期）
+            end = c.get("end")
+            if not end:
+                # 未闭合周期（end=None）：可能是今天正在进行中的真实周期，
+                # 也可能是手环更早某天起就离线、冻结的旧周期。后者会带着恒定
+                # 的初始 strain/kj 被反复归到“今天”写入，污染 9/19、9/20 这类
+                # 历史日期（见 2026-09-20 断档排查）。只有 start 确属“今天”的
+                # 才视为今日真实进行中周期并写入；其余离线冻结周期直接跳过。
+                start_date = _date_from_ts(c.get("start"))
+                if start_date != today.strftime("%Y-%m-%d"):
+                    continue
                 d = today.strftime("%Y-%m-%d")
+            else:
+                d = _date_from_ts(end)
+                if not d:
+                    continue
             score = c.get("score") or {}
             row = daily.setdefault(d, {})
             row["strain"] = score.get("strain")
