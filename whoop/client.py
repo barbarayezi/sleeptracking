@@ -76,6 +76,93 @@ def _delete_tokens():
         pass
 
 
+# ── Cross-instance coordination (Mac + Render share one Turso token) ──
+
+def _get_whoop_meta(key, default=None):
+    """Read a Whoop-specific flag from the shared _meta table (Turso)."""
+    try:
+        from database import get_connection
+        conn = get_connection()
+        try:
+            conn.execute("CREATE TABLE IF NOT EXISTS _meta (key TEXT PRIMARY KEY, value TEXT)")
+            cur = conn.execute("SELECT value FROM _meta WHERE key = ?", (key,))
+            row = cur.fetchone()
+        finally:
+            conn.close()
+        return row[0] if row else default
+    except Exception:
+        return default
+
+
+def _set_whoop_meta(key, value):
+    """Write a Whoop-specific flag to the shared _meta table (Turso)."""
+    try:
+        from database import get_connection
+        conn = get_connection()
+        try:
+            conn.execute("CREATE TABLE IF NOT EXISTS _meta (key TEXT PRIMARY KEY, value TEXT)")
+            conn.execute(
+                "INSERT OR REPLACE INTO _meta (key, value) VALUES (?, ?)",
+                (str(key), str(value)),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception:
+        pass
+
+
+def _acquire_refresh_lock(ttl_seconds=120, wait_max_seconds=8):
+    """Best-effort distributed lock so Mac + Render don't refresh the same
+    Whoop refresh token concurrently.
+
+    Whoop rotates refresh tokens on every refresh, so if two instances both
+    refreshed with the same (now-stale) refresh token, the second refresh
+    would be rejected by Whoop (4xx) and could poison the shared token. The
+    lock serializes refreshes; after acquiring it we re-read the token so we
+    pick up any rotation the other instance already performed.
+
+    Returns True if we hold the lock (or it was already ours / stale).
+    """
+    import socket
+    owner = f"{socket.gethostname()}:{os.getpid()}"
+    deadline = time.time() + wait_max_seconds
+    while True:
+        held = _get_whoop_meta("whoop_refresh_lock")
+        now = time.time()
+        if not held:
+            _set_whoop_meta("whoop_refresh_lock", f"{owner}|{now}")
+            return True
+        try:
+            h_owner, h_ts = held.split("|", 1)
+            h_ts = float(h_ts)
+        except Exception:
+            h_owner, h_ts = held, 0.0
+        if now - h_ts > ttl_seconds:
+            # Stale lock left behind by a crashed instance — take over.
+            _set_whoop_meta("whoop_refresh_lock", f"{owner}|{now}")
+            return True
+        if h_owner == owner:
+            return True  # reentrant
+        if time.time() >= deadline:
+            return False
+        time.sleep(1)
+
+
+def _release_refresh_lock():
+    """Drop the refresh lock (best-effort)."""
+    try:
+        from database import get_connection
+        conn = get_connection()
+        try:
+            conn.execute("DELETE FROM _meta WHERE key = 'whoop_refresh_lock'")
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception:
+        pass
+
+
 # ── API helpers ──────────────────────────────────────
 
 
@@ -117,6 +204,9 @@ class WhoopClient:
             "http://localhost:5800/api/whoop/callback",
         )
         self._tokens = _load_tokens()
+        # In-memory copy of the recorded hard-auth failure (if any). Loaded
+        # from _meta so a freshly constructed client reflects the real state.
+        self._auth_error = _get_whoop_meta("whoop_auth_error") or ""
 
     # ── Auth flow ─────────────────────────────────────
 
@@ -158,34 +248,73 @@ class WhoopClient:
         }
         _save_tokens(tokens)
         self._tokens = tokens
+        # Successful (re-)authorization clears any previous hard-auth-error flag.
+        try:
+            _set_whoop_meta("whoop_auth_error", "")
+            self._auth_error = ""
+        except Exception:
+            pass
         return tokens
 
     def refresh_access_token(self):
-        """Refresh the access token using the refresh token."""
+        """Refresh the access token using the refresh token.
+
+        Serialized across instances via a Turso lock: Whoop rotates refresh
+        tokens, so if Mac and Render both refreshed concurrently the second
+        refresh would be rejected and could poison the shared token. We also
+        re-read the token after acquiring the lock in case the other instance
+        already rotated it. On success the previous hard-auth-error flag is
+        cleared so the app resumes as "connected"."""
         if not self._tokens or not self._tokens.get("refresh_token"):
             raise PermissionError("No refresh token available — re-authenticate")
 
-        data = {
-            "client_id": self.client_id,
-            "client_secret": self.client_secret,
-            "grant_type": "refresh_token",
-            "refresh_token": self._tokens["refresh_token"],
-        }
-        result = self._token_request(data)
-        self._tokens["access_token"] = result["access_token"]
-        if "refresh_token" in result:
-            self._tokens["refresh_token"] = result["refresh_token"]
-        self._tokens["expires_at"] = int(time.time()) + result.get("expires_in", 3600)
-        _save_tokens(self._tokens)
-        return self._tokens
+        if not _acquire_refresh_lock():
+            # Another instance is mid-refresh. Our in-memory token is still
+            # valid for now; return it and let the next cycle pick up the
+            # rotated token. This avoids a redundant concurrent refresh.
+            return self._tokens
+
+        try:
+            # Re-read after acquiring the lock — the other instance may have
+            # already refreshed and saved a newer refresh token.
+            self._tokens = _load_tokens()
+            if not self._tokens or not self._tokens.get("refresh_token"):
+                raise PermissionError("No refresh token available — re-authenticate")
+
+            data = {
+                "client_id": self.client_id,
+                "client_secret": self.client_secret,
+                "grant_type": "refresh_token",
+                "refresh_token": self._tokens["refresh_token"],
+            }
+            result = self._token_request(data)
+            self._tokens["access_token"] = result["access_token"]
+            if "refresh_token" in result:
+                self._tokens["refresh_token"] = result["refresh_token"]
+            self._tokens["expires_at"] = int(time.time()) + result.get("expires_in", 3600)
+            _save_tokens(self._tokens)
+            # Refresh succeeded — clear any previous hard-auth-error flag.
+            try:
+                _set_whoop_meta("whoop_auth_error", "")
+                self._auth_error = ""
+            except Exception:
+                pass
+            return self._tokens
+        finally:
+            _release_refresh_lock()
 
     def _token_request(self, data):
         """Make a token exchange request to the Whoop OAuth endpoint.
         Uses form-encoded POST with client credentials in body (matching official whoop-sdk).
 
-        4xx (other than 429 rate-limit) is treated as an auth failure: the stored
-        token is wiped and PermissionError is raised so the UI can prompt re-authorization.
-        5xx and network errors propagate as RuntimeError for caller-level retry handling."""
+        4xx (other than 429 rate-limit) means the token/credentials were
+        rejected by Whoop. Historically this wiped the stored token, which made
+        a single transient failure (e.g. a refresh-token rotation race between
+        the two auto-syncing instances) permanently disconnect the app. We now
+        KEEP the token and record the exact Whoop error in _meta so the UI can
+        surface it and the user re-authorizes deliberately; the app reports
+        "not connected" via the whoop_auth_error flag instead of silently
+        deleting the token."""
         try:
             resp = requests.post(TOKEN_URL, data=data, timeout=30)
             resp.raise_for_status()
@@ -194,24 +323,30 @@ class WhoopClient:
             status = e.response.status_code
             text = e.response.text[:500]
             if 400 <= status < 500 and status != 429:
-                # Token/credentials rejected. Wipe local copy so next /api/whoop/status
-                # shows "未连接" instead of "已连接" with a still-broken token.
+                msg = f"Whoop 授权已失效（HTTP {status}），请重新连接"
+                detail = f"Whoop 授权已失效（HTTP {status}）: {text}"
                 try:
-                    _delete_tokens()
+                    _set_whoop_meta("whoop_auth_error", detail)
+                    self._auth_error = detail
                 except Exception:
                     pass
-                # Short message preferred — Whoop's error body is verbose and the
-                # misleading "redirect_uri whitelist" hint confuses users.
-                raise PermissionError(
-                    f"Whoop 授权已失效（HTTP {status}），请重新连接"
-                )
+                # Short message for the UI; full Whoop body kept in _meta.
+                raise PermissionError(msg)
             raise RuntimeError(f"Token request failed: {status} {text}")
 
     # ── Authentication state ──────────────────────────
 
     def is_authenticated(self):
-        """Check if we have valid tokens."""
-        return self._tokens is not None and bool(self._tokens.get("access_token"))
+        """Check if we have valid tokens AND no recorded hard-auth failure.
+
+        If a refresh was rejected by Whoop (recorded in _meta whoop_auth_error),
+        we report "not connected" so the UI prompts re-authorization instead of
+        showing "connected" with a dead token."""
+        if not self._tokens or not self._tokens.get("access_token"):
+            return False
+        if self._auth_error:
+            return False
+        return True
 
     def get_valid_access_token(self):
         """Return a valid access token, refreshing if needed."""
@@ -229,6 +364,11 @@ class WhoopClient:
         """Remove stored tokens."""
         _delete_tokens()
         self._tokens = None
+        try:
+            _set_whoop_meta("whoop_auth_error", "")
+            self._auth_error = ""
+        except Exception:
+            pass
 
     # ── Data endpoints ────────────────────────────────
 

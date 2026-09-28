@@ -2027,6 +2027,7 @@ def whoop_callback():
     client = WhoopClient()
     try:
         client.exchange_code(code, state=state)
+        _invalidate_whoop_status_cache()  # 连接状态已翻转，丢掉旧缓存
         # Redirect back to main app — JS will detect connected status
         return redirect('/?whoop=connected')
     except Exception as e:
@@ -2553,6 +2554,13 @@ def _background_sync_loop(interval_minutes=30):
         if _sync_state["running"]:
             time.sleep(30)
             continue
+        # 未连接时跳过实际的 Whoop 请求，只周期性等待——避免反复尝试刷新已失效的
+        # 令牌。用户重新授权后，下一轮循环会自动恢复同步（循环不再因鉴权失败而
+        # 退出，解决“重连后仍不自动同步”的老问题）。
+        if not WhoopClient().is_authenticated():
+            print("[auto-sync] Whoop 未连接 — 跳过（在应用里重新连接后自动恢复）。")
+            time.sleep(interval_minutes * 60)
+            continue
         try:
             stats = sync_all_whoop(days_back=2)
             # 同样只在真正同步到数据时才刷新 last_sync_at
@@ -2562,10 +2570,14 @@ def _background_sync_loop(interval_minutes=30):
             w = stats.get('workouts', {})
             print(f"[auto-sync] OK  sleep={s.get('synced')} daily={d.get('synced')} "
                   f"workouts={w.get('synced')}")
-        except PermissionError:
-            print("[auto-sync] Not authenticated — stopping (reconnect in the "
-                  "app to resume automatic sync).")
-            return
+        except PermissionError as e:
+            # 鉴权失败：记录具体原因（含 Whoop 原始错误）后继续轮询，不再退出循环。
+            # 用户重新授权后循环会自动恢复。
+            try:
+                _set_meta("last_whoop_sync_error", str(e) or "未连接 Whoop，请重新连接")
+            except Exception:
+                pass
+            print(f"[auto-sync] 鉴权失败，等待下次重试: {e}")
         except Exception as e:
             print(f"[auto-sync] sync error: {e}")
         time.sleep(interval_minutes * 60)
