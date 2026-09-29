@@ -469,6 +469,28 @@ def delete_meal_option(option_id):
     return '', 204
 
 
+@app.route('/api/meal-options/<int:option_id>', methods=['PUT'])
+def update_meal_option(option_id):
+    """Rename a meal option and cascade the rename into meal_records.
+
+    Body: {"option_value": "..."}. Returns the updated option plus how many
+    historical meal records were re-pointed to the new label.
+    """
+    data = request.get_json(silent=True) or {}
+    option_value = (data.get('option_value') or '').strip()
+    if not option_value:
+        return jsonify({'error': 'option_value is required'}), 400
+    if len(option_value) > 50:
+        return jsonify({'error': 'option_value must be at most 50 characters'}), 400
+    try:
+        option, renamed = meal_models.rename_meal_option(option_id, option_value)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 409
+    if option is None:
+        return jsonify({'error': 'Option not found'}), 404
+    return jsonify({'option': option, 'renamed_meals': renamed})
+
+
 # ── Meal photos: convert-image fallback + persistent image stream ──
 
 

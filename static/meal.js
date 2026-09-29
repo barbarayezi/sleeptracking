@@ -180,6 +180,9 @@ class MealManager {
                 <span class="${customCls}"></span>
                 ${this._escapeHtml(o.value)}
                 ${o.id !== null && o.id !== undefined
+                    ? `<button type="button" class="meal-option-edit" data-type="${name}" data-id="${o.id}" data-value="${this._escapeHtml(o.value)}" title="改名「${this._escapeHtml(o.value)}」">✎</button>`
+                    : ''}
+                ${o.id !== null && o.id !== undefined
                     ? `<button type="button" class="meal-option-del" data-id="${o.id}" data-value="${this._escapeHtml(o.value)}" title="删除「${this._escapeHtml(o.value)}」">×</button>`
                     : ''}
             </label>`).join('');
@@ -198,6 +201,15 @@ class MealManager {
 
         container.querySelector('.meal-option-add').addEventListener('click', () => {
             this._promptAddOption(name === 'dining_location' ? 'location' : 'method', typeLabel);
+        });
+        container.querySelectorAll('.meal-option-edit').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const id = parseInt(e.currentTarget.dataset.id, 10);
+                const type = e.currentTarget.dataset.type === 'dining_location' ? 'location' : 'method';
+                this._renameOption(id, type, e.currentTarget.dataset.value, typeLabel);
+            });
         });
         container.querySelectorAll('.meal-option-del').forEach(btn => {
             btn.addEventListener('click', (e) => {
@@ -220,6 +232,38 @@ class MealManager {
             } else {
                 const err = await resp.json().catch(() => ({}));
                 this._showMessage('❌ ' + (err.error || '删除失败'), 'error');
+            }
+        } catch (err) {
+            this._showMessage('❌ 网络错误: ' + err.message, 'error');
+        }
+    }
+
+    /** Rename an option (after prompt) — cascades into historical meal records. */
+    async _renameOption(optionId, optionType, oldValue, typeLabel) {
+        if (!optionId) return;
+        const value = (prompt(`把「${oldValue}」改名为：`, oldValue) || '').trim();
+        if (!value || value === oldValue) return;
+        if (value.length > 50) {
+            this._showMessage('❌ 选项最长 50 个字符', 'error');
+            return;
+        }
+        try {
+            const resp = await fetch(`/api/meal-options/${optionId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ option_value: value }),
+            });
+            if (resp.ok) {
+                const data = await resp.json().catch(() => ({}));
+                await this._loadMealOptions();
+                const n = data.renamed_meals || 0;
+                this._showMessage(
+                    n > 0 ? `已改名为「${value}」，同步更新 ${n} 条历史记录` : `已改名为「${value}」`,
+                    'success'
+                );
+            } else {
+                const err = await resp.json().catch(() => ({}));
+                this._showMessage('❌ ' + (err.error || '改名失败'), 'error');
             }
         } catch (err) {
             this._showMessage('❌ 网络错误: ' + err.message, 'error');

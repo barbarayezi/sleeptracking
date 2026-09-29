@@ -444,3 +444,67 @@ def delete_meal_option(option_id):
     conn.commit()
     conn.close()
     return deleted
+
+
+def rename_meal_option(option_id, option_value):
+    """Rename an option and cascade the rename into meal_records references.
+
+    Returns (option_dict, renamed_in_meals_count). Raises ValueError if the
+    target value already exists for the same type (UNIQUE guard kept intact).
+
+    Cascade rule:
+      - location: meal_records.dining_location == old → set to new (exact match).
+      - method:   meal_records.cooking_method is a '、'-joined multi-value
+        string; each '、' segment equal to old is replaced with new, so
+        historical meals keep the renamed method without touching other methods.
+    """
+    option_value = (option_value or '').strip()
+    if not option_value:
+        return None, 0
+    conn = get_connection()
+    row = conn.execute("SELECT * FROM meal_options WHERE id = ?", (option_id,)).fetchone()
+    if not row:
+        conn.close()
+        return None, 0
+    old_value = row['option_value']
+    option_type = row['option_type']
+    if old_value == option_value:
+        conn.close()
+        return row_to_dict(row), 0
+
+    # Guard against colliding with an existing option of the same type.
+    dup = conn.execute(
+        "SELECT id FROM meal_options WHERE option_type = ? AND option_value = ? AND id <> ?",
+        (option_type, option_value, option_id),
+    ).fetchone()
+    if dup:
+        conn.close()
+        raise ValueError('同名选项已存在，请先处理再改名')
+
+    conn.execute("UPDATE meal_options SET option_value = ? WHERE id = ?", (option_value, option_id))
+
+    renamed = 0
+    if option_type == 'location':
+        cur = conn.execute(
+            "UPDATE meal_records SET dining_location = ? WHERE dining_location = ?",
+            (option_value, old_value),
+        )
+        renamed = cur.rowcount
+    else:  # method — '、'-joined multi-value string; replace only exact segments
+        rows = conn.execute(
+            "SELECT id, cooking_method FROM meal_records WHERE cooking_method IS NOT NULL AND cooking_method != ''"
+        ).fetchall()
+        for r in rows:
+            parts = [p.strip() for p in (r['cooking_method'] or '').split('、') if p.strip()]
+            if old_value in parts:
+                new_parts = [option_value if p == old_value else p for p in parts]
+                conn.execute(
+                    "UPDATE meal_records SET cooking_method = ? WHERE id = ?",
+                    ('、'.join(new_parts), r['id']),
+                )
+                renamed += 1
+
+    conn.commit()
+    updated = conn.execute("SELECT * FROM meal_options WHERE id = ?", (option_id,)).fetchone()
+    conn.close()
+    return row_to_dict(updated), renamed
