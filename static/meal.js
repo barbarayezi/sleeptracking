@@ -247,11 +247,67 @@ class MealManager {
             this._showMessage('❌ 选项最长 50 个字符', 'error');
             return;
         }
+        // Fold in orphan values of the same group, so legacy spellings left
+        // behind by a delete/rename also get cleaned under the new name.
+        const mergeValues = await this._askMergeOrphans(optionType, oldValue);
+        // null means the user cancelled the whole rename.
+        if (mergeValues === null) return;
+        await this._renameOptionCommit(optionId, value, oldValue, mergeValues);
+    }
+
+    /**
+     * Scan for orphan values (labels present in history but missing from the
+     * option list) for the same group, and ask whether to fold them into the
+     * rename. Returns the list of confirmed orphan values to merge, [] if there
+     * are none / none confirmed, or null to abort the rename. Non-blocking on
+     * network failure (returns []).
+     */
+    async _askMergeOrphans(optionType, oldValue) {
+        let orphans;
+        try {
+            const resp = await fetch('/api/meal-options/orphans');
+            if (!resp.ok) return [];
+            orphans = await resp.json();
+        } catch (_) {
+            return [];
+        }
+        const list = (orphans && orphans[optionType]) || [];
+        // Exclude the value currently being renamed (its own rename covers it)
+        // and any value that literally equals the old value.
+        const candidates = list
+            .map(o => o.value)
+            .filter(v => v !== oldValue && v.trim() !== '');
+        if (!candidates.length) return [];
+
+        const mapping = candidates
+            .map(v => {
+                const c = (list.find(o => o.value === v) || {}).count || 0;
+                return `${v}（${c} 条）`;
+            })
+            .join('、');
+        const msg =
+            `检测到 ${candidates.length} 个历史遗留标签，已不在当前选项里：\n` +
+            `${mapping}\n\n` +
+            `确认后它们将一并并入为「${oldValue}」。\n` +
+            `（点"确定"同步修正这些历史记录；点"取消"仅改选项本身）`;
+        if (confirm(msg)) {
+            return candidates;
+        }
+        return [];
+    }
+
+    /**
+     * Actually PUT the rename. Optionally fetches orphan values first and asks
+     * the user whether to fold them into this rename — otherwise legacy
+     * spellings (left by a delete/rename) never match and the rename looks like
+     * it had "no effect".
+     */
+    async _renameOptionCommit(optionId, value, oldValue, mergeValues = []) {
         try {
             const resp = await fetch(`/api/meal-options/${optionId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ option_value: value }),
+                body: JSON.stringify({ option_value: value, merge_values: mergeValues }),
             });
             if (resp.ok) {
                 const data = await resp.json().catch(() => ({}));

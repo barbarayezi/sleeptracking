@@ -460,6 +460,15 @@ def create_meal_option():
     return jsonify(option), (201 if created else 200)
 
 
+@app.route('/api/meal-options/orphans', methods=['GET'])
+def list_orphan_option_values():
+    """Return option values/segments present in meal_records but missing from
+    meal_options. These orphans never match an exact rename, which is why a
+    rename can appear to "have no effect". The UI uses this to prompt the user
+    to confirm folding them into a rename."""
+    return jsonify(meal_models.find_orphan_values())
+
+
 @app.route('/api/meal-options/<int:option_id>', methods=['DELETE'])
 def delete_meal_option(option_id):
     """Delete a custom option by ID."""
@@ -473,17 +482,22 @@ def delete_meal_option(option_id):
 def update_meal_option(option_id):
     """Rename a meal option and cascade the rename into meal_records.
 
-    Body: {"option_value": "..."}. Returns the updated option plus how many
-    historical meal records were re-pointed to the new label.
+    Body: {"option_value": "...", "merge_values": ["legacy", "spellings"]}.
+    Returns the updated option plus how many historical meal records were
+    re-pointed to the new label. merge_values (optional) additionally folds
+    any orphan spellings the user confirmed into the rename.
     """
     data = request.get_json(silent=True) or {}
     option_value = (data.get('option_value') or '').strip()
+    merge_values = data.get('merge_values') or []
+    if not isinstance(merge_values, list):
+        merge_values = []
     if not option_value:
         return jsonify({'error': 'option_value is required'}), 400
     if len(option_value) > 50:
         return jsonify({'error': 'option_value must be at most 50 characters'}), 400
     try:
-        option, renamed = meal_models.rename_meal_option(option_id, option_value)
+        option, renamed = meal_models.rename_meal_option(option_id, option_value, merge_values)
     except ValueError as e:
         return jsonify({'error': str(e)}), 409
     if option is None:

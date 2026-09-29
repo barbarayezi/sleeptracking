@@ -446,17 +446,74 @@ def delete_meal_option(option_id):
     return deleted
 
 
-def rename_meal_option(option_id, option_value):
+def find_orphan_values():
+    """Scan meal_records for values that are no longer in the option lists.
+
+    This finds "orphan" labels left behind by deleting an option or by an old
+    rename: historical rows still hold a value that has no matching row in
+    meal_options. Such orphans never match an exact string rename, which is why
+    a rename can appear to "have no effect". Returns:
+
+        {'location': [{'value', 'count'}...], 'method': [{'value', 'count'}...]}
+
+    location compares the whole dining_location; method splits cooking_method
+    on '、' and reports each segment not present in the option list.
+    """
+    conn = get_connection()
+    owned_locs = set(
+        r['option_value'] for r in conn.execute(
+            "SELECT option_value FROM meal_options WHERE option_type = 'location'"
+        ).fetchall()
+    )
+    owned_methods = set(
+        r['option_value'] for r in conn.execute(
+            "SELECT option_value FROM meal_options WHERE option_type = 'method'"
+        ).fetchall()
+    )
+
+    loc_orphans = {}
+    for r in conn.execute(
+        "SELECT dining_location FROM meal_records "
+        "WHERE dining_location IS NOT NULL AND dining_location != ''"
+    ).fetchall():
+        v = r['dining_location']
+        if v and v not in owned_locs:
+            loc_orphans[v] = loc_orphans.get(v, 0) + 1
+
+    meth_orphans = {}
+    for r in conn.execute(
+        "SELECT cooking_method FROM meal_records "
+        "WHERE cooking_method IS NOT NULL AND cooking_method != ''"
+    ).fetchall():
+        for seg in [p.strip() for p in (r['cooking_method'] or '').split('、') if p.strip()]:
+            if seg not in owned_methods:
+                meth_orphans[seg] = meth_orphans.get(seg, 0) + 1
+
+    conn.close()
+    return {
+        'location': [{'value': k, 'count': v} for k, v in loc_orphans.items()],
+        'method': [{'value': k, 'count': v} for k, v in meth_orphans.items()],
+    }
+
+
+def rename_meal_option(option_id, option_value, merge_values=None):
     """Rename an option and cascade the rename into meal_records references.
 
     Returns (option_dict, renamed_in_meals_count). Raises ValueError if the
     target value already exists for the same type (UNIQUE guard kept intact).
 
+    merge_values (optional): extra legacy spellings to fold into the rename.
+    When the caller confirms them (from find_orphan_values), any historical
+    value/segment equal to one of these is also rewritten to option_value,
+    cleaning up orphans that would otherwise never match an exact rename.
+
     Cascade rule:
-      - location: meal_records.dining_location == old → set to new (exact match).
+      - location: meal_records.dining_location exactly equal to old (or any
+        merge value) → set to new.
       - method:   meal_records.cooking_method is a '、'-joined multi-value
-        string; each '、' segment equal to old is replaced with new, so
-        historical meals keep the renamed method without touching other methods.
+        string; each '、' segment equal to old (or any merge value) is replaced
+        with new, so historical meals keep the renamed method without touching
+        other methods.
     """
     option_value = (option_value or '').strip()
     if not option_value:
@@ -468,7 +525,17 @@ def rename_meal_option(option_id, option_value):
         return None, 0
     old_value = row['option_value']
     option_type = row['option_type']
-    if old_value == option_value:
+
+    # Targets to fold into the rename: the option's own current value plus any
+    # explicitly-confirmed orphan spellings (deduped, trimmed, excluding new value).
+    targets = {old_value}
+    for v in (merge_values or []):
+        v = (v or '').strip()
+        if v and v != option_value:
+            targets.add(v)
+
+    # Nothing to do only when the name is unchanged AND there are no orphans.
+    if old_value == option_value and len(targets) == 1:
         conn.close()
         return row_to_dict(row), 0
 
@@ -485,9 +552,10 @@ def rename_meal_option(option_id, option_value):
 
     renamed = 0
     if option_type == 'location':
+        placeholders = ','.join('?' * len(targets))
         cur = conn.execute(
-            "UPDATE meal_records SET dining_location = ? WHERE dining_location = ?",
-            (option_value, old_value),
+            f"UPDATE meal_records SET dining_location = ? WHERE dining_location IN ({placeholders})",
+            (option_value, *list(targets)),
         )
         renamed = cur.rowcount
     else:  # method — '、'-joined multi-value string; replace only exact segments
@@ -496,8 +564,8 @@ def rename_meal_option(option_id, option_value):
         ).fetchall()
         for r in rows:
             parts = [p.strip() for p in (r['cooking_method'] or '').split('、') if p.strip()]
-            if old_value in parts:
-                new_parts = [option_value if p == old_value else p for p in parts]
+            if any(p in targets for p in parts):
+                new_parts = [option_value if p in targets else p for p in parts]
                 conn.execute(
                     "UPDATE meal_records SET cooking_method = ? WHERE id = ?",
                     ('、'.join(new_parts), r['id']),
