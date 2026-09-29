@@ -1,0 +1,27 @@
+[
+  {
+    "id": 150,
+    "meal_date": "2026-09-14",
+    "cooking_method": "小零食"
+  },
+  {
+    "id": 163,
+    "meal_date": "2026-09-21",
+    "cooking_method": "小零食"
+  },
+  {
+    "id": 168,
+    "meal_date": "2026-09-19",
+    "cooking_method": "外卖、小零食"
+  },
+  {
+    "id": 175,
+    "meal_date": "2026-09-22",
+    "cooking_method": "小零食"
+  },
+  {
+    "id": 176,
+    "meal_date": "2026-09-29",
+    "cooking_method": "小零食"
+  }
+]
