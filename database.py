@@ -534,6 +534,14 @@ def _migrate(conn):
     if version < 17:
         _migrate_v17(conn)
 
+    # v18: whoop_daily_metrics gains steps (cycle.step_count) and distance_km
+    #      (sum of whoop_workouts.distance_meter per date). These feed the
+    #      auto-fill fallback in get_health_overview when the user hasn't
+    #      typed those values manually in the sleep form.
+    version = _get_schema_version(conn)
+    if version < 18:
+        _migrate_v18(conn)
+
 
 def _migrate_v12(conn):
     """Migrate from v11 to v12: add medication_records table for daily medication log.
@@ -756,6 +764,24 @@ def _migrate_v17(conn):
         conn.execute("ALTER TABLE sleep_records ADD COLUMN distance_km REAL DEFAULT NULL")
     _set_schema_version(conn, 17)
     print("  Migration v16 -> v17 completed.")
+
+
+def _migrate_v18(conn):
+    """Migrate v17 -> v18: Whoop-derived steps and distance on whoop_daily_metrics.
+
+    Adds `steps` (cycle.step_count) and `distance_km` (sum of workout
+    distance_meter / 1000) so the dashboard can auto-fill these two metrics
+    from Whoop when the night-sleep form was left blank. Idempotent.
+    """
+    print("  Running migration v17 -> v18 ...")
+    col_cursor = conn.execute("PRAGMA table_info('whoop_daily_metrics')")
+    columns = [row[1] for row in col_cursor.fetchall()]
+    if 'steps' not in columns:
+        conn.execute("ALTER TABLE whoop_daily_metrics ADD COLUMN steps INTEGER DEFAULT NULL")
+    if 'distance_km' not in columns:
+        conn.execute("ALTER TABLE whoop_daily_metrics ADD COLUMN distance_km REAL DEFAULT NULL")
+    _set_schema_version(conn, 18)
+    print("  Migration v17 -> v18 completed.")
 
 
 def _migrate_v6(conn):
@@ -1098,6 +1124,8 @@ def init_db():
             kilojoule           REAL DEFAULT NULL,
             avg_heart_rate      INTEGER DEFAULT NULL,
             max_heart_rate      INTEGER DEFAULT NULL,
+            steps               INTEGER DEFAULT NULL,
+            distance_km         REAL DEFAULT NULL,
             updated_at          TEXT DEFAULT (datetime('now', 'localtime'))
         )
     """)

@@ -45,6 +45,34 @@ class FormManager {
         }
 
         this._renderRecordList();
+        this._prefillFromWhoop();
+    }
+
+    /**
+     * Auto-fill steps / distance from Whoop when the form is empty (new record).
+     * Manual values win: only fills inputs that are still blank. Whoop only
+     * provides steps + distance, so weight/water/kcal are left untouched.
+     */
+    async _prefillFromWhoop() {
+        if (this._editingRecordId !== null) return;  // editing — values already populated
+        const date = this._selectedDate;
+        try {
+            const resp = await fetch(`/api/whoop/daily?from=${date}&to=${date}`);
+            if (!resp.ok) return;
+            const rows = await resp.json();
+            const row = Array.isArray(rows) ? rows[0] : null;
+            if (!row) return;
+            const stepsInput = document.getElementById('steps');
+            const distInput = document.getElementById('distance-km');
+            if (stepsInput && !stepsInput.value && row.steps != null) {
+                stepsInput.value = Math.round(row.steps);
+            }
+            if (distInput && !distInput.value && row.distance_km != null) {
+                distInput.value = Number(row.distance_km).toFixed(1);
+            }
+        } catch (err) {
+            // Never block the form on a failed whoop prefill.
+        }
     }
 
     /** Return the currently selected date. */

@@ -379,6 +379,10 @@ def sync_daily_metrics(days_back=30):
             row["kilojoule"] = score.get("kilojoule")
             row["avg_heart_rate"] = score.get("average_heart_rate")
             row["max_heart_rate"] = score.get("max_heart_rate")
+            # Whoop cycle exposes step_count at the TOP level (not inside score).
+            step_count = c.get("step_count")
+            if step_count is not None:
+                row["steps"] = step_count
             # remember cycle_id → date for recovery mapping
             daily.setdefault("_cycle_date", {})[c.get("id")] = d
     except Exception as e:
@@ -408,6 +412,23 @@ def sync_daily_metrics(days_back=30):
     except Exception as e:
         print(f"[sync_daily_metrics] recovery fetch failed: {e}")
 
+    # 3) Workout distance → per-date sum (km). Whoop workouts carry distance_meter,
+    #    so we roll them up by record_date and feed the auto-fill fallback.
+    try:
+        workouts = client.get_all_workout_data(start_date=from_date, end_date=to_date)
+        for w in workouts:
+            dist = (w.get("score") or {}).get("distance_meter")
+            if dist is None:
+                continue
+            d = _date_from_ts(w.get("start")) or _date_from_ts(w.get("end"))
+            if not d:
+                continue
+            row = daily.setdefault(d, {})
+            km = float(dist) / 1000.0
+            row["distance_km"] = (row.get("distance_km") or 0.0) + km
+    except Exception as e:
+        print(f"[sync_daily_metrics] workout distance fetch failed: {e}")
+
     conn = get_connection()
     synced = 0
     for d, row in daily.items():
@@ -415,8 +436,8 @@ def sync_daily_metrics(days_back=30):
             """INSERT OR REPLACE INTO whoop_daily_metrics
                (record_date, recovery_score, resting_heart_rate, hrv,
                 spo2_percentage, skin_temp_celsius, strain, kilojoule,
-                avg_heart_rate, max_heart_rate, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now','localtime'))""",
+                avg_heart_rate, max_heart_rate, steps, distance_km, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now','localtime'))""",
             (
                 d,
                 row.get("recovery_score"),
@@ -428,6 +449,8 @@ def sync_daily_metrics(days_back=30):
                 row.get("kilojoule"),
                 row.get("avg_heart_rate"),
                 row.get("max_heart_rate"),
+                row.get("steps"),
+                row.get("distance_km"),
             ),
         )
         synced += 1

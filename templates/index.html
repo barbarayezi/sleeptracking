@@ -11,7 +11,7 @@
     <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="/static/icon.svg">
     <title>量化健康 — QHealth</title>
-    <link rel="stylesheet" href="/static/style.css?v=37">
+    <link rel="stylesheet" href="/static/style.css?v=38">
 </head>
 <body>
 
@@ -356,11 +356,11 @@
                         </div>
                     </fieldset>
 
-                    <!-- Device Score (手环评分) — smart bracelet sleep quality score -->
+                    <!-- Device Score (手环评分) — Whoop 自动同步，离线兜底可手填 -->
                     <div class="form-row">
-                        <label class="form-label" for="device-score">手环评分 <span class="label-hint">（0-100）</span></label>
+                        <label class="form-label" for="device-score">手环评分 <span class="label-hint">（0-100 · Whoop 自动同步，留空即可）</span></label>
                         <div class="input-with-unit">
-                            <input type="number" id="device-score" class="form-input" min="0" max="100" placeholder="—">
+                            <input type="number" id="device-score" class="form-input" min="0" max="100" placeholder="自动同步">
                             <span class="input-unit">分</span>
                         </div>
                     </div>
@@ -406,10 +406,10 @@
 
                     <!-- Health metrics (体重/喝水/步数) — only for night sleep, optional -->
                     <div class="form-row" id="health-metrics-group">
-                        <label class="form-label">昨日健康数据 <span class="label-hint">（选填）</span></label>
+                        <label class="form-label">昨日健康数据 <span class="label-hint">（选填 · 步数与运动距离由 Whoop 自动预填，可改）</span></label>
                         <div class="health-metrics-row">
                             <div class="health-metric-item">
-                                <label class="health-metric-label" for="weight">体重</label>
+                                <label class="health-metric-label" for="weight">体重 <span class="label-hint-2">· 手环不测，手动</span></label>
                                 <div class="input-with-unit">
                                     <input type="number" id="weight" class="form-input" step="0.1" min="20" max="500"
                                         placeholder="-">
@@ -417,7 +417,7 @@
                                 </div>
                             </div>
                             <div class="health-metric-item">
-                                <label class="health-metric-label" for="water-cups">喝水</label>
+                                <label class="health-metric-label" for="water-cups">喝水 <span class="label-hint-2">· 手环不测，手动</span></label>
                                 <div class="input-with-unit">
                                     <input type="number" id="water-cups" class="form-input" step="0.5" min="0" max="100"
                                         placeholder="-">
@@ -425,15 +425,15 @@
                                 </div>
                             </div>
                             <div class="health-metric-item">
-                                <label class="health-metric-label" for="steps">步数</label>
+                                <label class="health-metric-label" for="steps">步数 <span class="label-hint-2">· Whoop 自动</span></label>
                                 <div class="input-with-unit">
                                     <input type="number" id="steps" class="form-input" step="100" min="0" max="200000"
-                                        placeholder="-">
+                                        placeholder="自动预填">
                                     <span class="input-unit">步</span>
                                 </div>
                             </div>
                             <div class="health-metric-item">
-                                <label class="health-metric-label" for="activity-kcal">活动热量</label>
+                                <label class="health-metric-label" for="activity-kcal">活动热量 <span class="label-hint-2">· 手动</span></label>
                                 <div class="input-with-unit">
                                     <input type="number" id="activity-kcal" class="form-input" step="10" min="0" max="10000"
                                         placeholder="-">
@@ -441,10 +441,10 @@
                                 </div>
                             </div>
                             <div class="health-metric-item">
-                                <label class="health-metric-label" for="distance-km">运动距离</label>
+                                <label class="health-metric-label" for="distance-km">运动距离 <span class="label-hint-2">· Whoop 自动</span></label>
                                 <div class="input-with-unit">
                                     <input type="number" id="distance-km" class="form-input" step="0.1" min="0" max="500"
-                                        placeholder="-">
+                                        placeholder="自动预填">
                                     <span class="input-unit">km</span>
                                 </div>
                             </div>
@@ -987,7 +987,7 @@
     </footer>
 
     <script src="/static/apiCache.js?v=3"></script>
-    <script src="/static/form.js?v=17"></script>
+    <script src="/static/form.js?v=18"></script>
     <script src="/static/meal.js?v=21"></script>
     <script src="/static/period.js?v=16"></script>
     <script src="/static/medication.js?v=4"></script>

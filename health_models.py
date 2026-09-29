@@ -337,13 +337,21 @@ def get_health_overview(from_date, to_date):
             day["workout_count"] = wk["count"]
             day["workout_strain"] = round(wk["strain"], 1)
             day["sports"] = wk["sports"]
-        # 手动录入字段 —— 唯一源 = sleep_records(用户每次新建/编辑睡眠记录时手填)。
-        # steps / activity_kcal / distance_km 一律不读 health_metrics(苹果健康/外部同步),即便有也不取。
-        # 当天没填则保持 None(前端显示 "—"),绝不用外部来源补齐。
+        # 活动字段来源（2026-09-29 起）：手动录入优先，Whoop 自动兜底。
+        #   - steps / distance_km：表单手填优先；为空时回退 whoop_daily_metrics
+        #     的 steps（cycle.step_count）与 distance_km（当日 workout 距离求和）。
+        #   - activity_kcal：Whoop 只有全天总消耗 kilojoule（含基础代谢、单位为千焦），
+        #     没有"活动热量 kcal"这一口径，硬换算会误导，故保持手动唯一来源。
+        #   一律不读 health_metrics（苹果健康/外部同步），即便有也不取。
         if s:
             day["steps"] = s["steps"]
             day["activity_kcal"] = s["activity_kcal"]
             day["distance_km"] = s["distance_km"]
+        if wd:
+            if day.get("steps") is None and wd.get("steps") is not None:
+                day["steps"] = int(wd["steps"])
+            if day.get("distance_km") is None and wd.get("distance_km") is not None:
+                day["distance_km"] = float(wd["distance_km"])
         pd = period_by_date.get(d)
         if pd:
             day["is_period"] = bool(pd["is_period_start"]) or (pd["flow"] not in (None, "", "none"))
