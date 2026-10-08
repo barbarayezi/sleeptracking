@@ -814,6 +814,34 @@ body {
 .med-summary-chip--other          { background: var(--gray-100);    color: var(--gray-600); }
 .med-summary-chip--total          { background: var(--bg-tint);     color: var(--gray-900); }
 
+/* ── Medication: custom category adder ───────── */
+.btn-link-add {
+    margin-left: 8px;
+    padding: 1px 8px;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--primary);
+    background: var(--primary-soft);
+    border: 1px solid transparent;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: .15s;
+}
+.btn-link-add:hover { background: var(--primary); color: #fff; }
+
+.med-cat-add {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    flex-wrap: wrap;
+}
+.med-cat-add .form-input { width: auto; flex: 1 1 130px; min-width: 100px; padding: 6px 10px; font-size: 13px; }
+.med-cat-add__emoji { flex: 0 0 64px; text-align: center; }
+.med-cat-add .btn { padding: 6px 12px; font-size: 12px; }
+.med-cat-add__hint { margin-top: 6px; font-size: 12px; color: var(--text-muted); }
+
 .medication-quickfill { margin: 12px 0 16px; }
 .medication-quickfill > .form-label { margin-bottom: 8px; display: block; }
 .medication-quick-buttons {

@@ -11,7 +11,7 @@
     <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="/static/icon.svg">
     <title>量化健康 — QHealth</title>
-    <link rel="stylesheet" href="/static/style.css?v=39">
+    <link rel="stylesheet" href="/static/style.css?v=40">
 </head>
 <body>
 
@@ -752,12 +752,34 @@
                             </select>
                         </div>
                         <div class="form-group">
-                            <label class="form-label" for="medication-category">类别</label>
+                            <label class="form-label" for="medication-category">
+                                类别
+                                <button type="button" id="btn-add-med-category"
+                                    class="btn-link-add" title="新增自定义类别">+ 新类别</button>
+                            </label>
                             <select id="medication-category" class="form-input" required>
-                                <option value="supplement" selected>🍃 保健类</option>
-                                <option value="antidepressant">💊 抗抑郁药</option>
-                                <option value="other">📦 其他</option>
+                                <!-- 选项由 medication.js 从 /api/medication-categories 动态填充 -->
                             </select>
+                            <div id="medication-category-add" class="med-cat-add hidden">
+                                <input type="text" id="medication-category-new-label"
+                                    class="form-input" maxlength="20" placeholder="类别名，如：感冒药">
+                                <select id="medication-category-new-emoji" class="form-input med-cat-add__emoji"
+                                    aria-label="类别图标">
+                                    <option value="💊" selected>💊</option>
+                                    <option value="🤧">🤧</option>
+                                    <option value="🤕">🤕</option>
+                                    <option value="🌿">🌿</option>
+                                    <option value="🌸">🌸</option>
+                                    <option value="😴">😴</option>
+                                    <option value="🍃">🍃</option>
+                                    <option value="💉">💉</option>
+                                    <option value="🧴">🧴</option>
+                                    <option value="📦">📦</option>
+                                </select>
+                                <button type="button" id="btn-med-category-save" class="btn btn-primary">添加</button>
+                                <button type="button" id="btn-med-category-cancel" class="btn btn-secondary">取消</button>
+                            </div>
+                            <p class="med-cat-add__hint">没有想要的类别？点「+ 新类别」自己加一个。</p>
                         </div>
                     </div>
 
@@ -990,7 +1012,7 @@
     <script src="/static/form.js?v=18"></script>
     <script src="/static/meal.js?v=23"></script>
     <script src="/static/period.js?v=16"></script>
-    <script src="/static/medication.js?v=4"></script>
+    <script src="/static/medication.js?v=5"></script>
     <script src="/static/workout.js?v=1"></script>
     <script src="/static/calendar.js?v=16"></script>
     <script src="/static/timeline.js?v=20"></script>

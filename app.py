@@ -1712,17 +1712,27 @@ def _validate_period_data(data, partial=False):
 # ──────────────────────────────────────────────
 
 
-# Allowed values mirror the CHECK constraints declared in database.py.
+# Allowed values mirror the remaining CHECK constraints declared in database.py.
 _MED_DOSAGE_UNITS = {'粒', '支', '片', 'ml', 'mg', '滴', '袋', '颗'}
-_MED_CATEGORIES    = {'supplement', 'antidepressant', 'other'}
 _MED_SLOTS         = {'morning', 'noon', 'evening', 'night'}
 
-# Categories shown to users in Chinese on the form & list.
-_MED_CATEGORY_LABELS = {
-    'supplement':     '保健类',
-    'antidepressant': '抗抑郁药',
-    'other':          '其他',
-}
+# 类别不再是硬编码枚举 —— 真源是 medication_categories 表，
+# 用户可在「强化健康」页自助添加（如感冒药、肠胃药）。
+def _med_category_keys():
+    try:
+        return set(medication_models.get_medication_category_keys())
+    except Exception:
+        return {'supplement', 'antidepressant', 'other'}
+
+
+def _med_category_labels():
+    try:
+        disp = medication_models.get_category_display_map()
+        return {k: f"{v['emoji']} {v['label']}" for k, v in disp.items()}
+    except Exception:
+        return {'supplement': '🍃 保健类',
+                'antidepressant': '💊 抗抑郁药',
+                'other': '📦 其他'}
 
 # Slot labels (Chinese) used by the dashboard summary card.
 _MED_SLOT_LABELS = {
@@ -1742,8 +1752,8 @@ def _validate_medication_data(data, partial=False):
             errors.append('请选择日期。')
     if 'dosage_unit' in data and data['dosage_unit'] not in _MED_DOSAGE_UNITS:
         errors.append(f'剂量单位必须是：{"/".join(sorted(_MED_DOSAGE_UNITS))}')
-    if 'category' in data and data['category'] not in _MED_CATEGORIES:
-        errors.append('类别取值无效（保健类/抗抑郁药/其他）。')
+    if 'category' in data and data['category'] not in _med_category_keys():
+        errors.append('类别取值无效，请从下拉里选择（可点「+ 新类别」添加）。')
     if 'administration_slot' in data and data['administration_slot'] not in _MED_SLOTS:
         errors.append('时段取值无效。')
 
@@ -1789,8 +1799,42 @@ def medication_summary():
         return jsonify({'error': 'date 参数格式应为 YYYY-MM-DD'}), 400
     return jsonify({'date': date_str,
                     'summary': medication_models.get_daily_medication_summary(date_str),
-                    'category_labels': _MED_CATEGORY_LABELS,
+                    'category_labels': _med_category_labels(),
                     'slot_labels': _MED_SLOT_LABELS})
+
+
+@app.route('/api/medication-categories', methods=['GET'])
+def list_medication_categories():
+    """Return every medication category (key / label / emoji / color)."""
+    return jsonify(medication_models.get_medication_categories())
+
+
+@app.route('/api/medication-categories', methods=['POST'])
+def create_medication_category():
+    """Add a user-defined medication category.
+
+    Body: {"label": "感冒药", "emoji": "🤧"}
+    Idempotent: posting an existing label returns 200 with the existing row.
+    """
+    data = request.get_json(silent=True) or {}
+    label = (data.get('label') or '').strip()
+    emoji = (data.get('emoji') or '📦').strip() or '📦'
+    if not label:
+        return jsonify({'error': '类别名称不能为空'}), 400
+    try:
+        category, created = medication_models.add_medication_category(label, emoji)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    return jsonify(category), (201 if created else 200)
+
+
+@app.route('/api/medication-categories/<int:cat_id>', methods=['DELETE'])
+def delete_medication_category(cat_id):
+    """Delete a user-added category (built-ins and in-use ones are refused)."""
+    ok, err = medication_models.delete_medication_category(cat_id)
+    if not ok:
+        return jsonify({'error': err}), 400
+    return '', 204
 
 
 @app.route('/api/medications/<int:med_id>', methods=['GET'])
@@ -2728,7 +2772,7 @@ def export_data():
     from datetime import datetime
     TABLES = ['sleep_records', 'meal_records', 'period_records',
               'whoop_daily_metrics', 'whoop_workouts', 'health_metrics', 'whoop_tokens',
-              'medication_records']
+              'medication_records', 'medication_categories']
     conn = get_connection()
     data = {'version': 1, 'exported_at': datetime.now().isoformat(), 'tables': {}}
     try:
@@ -2760,7 +2804,7 @@ def import_data():
 
     TABLES = ['sleep_records', 'meal_records', 'period_records',
               'whoop_daily_metrics', 'whoop_workouts', 'health_metrics', 'whoop_tokens',
-              'medication_records']
+              'medication_records', 'medication_categories']
     summary = {}
     conn = get_connection()
     try:

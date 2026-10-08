@@ -538,9 +538,14 @@ def _migrate(conn):
     #      (sum of whoop_workouts.distance_meter per date). These feed the
     #      auto-fill fallback in get_health_overview when the user hasn't
     #      typed those values manually in the sleep form.
+    # v19: medication_categories — user-extensible 用药类别（含感冒药等新类别）
     version = _get_schema_version(conn)
     if version < 18:
         _migrate_v18(conn)
+
+    version = _get_schema_version(conn)
+    if version < 19:
+        _migrate_v19(conn)
 
 
 def _migrate_v12(conn):
@@ -782,6 +787,146 @@ def _migrate_v18(conn):
         conn.execute("ALTER TABLE whoop_daily_metrics ADD COLUMN distance_km REAL DEFAULT NULL")
     _set_schema_version(conn, 18)
     print("  Migration v17 -> v18 completed.")
+
+
+# Seed medication categories. `key` is what gets stored on each record row;
+# everything else is presentation. 用户可在页面上自助追加新类别（is_system=0）。
+MEDICATION_CATEGORY_SEEDS = [
+    # (key, label, emoji, color)
+    ('supplement',     '保健类',   '🍃', '#16a34a'),
+    ('antidepressant', '抗抑郁药', '💊', '#2563eb'),
+    ('cold',           '感冒药',   '🤧', '#0891b2'),
+    ('analgesic',      '止痛退烧', '🤕', '#d97706'),
+    ('digestive',      '肠胃药',   '🌿', '#4d7c0f'),
+    ('allergy',        '抗过敏',   '🌸', '#be185d'),
+    ('sleep_aid',      '助眠药',   '😴', '#6d28d9'),
+    ('other',          '其他',     '📦', '#64748b'),
+]
+
+# 调色板：新增类别时按顺序自动分配，保证不同类别颜色可区分。
+MEDICATION_CATEGORY_PALETTE = [
+    '#0f766e', '#b45309', '#0369a1', '#7c3aed',
+    '#15803d', '#be123c', '#ca8a04', '#475569',
+]
+
+
+def _seed_medication_categories(conn):
+    """Insert default medication categories. Idempotent (skips existing keys)."""
+    for i, (key, label, emoji, color) in enumerate(MEDICATION_CATEGORY_SEEDS):
+        conn.execute(
+            "INSERT OR IGNORE INTO medication_categories "
+            "(category_key, label, emoji, color, sort_order, is_system) "
+            "VALUES (?, ?, ?, ?, ?, 1)",
+            (key, label, emoji, color, i),
+        )
+
+
+def _migrate_v19(conn):
+    """Migrate from v18 to v19: user-extensible medication categories.
+
+    Two changes:
+      1. medication_categories table (+ seeds) becomes the single source of
+         truth for the 类别 dropdown, label, emoji and chip colour.
+      2. Drop the hard-coded CHECK(category IN (...)) on medication_records —
+         SQLite cannot alter a CHECK in place, so the table is rebuilt without
+         it. New user-defined category keys would otherwise be rejected.
+
+    Idempotent: both steps check the current schema before acting.
+    """
+    print("  Running migration v18 -> v19 ...")
+
+    # 1) Category table + seeds.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS medication_categories (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            category_key TEXT NOT NULL UNIQUE,
+            label        TEXT NOT NULL,
+            emoji        TEXT NOT NULL DEFAULT '📦',
+            color        TEXT NOT NULL DEFAULT '#64748b',
+            sort_order   INTEGER NOT NULL DEFAULT 0,
+            is_system    INTEGER NOT NULL DEFAULT 1,
+            created_at   TEXT DEFAULT (datetime('now', 'localtime'))
+        )
+    """)
+    _seed_medication_categories(conn)
+
+    # 2) Drop the category CHECK by rebuilding the table without it.
+    #    只有在能明确读到"不含 CHECK(category)"的表定义时才跳过；
+    #    读不到（Turso 偶发返回空 / Hrana 瞬时错误）时一律重建，
+    #    宁可多做一次重建，也不要留下会拒绝自定义类别的旧约束。
+    rows = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='medication_records'"
+    ).fetchall()
+    current_sql = ''
+    if rows:
+        first = rows[0]
+        try:
+            current_sql = (first['sql'] if isinstance(first, dict) else first[0]) or ''
+        except Exception:
+            current_sql = ''
+    needs_rebuild = not ('CHECK(category' not in current_sql.replace('\n', ' ')
+                         and 'CREATE TABLE' in current_sql)
+    if needs_rebuild:
+        # 上一轮若中途失败会留下临时表，先清理保证可重复执行。
+        conn.execute("DROP TABLE IF EXISTS medication_records_new")
+        conn.execute("""
+            CREATE TABLE medication_records_new (
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                record_date         DATE NOT NULL,
+                record_time         TEXT NOT NULL DEFAULT '08:00',
+                medication_name     TEXT NOT NULL,
+                dosage              REAL NOT NULL DEFAULT 1,
+                dosage_unit         TEXT NOT NULL DEFAULT '粒'
+                                    CHECK(dosage_unit IN ('粒','支','片','ml','mg','滴','袋','颗')),
+                category            TEXT NOT NULL DEFAULT 'supplement',
+                administration_slot TEXT NOT NULL DEFAULT 'morning'
+                                    CHECK(administration_slot IN ('morning','noon','evening','night')),
+                notes               TEXT DEFAULT '',
+                created_at          TEXT DEFAULT (datetime('now', 'localtime')),
+                updated_at          TEXT DEFAULT (datetime('now', 'localtime'))
+            )
+        """)
+        conn.execute("""
+            INSERT INTO medication_records_new
+                (id, record_date, record_time, medication_name, dosage,
+                 dosage_unit, category, administration_slot, notes,
+                 created_at, updated_at)
+            SELECT id, record_date, record_time, medication_name, dosage,
+                   dosage_unit, category, administration_slot, notes,
+                   created_at, updated_at
+            FROM medication_records
+        """)
+        conn.execute("DROP TABLE medication_records")
+        conn.execute("ALTER TABLE medication_records_new RENAME TO medication_records")
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_medication_records_date
+            ON medication_records(record_date)
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_medication_records_category
+            ON medication_records(category)
+        """)
+
+        # 后置校验：Turso 偶发网络重试可能吞掉 DDL，这里确认约束真的没了，
+        # 否则宁可报错也不要静默带上旧 CHECK（会导致自定义类别无法保存）。
+        after = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='medication_records'"
+        ).fetchall()
+        after_sql = ''
+        if after:
+            row0 = after[0]
+            try:
+                after_sql = (row0['sql'] if isinstance(row0, dict) else row0[0]) or ''
+            except Exception:
+                after_sql = ''
+        if 'CHECK(category' in after_sql.replace('\n', ' '):
+            raise RuntimeError(
+                'medication_records.category 的 CHECK 约束未能移除，请重试迁移'
+            )
+        print("  medication_records.category CHECK 已移除。")
+
+    _set_schema_version(conn, 19)
+    print("  Migration v18 -> v19 completed.")
 
 
 def _migrate_v6(conn):
@@ -1221,8 +1366,7 @@ def init_db():
             dosage              REAL NOT NULL DEFAULT 1,
             dosage_unit         TEXT NOT NULL DEFAULT '粒'
                                 CHECK(dosage_unit IN ('粒','支','片','ml','mg','滴','袋','颗')),
-            category            TEXT NOT NULL DEFAULT 'supplement'
-                                CHECK(category IN ('supplement','antidepressant','other')),
+            category            TEXT NOT NULL DEFAULT 'supplement',
             administration_slot TEXT NOT NULL DEFAULT 'morning'
                                 CHECK(administration_slot IN ('morning','noon','evening','night')),
             notes               TEXT DEFAULT '',
@@ -1238,6 +1382,19 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_medication_records_category
         ON medication_records(category)
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS medication_categories (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            category_key TEXT NOT NULL UNIQUE,
+            label        TEXT NOT NULL,
+            emoji        TEXT NOT NULL DEFAULT '📦',
+            color        TEXT NOT NULL DEFAULT '#64748b',
+            sort_order   INTEGER NOT NULL DEFAULT 0,
+            is_system    INTEGER NOT NULL DEFAULT 1,
+            created_at   TEXT DEFAULT (datetime('now', 'localtime'))
+        )
+    """)
+    _seed_medication_categories(conn)
 
     # Meal images table (v13) — persistent photo storage for before/after photos.
     conn.execute("""

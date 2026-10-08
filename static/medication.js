@@ -10,6 +10,18 @@
  */
 
 class MedicationManager {
+    // 网络异常 / 旧后端时的兜底类别，保证表单依旧可用
+    static FALLBACK_CATEGORIES = [
+        { id: 0, category_key: 'supplement',     label: '保健类',   emoji: '🍃', color: '#16a34a', sort_order: 0, is_system: 1 },
+        { id: 1, category_key: 'antidepressant', label: '抗抑郁药', emoji: '💊', color: '#2563eb', sort_order: 1, is_system: 1 },
+        { id: 2, category_key: 'cold',           label: '感冒药',   emoji: '🤧', color: '#0891b2', sort_order: 2, is_system: 1 },
+        { id: 3, category_key: 'analgesic',      label: '止痛退烧', emoji: '🤕', color: '#d97706', sort_order: 3, is_system: 1 },
+        { id: 4, category_key: 'digestive',      label: '肠胃药',   emoji: '🌿', color: '#4d7c0f', sort_order: 4, is_system: 1 },
+        { id: 5, category_key: 'allergy',        label: '抗过敏',   emoji: '🌸', color: '#be185d', sort_order: 5, is_system: 1 },
+        { id: 6, category_key: 'sleep_aid',      label: '助眠药',   emoji: '😴', color: '#6d28d9', sort_order: 6, is_system: 1 },
+        { id: 7, category_key: 'other',          label: '其他',     emoji: '📦', color: '#64748b', sort_order: 7, is_system: 1 },
+    ];
+
     constructor() {
         this.form = document.getElementById('medication-form');
         this.btnSave = document.getElementById('btn-medication-save');
@@ -24,6 +36,16 @@ class MedicationManager {
         this._editingMedicationId = null;
         this._quickfillButtons = Array.from(document.querySelectorAll('.btn-quick-med'));
 
+        // 类别由后端 /api/medication-categories 提供（可自助新增），首次渲染前加载。
+        this._categories = [];
+        this._categoriesLoaded = null;   // in-flight promise，避免并发重复拉取
+        this.btnAddCat = document.getElementById('btn-add-med-category');
+        this.catAddRow = document.getElementById('medication-category-add');
+        this.catAddLabel = document.getElementById('medication-category-new-label');
+        this.catAddEmoji = document.getElementById('medication-category-new-emoji');
+        this.btnCatSave = document.getElementById('btn-med-category-save');
+        this.btnCatCancel = document.getElementById('btn-med-category-cancel');
+
         this._initEvents();
     }
 
@@ -33,6 +55,10 @@ class MedicationManager {
     async loadDate(dateStr) {
         this._selectedDate = dateStr;
         this._editingMedicationId = null;
+
+        // 类别必须在表单默认值与列表渲染之前就绪（标签 / 配色依赖它）。
+        await this._ensureCategories();
+
         this._resetForm();
         this._updateFormMode();
 
@@ -78,6 +104,151 @@ class MedicationManager {
         this._quickfillButtons.forEach(btn => {
             btn.addEventListener('click', () => this._quickLog(btn));
         });
+
+        // 自定义类别：展开/收起新增行
+        if (this.btnAddCat) {
+            this.btnAddCat.addEventListener('click', () => this._toggleCategoryAdder(true));
+        }
+        if (this.btnCatCancel) {
+            this.btnCatCancel.addEventListener('click', () => this._toggleCategoryAdder(false));
+        }
+        if (this.btnCatSave) {
+            this.btnCatSave.addEventListener('click', () => this._createCategory());
+        }
+        if (this.catAddLabel) {
+            this.catAddLabel.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    this._createCategory();
+                }
+            });
+        }
+    }
+
+    /* ── Category handling ────────────────── */
+
+    /** Load categories once (cached); concurrent callers share one request. */
+    _ensureCategories(force = false) {
+        if (this._categories.length && !force) return Promise.resolve(this._categories);
+        if (this._categoriesLoaded && !force) return this._categoriesLoaded;
+
+        const url = '/api/medication-categories';
+        const task = (async () => {
+            try {
+                const fetcher = window.ApiCache
+                    ? (u) => window.ApiCache.fetch(u, { ttlMs: 300000, force })
+                    : (u) => fetch(u).then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))));
+                const data = await fetcher(url);
+                if (Array.isArray(data) && data.length) {
+                    this._categories = data;
+                }
+            } catch (err) {
+                // 网络异常时退化为内置兜底，保证表单仍可用
+                if (!this._categories.length) this._categories = MedicationManager.FALLBACK_CATEGORIES;
+            }
+            this._renderCategorySelect();
+            this._categoriesLoaded = null;
+            return this._categories;
+        })();
+
+        this._categoriesLoaded = task;
+        return task;
+    }
+
+    /** Fill the 类别 dropdown from this._categories. */
+    _renderCategorySelect() {
+        const sel = document.getElementById('medication-category');
+        if (!sel || !this._categories.length) return;
+        const previous = sel.value;
+        sel.innerHTML = this._categories.map(c =>
+            `<option value="${c.category_key}">${c.emoji} ${this._escapeHtml(c.label)}</option>`
+        ).join('');
+        if (previous && this._categories.some(c => c.category_key === previous)) {
+            sel.value = previous;
+        } else {
+            sel.value = this._defaultCategoryKey();
+        }
+    }
+
+    /** Default category for a fresh form: 保健类 if present, else the first one. */
+    _defaultCategoryKey() {
+        const sup = this._categories.find(c => c.category_key === 'supplement');
+        return (sup || this._categories[0] || {}).category_key || 'supplement';
+    }
+
+    _catByKey(key) {
+        return this._categories.find(c => c.category_key === key);
+    }
+
+    _catLabel(key) {
+        const c = this._catByKey(key);
+        return c ? `${c.emoji} ${c.label}` : (key || '其他');
+    }
+
+    _catColor(key) {
+        const c = this._catByKey(key);
+        return c ? c.color : '#64748b';
+    }
+
+    /** Render one summary chip. Colour comes from the category row so custom
+     *  categories get their own chip style without touching CSS. */
+    _chipHtml(count, cat) {
+        const emoji = cat.emoji || '📦';
+        const label = cat.label || '其他';
+        const color = cat.color || '#64748b';
+        return `<span class="med-summary-chip" style="background:${color}1a; color:${color}">` +
+               `${emoji} ${this._escapeHtml(label)} ${count}</span>`;
+    }
+
+    _toggleCategoryAdder(show) {
+        if (!this.catAddRow) return;
+        this.catAddRow.classList.toggle('hidden', !show);
+        if (show && this.catAddLabel) {
+            this.catAddLabel.value = '';
+            this.catAddLabel.focus();
+        }
+    }
+
+    /** POST a user-defined category, then refresh the dropdown and select it. */
+    async _createCategory() {
+        const label = (this.catAddLabel?.value || '').trim();
+        if (!label) {
+            this._showMessage('请先填写类别名称，例如「感冒药」。', 'error');
+            this.catAddLabel?.focus();
+            return;
+        }
+        const emoji = this.catAddEmoji?.value || '📦';
+        if (this.btnCatSave) {
+            this.btnCatSave.disabled = true;
+            this.btnCatSave.textContent = '添加中…';
+        }
+        try {
+            const resp = await fetch('/api/medication-categories', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ label, emoji }),
+            });
+            const data = await resp.json();
+            if (!resp.ok) {
+                this._showMessage('❌ ' + (data.error || '新增类别失败'), 'error');
+                return;
+            }
+            if (window.ApiCache) {
+                window.ApiCache.invalidatePrefix('/api/medication-categories');
+            }
+            await this._ensureCategories(true);
+            this._toggleCategoryAdder(false);
+            const sel = document.getElementById('medication-category');
+            if (sel && data && data.category_key) sel.value = data.category_key;
+            this._showMessage(`✅ 已新增类别「${data.emoji} ${data.label}」，可直接选择使用`, 'success');
+        } catch (err) {
+            this._showMessage('❌ 网络错误: ' + err.message, 'error');
+        } finally {
+            if (this.btnCatSave) {
+                this.btnCatSave.disabled = false;
+                this.btnCatSave.textContent = '添加';
+            }
+        }
     }
 
     /* ── One-Tap Quick Log ────────────────── */
@@ -173,14 +344,31 @@ class MedicationManager {
             this.daySummaryEl.innerHTML = '';
             return;
         }
-        const sup = summary.supplement_taken || 0;
-        const adr = summary.antidepressant_taken || 0;
-        const oth = summary.other_taken || 0;
 
-        const chips = [];
-        if (sup)  chips.push(`<span class="med-summary-chip med-summary-chip--supplement">🍃 保健 ${sup}</span>`);
-        if (adr)  chips.push(`<span class="med-summary-chip med-summary-chip--antidepressant">💊 抗抑郁 ${adr}</span>`);
-        if (oth)  chips.push(`<span class="med-summary-chip med-summary-chip--other">📦 其他 ${oth}</span>`);
+        // 优先用后端返回的动态分桶；旧后端没有该字段时退回固定三桶。
+        let chips = [];
+        const byCategory = summary.by_category || null;
+        if (byCategory) {
+            chips = this._categories
+                .filter(c => (byCategory[c.category_key] || 0) > 0)
+                .map(c => this._chipHtml(byCategory[c.category_key], c));
+            // 未登记进类别表的历史取值也要显示，避免记录"凭空消失"
+            Object.keys(byCategory).forEach((key) => {
+                if (this._catByKey(key)) return;
+                chips.push(this._chipHtml(byCategory[key],
+                    { emoji: '📦', label: key, color: '#64748b' }));
+            });
+        } else {
+            const buckets = [
+                [summary.supplement_taken,     'supplement'],
+                [summary.antidepressant_taken, 'antidepressant'],
+                [summary.other_taken,          'other'],
+            ];
+            chips = buckets
+                .filter(([n]) => (n || 0) > 0)
+                .map(([n, key]) => this._chipHtml(n, this._catByKey(key) ||
+                    { emoji: '📦', label: '其他', color: '#64748b' }));
+        }
         chips.push(`<span class="med-summary-chip med-summary-chip--total">合计 ${total}</span>`);
 
         this.daySummaryEl.innerHTML = `
@@ -203,12 +391,7 @@ class MedicationManager {
 
         const slotLabels = { morning: '🌅 早上', noon: '☀️ 中午', evening: '🌇 晚上', night: '🌙 睡前' };
         const slotOrder  = ['morning', 'noon', 'evening', 'night'];
-        const categoryLabels = { supplement: '🍃 保健类', antidepressant: '💊 抗抑郁药', other: '📦 其他' };
-        const categoryColors = {
-            supplement:     'var(--success)',
-            antidepressant: 'var(--primary)',
-            other:          'var(--gray-500)',
-        };
+        // 标签与配色统一取自 this._categories（唯一真源，支持用户自定义类别）
 
         // Group rows by slot, preserving server-side ordering inside each slot.
         const bySlot = { morning: [], noon: [], evening: [], night: [] };
@@ -224,8 +407,8 @@ class MedicationManager {
             html += `<div class="med-slot-head">${slotLabels[slot]}</div>`;
             for (const m of rows) {
                 const isEditing = (this._editingMedicationId === m.id);
-                const catLabel = categoryLabels[m.category] || m.category;
-                const catColor = categoryColors[m.category] || '#94a3b8';
+                const catLabel = this._catLabel(m.category);
+                const catColor = this._catColor(m.category);
                 const dose = (m.dosage === 1 || m.dosage === 1.0) ? m.dosage_unit
                     : `${m.dosage}${m.dosage_unit}`;
 
@@ -301,7 +484,7 @@ class MedicationManager {
         const timeSelect = document.getElementById('medication-time');
         if (timeSelect) timeSelect.value = 'morning';
         const catSelect = document.getElementById('medication-category');
-        if (catSelect) catSelect.value = 'supplement';
+        if (catSelect) catSelect.value = this._defaultCategoryKey();
         const dose = document.getElementById('medication-dosage');
         if (dose) dose.value = '1';
         const unit = document.getElementById('medication-unit');
@@ -314,7 +497,10 @@ class MedicationManager {
         const timeSelect = document.getElementById('medication-time');
         if (timeSelect) timeSelect.value = med.administration_slot || 'morning';
         const catSelect = document.getElementById('medication-category');
-        if (catSelect) catSelect.value = med.category || 'supplement';
+        if (catSelect) {
+            const key = med.category || 'supplement';
+            catSelect.value = this._catByKey(key) ? key : this._defaultCategoryKey();
+        }
         document.getElementById('medication-name').value = med.medication_name || '';
         const dose = document.getElementById('medication-dosage');
         if (dose) dose.value = (med.dosage != null) ? String(med.dosage) : '1';
