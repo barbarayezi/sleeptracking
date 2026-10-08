@@ -286,16 +286,26 @@ const App = {
         const today = this._todayStr();
         const yesterday = this._addDays(today, -1);
         const tomorrow = this._addDays(today, 1);
+        const weekday = ' · ' + this._weekdayLabel(this.currentDate);
 
         if (this.currentDate === today) {
-            label.textContent = '📅 今天';
+            label.textContent = '📅 今天' + weekday;
         } else if (this.currentDate === yesterday) {
-            label.textContent = '📅 昨天';
+            label.textContent = '📅 昨天' + weekday;
         } else if (this.currentDate === tomorrow) {
-            label.textContent = '📅 明天';
+            label.textContent = '📅 明天' + weekday;
         } else {
-            label.textContent = '📅 ' + this.currentDate;
+            label.textContent = '📅 ' + this.currentDate + weekday;
         }
+    },
+
+    /** 周几标签，如「周四」。按日期各部分本地构造 Date，避免 UTC 解析偏移一天。 */
+    _weekdayLabel(dateStr) {
+        const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr || '');
+        if (!m) return '';
+        const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+        if (isNaN(d.getTime())) return '';
+        return '周' + '日一二三四五六'[d.getDay()];
     },
 
     /* ── Data Refresh ─────────────────────── */
