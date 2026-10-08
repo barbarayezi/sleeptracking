@@ -46,11 +46,14 @@ json.dump(mm.get_all_...(), open('/tmp/backup.json','w'), ensure_ascii=False, de
 
 ---
 
-## 铁律三：不要相信 schema 版本号，必须查实际 schema
+## 铁律三：迁移编号先对齐远程，不要相信 schema 版本号
 
-2026-10-08 v18 迁移曾**静默失败**：版本号被写成 18，但 `medication_records` 上 `CHECK(category ...)` 仍在（Turso 读 `sqlite_master` 偶尔返回空，检测逻辑误判为"无需重建"）。表象是写新值报 500，查 `_meta` 却显示已迁移。
+2026-10-08 真实事故：本地基于旧 master 把"用药类别"迁移编号成 v18 并写了 Turso；而 **Render 在用的远程 master 早已把 v18 用在 whoop 步数迁移上**。两边版本号撞车 → 本地 `_migrate()` 读到 version=18 直接跳过 → 类别表由 init_db 建出来、CHECK 却没去掉 → 写新值 500。当时误判成"Turso 读 sqlite_master 返回空"，冤枉了 Turso。
 
-检测一律写"保守派" —— **无法明确确认约束已消失就重建**：
+因此两条都要做：
+
+1. **动手前先 `git fetch` 看 `database.py` 的最新迁移号**，新迁移从 max+1 开始编；本地分支落后远程时尤其致命（你写的 vN 可能已被远程占用，且远程版本号可能已经写进了同一个 Turso 库）。
+2. **不要相信 `_meta` 里的版本号，必须查实际 schema**。检测写"保守派" —— 无法明确确认约束已消失就重建：
 
 ```python
 needs_rebuild = not ('CHECK(' + col + ')' not in sql.replace('\n',' ')
@@ -61,10 +64,10 @@ needs_rebuild = not ('CHECK(' + col + ')' not in sql.replace('\n',' ')
 
 ---
 
-## 标准改动清单（以"用药类别" v18 为模板）
+## 标准改动清单（以"用药类别" v19 为模板）
 
 1. **`database.py`**
-   - 新版本号迁移 `_migrate_vN`（当前最新 v18，查 `SELECT value FROM _meta WHERE key='schema_version'`）
+   - 新版本号迁移 `_migrate_vN`（**先 git fetch 确认远程最新号**，当前最新 v19；再查 `SELECT value FROM _meta WHERE key='schema_version'`）
    - 在 `_migrate()` 尾部登记 `if version < N: _migrate_vN(conn)`
    - `init_db()` 里的 `CREATE TABLE` 同步改成最终形态（新装走这条路）
    - 若要用户自助维护：仿 `meal_options` / `medication_categories` 建选项表 + 种子常量 + `_seed_xxx()`（`INSERT OR IGNORE` 幂等）
@@ -95,6 +98,6 @@ needs_rebuild = not ('CHECK(' + col + ')' not in sql.replace('\n',' ')
 
 ## 参考实现
 
-- 用户自助选项：`database.py` 的 `_migrate_v15`（`meal_options`）、`_migrate_v18`（`medication_categories`）
-- 重建表去 CHECK：`database.py` 的 `_migrate_v14`（`daily_reports`）、`_migrate_v18`
+- 用户自助选项：`database.py` 的 `_migrate_v15`（`meal_options`）、`_migrate_v19`（`medication_categories`）
+- 重建表去 CHECK：`database.py` 的 `_migrate_v14`（`daily_reports`）、`_migrate_v19`
 - 前端动态渲染：`static/medication.js` 的 `_ensureCategories()` / `_renderCategorySelect()`
