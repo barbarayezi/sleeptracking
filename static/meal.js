@@ -65,7 +65,10 @@ class MealManager {
         this._updateFormMode();
 
         try {
-            const resp = await fetch(`/api/meals?date=${dateStr}`);
+            const ctrl = new AbortController();
+            const timer = setTimeout(() => ctrl.abort(), 30 * 1000);
+            const resp = await fetch(`/api/meals?date=${dateStr}`, { signal: ctrl.signal });
+            clearTimeout(timer);
             if (resp.ok) {
                 this._mealsForDate = await resp.json();
             } else {
@@ -1132,7 +1135,13 @@ class MealManager {
         const method = isUpdate ? 'PUT' : 'POST';
 
         const hasImages = this._imageFiles.length > 0;
-        const fetchOpts = { method };
+        // 90s 超时：带图 multipart 上传（可达数 MB）遇到网络停滞时，无超时的
+        // fetch 会永远挂在「保存中...」。超时后走核对逻辑而非盲目报错，因为
+        // 服务端可能已实际落库。
+        const SAVE_TIMEOUT_MS = 90 * 1000;
+        const ctrl = new AbortController();
+        const timeoutTimer = setTimeout(() => ctrl.abort(), SAVE_TIMEOUT_MS);
+        const fetchOpts = { method, signal: ctrl.signal };
         try {
             if (hasImages) {
                 // multipart: payload JSON + before/after image files.
@@ -1195,8 +1204,20 @@ class MealManager {
                 this._showMessage('❌ ' + msg, 'error');
             }
         } catch (err) {
-            this._showMessage('❌ 网络错误: ' + err.message, 'error');
+            if (err && err.name === 'AbortError') {
+                // 上传超时：无法确定服务端是否已落库，核对当天列表让用户确认，
+                // 避免盲目重试造成重复记录。
+                this._showMessage('⚠️ 保存请求超时（90 秒无响应），正在核对是否已保存...', 'error');
+                try {
+                    if (window.ApiCache) ApiCache.invalidateAll();
+                    await this.loadDate(this._selectedDate);
+                    if (typeof App !== 'undefined' && App._loadToday) App._loadToday();
+                } catch (e) { /* 核对失败不掩盖主提示 */ }
+            } else {
+                this._showMessage('❌ 网络错误: ' + err.message, 'error');
+            }
         } finally {
+            clearTimeout(timeoutTimer);
             this.btnSave.disabled = false;
             this.btnSave.textContent = '💾 保存饮食';
         }
@@ -1206,8 +1227,10 @@ class MealManager {
         if (!mealId) return;
         if (!confirm('确定要删除这条饮食记录吗？')) return;
 
+        const ctrl = new AbortController();
+        const timeoutTimer = setTimeout(() => ctrl.abort(), 30 * 1000);
         try {
-            const resp = await fetch(`/api/meals/${mealId}`, { method: 'DELETE' });
+            const resp = await fetch(`/api/meals/${mealId}`, { method: 'DELETE', signal: ctrl.signal });
             if (resp.ok || resp.status === 204) {
                 this._mealsForDate = this._mealsForDate.filter(m => m.id !== mealId);
 
@@ -1230,7 +1253,13 @@ class MealManager {
                 this._showMessage('❌ ' + (errBody?.error || `删除失败 (HTTP ${resp.status})`), 'error');
             }
         } catch (err) {
-            this._showMessage('❌ 网络错误: ' + err.message, 'error');
+            if (err && err.name === 'AbortError') {
+                this._showMessage('❌ 删除请求超时，请稍后刷新页面核对。', 'error');
+            } else {
+                this._showMessage('❌ 网络错误: ' + err.message, 'error');
+            }
+        } finally {
+            clearTimeout(timeoutTimer);
         }
     }
 
