@@ -1149,8 +1149,20 @@ class MealManager {
 
             const resp = await fetch(url, fetchOpts);
 
-            if (resp.ok) {
-                const saved = await resp.json();
+            // Defensive parse: gateway 层（如 Render 免费实例）偶发返回空响应体
+            // 或非 JSON 错误页，直接 resp.json() 会抛 "Unexpected end of JSON
+            // input"，掩盖真实状态。服务端 Turso 写入此时往往已成功，所以
+            // 2xx+空体时先核对列表，而不是让用户盲目重试造成重复记录。
+            const text = await resp.text();
+            let body;
+            try {
+                body = text ? JSON.parse(text) : null;
+            } catch (e) {
+                body = undefined;   // 非 JSON（HTML 错误页 / 截断响应等）
+            }
+
+            if (resp.ok && body) {
+                const saved = body;
                 this._showMessage('✅ 保存成功！', 'success');
 
                 if (isUpdate) {
@@ -1169,9 +1181,18 @@ class MealManager {
                 this._renderMealList();
                 if (typeof App !== 'undefined' && App._loadToday) App._loadToday();
                 if (window.ApiCache) ApiCache.invalidateAll();
+            } else if (resp.ok && body === null) {
+                // 2xx 但空响应体：服务端大概率已保存（网关把响应体弄丢了）。
+                // 重新拉取当天列表核对，避免用户直接重试造成重复记录。
+                this._showMessage('⚠️ 服务器响应异常（返回空），正在核对是否已保存...', 'error');
+                if (window.ApiCache) ApiCache.invalidateAll();
+                await this.loadDate(this._selectedDate);
+                if (typeof App !== 'undefined' && App._loadToday) App._loadToday();
             } else {
-                const err = await resp.json();
-                this._showMessage('❌ ' + (err.error || '保存失败'), 'error');
+                const msg = (body && body.error)
+                    ? body.error
+                    : `保存失败 (HTTP ${resp.status}${body === undefined ? '，响应非 JSON' : ''})`;
+                this._showMessage('❌ ' + msg, 'error');
             }
         } catch (err) {
             this._showMessage('❌ 网络错误: ' + err.message, 'error');
@@ -1203,8 +1224,10 @@ class MealManager {
                 if (window.ApiCache) ApiCache.invalidateAll();
                 this._showMessage('已删除。', 'success');
             } else {
-                const err = await resp.json();
-                this._showMessage('❌ ' + (err.error || '删除失败'), 'error');
+                // 网关可能返回空体/HTML 错误页，防御性解析（同 _saveMeal）
+                let errBody = null;
+                try { errBody = await resp.json(); } catch (e) { /* ignore */ }
+                this._showMessage('❌ ' + (errBody?.error || `删除失败 (HTTP ${resp.status})`), 'error');
             }
         } catch (err) {
             this._showMessage('❌ 网络错误: ' + err.message, 'error');
