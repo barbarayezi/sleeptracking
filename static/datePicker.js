@@ -5,6 +5,8 @@
  *  - 点击顶栏 #current-date-label 弹出日历浮层，可 ‹/› 翻月、«/» 翻年，
  *    点任意日期跳转（走 App.setDate 统一刷新所有模块）。
  *  - 高亮今天与当前选中日期；「今天」按钮一键回到今天。
+ *  - 数据覆盖标注：当天及以前若在所有记录表（睡眠/饮食/用药/经期/运动/Whoop）
+ *    中均无任何记录，日期下方标红点，方便发现漏记的日子。
  *  - 点击浮层外部 / Esc 关闭。
  */
 (function () {
@@ -13,6 +15,7 @@
     let popup = null;          // 浮层根节点（懒创建，全局唯一）
     let viewY = 0, viewM = 0;  // 当前展示的年 / 月（M: 1-12）
     let isOpen = false;
+    const coverageCache = new Map();  // 'YYYY-MM' -> Set<date> 有记录的日期
 
     function fmt(y, m, d) {
         return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
@@ -95,13 +98,67 @@
         }
         popup.appendChild(grid);
 
-        // 底部：回到今天 + 关闭
+        // 底部：回到今天 + 图例 + 关闭
         const foot = document.createElement('div');
         foot.className = 'dp-foot';
         foot.innerHTML = `
             <button type="button" class="dp-today-btn">今天</button>
+            <span class="dp-legend"><i class="dp-dot"></i>当天无记录</span>
             <button type="button" class="dp-close-btn">关闭</button>`;
         popup.appendChild(foot);
+
+        applyCoverage();
+    }
+
+    /* ── 数据覆盖（红点标注）───────────────── */
+
+    function coverageKey(y, m) {
+        return `${y}-${String(m).padStart(2, '0')}`;
+    }
+
+    /** 可见网格（含上下月补位）的日期范围。 */
+    function visibleRange(y, m) {
+        const first = new Date(y, m - 1, 1);
+        const lead = (first.getDay() + 6) % 7;
+        const daysInMonth = new Date(y, m, 0).getDate();
+        const total = Math.ceil((lead + daysInMonth) / 7) * 7;
+        const start = new Date(y, m - 1, 1 - lead);
+        const end = new Date(y, m - 1, 1 - lead + total - 1);
+        return [fmt(start.getFullYear(), start.getMonth() + 1, start.getDate()),
+                fmt(end.getFullYear(), end.getMonth() + 1, end.getDate())];
+    }
+
+    async function fetchCoverage(y, m) {
+        const key = coverageKey(y, m);
+        if (coverageCache.has(key)) return coverageCache.get(key);
+        const [from, to] = visibleRange(y, m);
+        try {
+            const ctrl = new AbortController();
+            const timer = setTimeout(() => ctrl.abort(), 10000);  // 与站点超时约定一致
+            const resp = await fetch(`/api/data-coverage?from=${from}&to=${to}`, { signal: ctrl.signal });
+            clearTimeout(timer);
+            if (!resp.ok) return null;
+            const data = await resp.json();
+            const set = new Set(data.dates || []);
+            coverageCache.set(key, set);
+            return set;
+        } catch (err) {
+            return null;  // 网络失败只是不标红点，不影响日历本身
+        }
+    }
+
+    function applyCoverage() {
+        const y = viewY, m = viewM;
+        fetchCoverage(y, m).then((set) => {
+            if (!set || !popup || !isOpen || y !== viewY || m !== viewM) return;
+            const today = todayStr();
+            popup.querySelectorAll('.dp-day').forEach((cell) => {
+                const ds = cell.dataset.date;
+                if (cell.classList.contains('dp-outside')) return;  // 只标当月
+                if (ds >= today) return;                            // 今天及未来不标（还没过完）
+                if (!set.has(ds)) cell.classList.add('dp-missed');
+            });
+        });
     }
 
     function position() {
@@ -128,9 +185,10 @@
         const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(cur);
         viewY = m ? Number(m[1]) : new Date().getFullYear();
         viewM = m ? Number(m[2]) : new Date().getMonth() + 1;
+        coverageCache.clear();  // 每次打开强制拉最新，刚录入的记录立即反映
+        isOpen = true;          // 先置位：render() 末尾的 applyCoverage 依赖它
         render();
         position();
-        isOpen = true;
     }
 
     function close() {

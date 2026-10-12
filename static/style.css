@@ -1934,3 +1934,34 @@ i.algo-lg-line { background: transparent; border-left: 1px solid var(--gray-400)
     .date-picker-pop { width: 236px; }
     .dp-day { height: 32px; font-size: 13px; }
 }
+
+/* ── Date Picker 数据覆盖红点（当天所有记录表均无数据）── */
+.dp-day {
+    position: relative;
+}
+.dp-missed::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    bottom: 2px;
+    transform: translateX(-50%);
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: #ef4444;
+}
+.dp-legend {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    color: var(--muted, #64748b);
+    white-space: nowrap;
+}
+.dp-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #ef4444;
+    display: inline-block;
+}

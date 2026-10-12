@@ -2533,6 +2533,46 @@ def health_overview():
     return jsonify(get_health_overview(from_date, to_date))
 
 
+@app.route('/api/data-coverage')
+def data_coverage():
+    """Dates within [from, to] having at least one record in any log table.
+
+    Lightweight presence check for the date-picker calendar: days NOT in the
+    returned list (before today) have no sleep/meal/medication/period/workout/
+    Whoop data at all, so the UI can flag them with a red dot.
+    """
+    from_date = request.args.get('from')
+    to_date = request.args.get('to')
+    if not from_date or not to_date:
+        return jsonify({'error': 'from and to are required (YYYY-MM-DD)'}), 400
+    # (table, date column) — meal/workout check-ins use their own column names
+    tables = (
+        ('sleep_records', 'record_date'),
+        ('meal_records', 'meal_date'),
+        ('medication_records', 'record_date'),
+        ('period_records', 'record_date'),
+        ('whoop_daily_metrics', 'record_date'),
+        ('whoop_workouts', 'record_date'),
+        ('workout_checkins', 'workout_date'),
+    )
+    dates = set()
+    conn = get_connection()
+    try:
+        for table, col in tables:
+            try:
+                rows = conn.execute(
+                    f"SELECT DISTINCT {col} FROM {table} "
+                    f"WHERE {col} >= ? AND {col} <= ?",
+                    (from_date, to_date),
+                ).fetchall()
+                dates.update(str(r[0])[:10] for r in rows)
+            except Exception:
+                pass  # older schema missing the table — skip it
+    finally:
+        conn.close()
+    return jsonify({'from': from_date, 'to': to_date, 'dates': sorted(dates)})
+
+
 @app.route('/api/whoop/disconnect', methods=['POST'])
 def whoop_disconnect():
     """Disconnect Whoop — remove stored tokens."""
