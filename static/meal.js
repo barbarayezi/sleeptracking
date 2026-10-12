@@ -503,7 +503,20 @@ class MealManager {
             this._showAiMessage('请选择图片文件。', 'error');
             return;
         }
-        const oversized = files.filter(f => f.size > 10 * 1024 * 1024);
+
+        // 上传前客户端压缩：手机原图/Retina 截图常达 3-8MB，跨境弱上行链路
+        // 传一张要十几分钟甚至停滞。压缩到 ≤1600px JPEG（约 200-400KB）后
+        // 秒传，AI 识别与预览质量也足够。压缩在大小校验之前做，>10MB 的
+        // 原图压缩后也能正常收录。
+        let compressedAny = false;
+        const staged = [];
+        for (const f of files) {
+            const c = await this._compressImage(f);
+            if (c !== f) compressedAny = true;
+            staged.push(c);
+        }
+
+        const oversized = staged.filter(f => f.size > 10 * 1024 * 1024);
         if (oversized.length) {
             this._showAiMessage('图片过大（上限 10MB）。', 'error');
             return;
@@ -511,9 +524,10 @@ class MealManager {
 
         // Stage each new file with the channel's role; for HEIC/HEIF we ask
         // the server to convert to JPEG so non-Safari browsers can preview.
-        let pending = files.length;
+        let pending = staged.length;
         const finalize = () => { if (pending === 0) this._renderImageGrid(); };
-        for (const file of files) {
+        if (compressedAny) console.info('[meal] 图片已客户端压缩后上传');
+        for (const file of staged) {
             const item = { file, role, dataUrl: '' };
             this._imageFiles.push(item);
             try {
@@ -527,6 +541,80 @@ class MealManager {
             finalize();
         }
         this._renderImageGrid();
+    }
+
+    /**
+     * Client-side downscale/re-encode for large images before upload.
+     *
+     * - HEIC/HEIF: skipped (browser can't decode; server converts for preview,
+     *   and the original blob is what the AI pipeline re-encodes).
+     * - GIF: skipped (canvas re-encode would lose animation).
+     * - ≤600KB: returned as-is (already cheap to upload).
+     * - Otherwise: decode (createImageBitmap with <img> fallback), scale so
+     *   the longest edge ≤1600px, re-encode as JPEG q=0.85 on a white
+     *   background (preserves PNG transparency visually). If the result is
+     *   somehow larger than the original, the original is kept.
+     * Any decode/encode failure returns the original file — compression must
+     * never block saving.
+     */
+    async _compressImage(file) {
+        try {
+            const head = await file.slice(0, 16).arrayBuffer();
+            const view = new Uint8Array(head);
+            const isHeic = view.length >= 16
+                && view[4] === 0x66 && view[5] === 0x74 && view[6] === 0x79 && view[7] === 0x70
+                && ['heic', 'heix', 'mif1', 'msf1'].includes(
+                    String.fromCharCode(view[8], view[9], view[10], view[11]).toLowerCase()
+                );
+            if (isHeic || file.type === 'image/gif') return file;
+            if (file.size <= 600 * 1024) return file;
+
+            const MAX_DIM = 1600;
+            const QUALITY = 0.85;
+            let src;
+            try {
+                src = await createImageBitmap(file);
+            } catch (e) {
+                const url = URL.createObjectURL(file);
+                try {
+                    src = await new Promise((resolve, reject) => {
+                        const img = new Image();
+                        img.onload = () => resolve(img);
+                        img.onerror = () => reject(new Error('image decode failed'));
+                        img.src = url;
+                    });
+                } finally {
+                    URL.revokeObjectURL(url);
+                }
+            }
+
+            const scale = Math.min(1, MAX_DIM / Math.max(src.width, src.height));
+            const w = Math.max(1, Math.round(src.width * scale));
+            const h = Math.max(1, Math.round(src.height * scale));
+            const canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, w, h);
+            ctx.drawImage(src, 0, 0, w, h);
+            if (src.close) src.close();
+
+            const blob = await new Promise((resolve, reject) => {
+                canvas.toBlob(
+                    (b) => (b ? resolve(b) : reject(new Error('canvas.toBlob failed'))),
+                    'image/jpeg',
+                    QUALITY
+                );
+            });
+            if (!blob || blob.size >= file.size) return file;
+
+            const base = (file.name || 'photo').replace(/\.[^.]+$/, '');
+            return new File([blob], `${base}-c.jpg`, { type: 'image/jpeg' });
+        } catch (err) {
+            console.warn('[meal] compress failed, keep original', err);
+            return file;
+        }
     }
 
     /**
