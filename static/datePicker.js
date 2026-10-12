@@ -5,8 +5,8 @@
  *  - 点击顶栏 #current-date-label 弹出日历浮层，可 ‹/› 翻月、«/» 翻年，
  *    点任意日期跳转（走 App.setDate 统一刷新所有模块）。
  *  - 高亮今天与当前选中日期；「今天」按钮一键回到今天。
- *  - 数据覆盖标注：当天及以前若在所有记录表（睡眠/饮食/用药/经期/运动/Whoop）
- *    中均无任何记录，日期下方标红点，方便发现漏记的日子。
+ *  - 数据覆盖标注：当天及以前若没有 meal_records（餐食）记录，日期下方标红点，
+ *    方便发现哪天忘了记餐食。
  *  - 点击浮层外部 / Esc 关闭。
  */
 (function () {
@@ -103,7 +103,7 @@
         foot.className = 'dp-foot';
         foot.innerHTML = `
             <button type="button" class="dp-today-btn">今天</button>
-            <span class="dp-legend"><i class="dp-dot"></i>当天无记录</span>
+            <span class="dp-legend"><i class="dp-dot"></i>未记录餐食</span>
             <button type="button" class="dp-close-btn">关闭</button>`;
         popup.appendChild(foot);
 
@@ -135,7 +135,7 @@
         try {
             const ctrl = new AbortController();
             const timer = setTimeout(() => ctrl.abort(), 10000);  // 与站点超时约定一致
-            const resp = await fetch(`/api/data-coverage?from=${from}&to=${to}`, { signal: ctrl.signal });
+            const resp = await fetch(`/api/data-coverage?from=${from}&to=${to}&kind=meal`, { signal: ctrl.signal });
             clearTimeout(timer);
             if (!resp.ok) return null;
             const data = await resp.json();

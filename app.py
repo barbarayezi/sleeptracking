@@ -2535,26 +2535,29 @@ def health_overview():
 
 @app.route('/api/data-coverage')
 def data_coverage():
-    """Dates within [from, to] having at least one record in any log table.
+    """Dates within [from, to] that have a record, used to flag empty days.
 
-    Lightweight presence check for the date-picker calendar: days NOT in the
-    returned list (before today) have no sleep/meal/medication/period/workout/
-    Whoop data at all, so the UI can flag them with a red dot.
+    ?kind=meal (default) → only meal_records (餐食) presence, per calendar red-dot
+    rule "当天没记餐食就标红点". ?kind=any → union of all log tables.
     """
     from_date = request.args.get('from')
     to_date = request.args.get('to')
+    kind = request.args.get('kind', 'meal')
     if not from_date or not to_date:
         return jsonify({'error': 'from and to are required (YYYY-MM-DD)'}), 400
     # (table, date column) — meal/workout check-ins use their own column names
-    tables = (
-        ('sleep_records', 'record_date'),
-        ('meal_records', 'meal_date'),
-        ('medication_records', 'record_date'),
-        ('period_records', 'record_date'),
-        ('whoop_daily_metrics', 'record_date'),
-        ('whoop_workouts', 'record_date'),
-        ('workout_checkins', 'workout_date'),
-    )
+    if kind == 'any':
+        tables = (
+            ('sleep_records', 'record_date'),
+            ('meal_records', 'meal_date'),
+            ('medication_records', 'record_date'),
+            ('period_records', 'record_date'),
+            ('whoop_daily_metrics', 'record_date'),
+            ('whoop_workouts', 'record_date'),
+            ('workout_checkins', 'workout_date'),
+        )
+    else:  # meal
+        tables = (('meal_records', 'meal_date'),)
     dates = set()
     conn = get_connection()
     try:
@@ -2570,7 +2573,7 @@ def data_coverage():
                 pass  # older schema missing the table — skip it
     finally:
         conn.close()
-    return jsonify({'from': from_date, 'to': to_date, 'dates': sorted(dates)})
+    return jsonify({'from': from_date, 'to': to_date, 'kind': kind, 'dates': sorted(dates)})
 
 
 @app.route('/api/whoop/disconnect', methods=['POST'])
