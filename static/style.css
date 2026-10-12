@@ -1821,3 +1821,116 @@ i.algo-lg-line { background: transparent; border-left: 1px solid var(--gray-400)
     .calendar-year { grid-template-columns: repeat(2, 1fr); }
     .pc-grid { grid-template-columns: 1fr; }
 }
+
+/* ── Date Picker（顶栏日期标签点击弹出，按月翻页任选年月日）── */
+.date-label-clickable {
+    cursor: pointer;
+    padding: 4px 10px;
+    border-radius: 8px;
+    transition: background-color .15s ease;
+    user-select: none;
+}
+.date-label-clickable:hover {
+    background-color: var(--primary-soft);
+}
+
+.date-picker-pop {
+    position: absolute;
+    z-index: 9999;
+    background: #ffffff;
+    border: 1px solid var(--border, #e5e7eb);
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(15, 23, 42, .16);
+    padding: 10px;
+    width: 252px;
+}
+
+.dp-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 2px;
+    margin-bottom: 6px;
+}
+.dp-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text, #0f172a);
+    white-space: nowrap;
+}
+.dp-nav {
+    border: none;
+    background: transparent;
+    color: var(--text, #0f172a);
+    font-size: 14px;
+    width: 26px;
+    height: 26px;
+    border-radius: 6px;
+    cursor: pointer;
+    line-height: 1;
+}
+.dp-nav:hover { background: var(--primary-soft); color: var(--primary-deep); }
+
+.dp-week {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    margin-bottom: 2px;
+}
+.dp-wcell {
+    text-align: center;
+    font-size: 11px;
+    color: var(--muted, #64748b);
+    padding: 3px 0;
+}
+
+.dp-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    row-gap: 2px;
+}
+.dp-day {
+    border: none;
+    background: transparent;
+    font-size: 12px;
+    height: 30px;
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--text, #0f172a);
+    line-height: 1;
+}
+.dp-day:hover { background: var(--primary-soft); }
+.dp-outside { color: #cbd5e1; }
+.dp-today {
+    color: var(--primary-deep);
+    font-weight: 600;
+    box-shadow: inset 0 0 0 1px var(--primary);
+}
+.dp-selected {
+    background: var(--primary) !important;
+    color: #ffffff !important;
+    font-weight: 600;
+}
+
+.dp-foot {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border, #eef2f7);
+}
+.dp-today-btn, .dp-close-btn {
+    border: 1px solid var(--border, #e5e7eb);
+    background: #ffffff;
+    color: var(--text, #0f172a);
+    font-size: 12px;
+    padding: 4px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+}
+.dp-today-btn:hover { background: var(--primary-soft); color: var(--primary-deep); }
+.dp-close-btn:hover { background: #f1f5f9; }
+
+@media (max-width: 640px) {
+    .date-picker-pop { width: 236px; }
+    .dp-day { height: 32px; font-size: 13px; }
+}
