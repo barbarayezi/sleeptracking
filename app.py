@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
 from flask import Flask, request, jsonify, render_template, redirect
+from werkzeug.exceptions import HTTPException
 from database import init_db, get_connection
 from reports import generate_report, get_quick_stats
 import models as models
@@ -50,6 +51,31 @@ def _set_no_cache_headers(response):
         response.headers['Pragma'] = 'no-cache'
         response.headers['Expires'] = '0'
     return response
+
+
+# ── 全局 JSON 错误处理 ──────────────────────────
+# Flask 默认对未捕获异常返回 HTML 错误页（<!doctype html>...），前端 resp.json()
+# 解析时只会报 "Unexpected token '<'"，把真实错误掩盖。对 /api/* 一律返回 JSON，
+# 并把完整堆栈写进日志（Render 日志可见），前端也能显示真实 HTTP 状态码。
+def _wants_json_error():
+    return request.path.startswith('/api/')
+
+
+@app.errorhandler(HTTPException)
+def _http_exception(e):
+    """4xx/5xx HTTP 异常：API 路径返回 JSON（含 404/405），其余保持默认页。"""
+    if _wants_json_error():
+        return jsonify({'error': e.description, 'status': e.code}), e.code
+    return e
+
+
+@app.errorhandler(Exception)
+def _uncaught_exception(e):
+    """未捕获异常：API 路径返回 JSON 500，非 API 保持 Flask 默认行为。"""
+    app.logger.exception('Unhandled error on %s %s', request.method, request.path)
+    if _wants_json_error():
+        return jsonify({'error': f'服务器内部错误：{type(e).__name__}: {e}'}), 500
+    return e
 
 
 # ──────────────────────────────────────────────

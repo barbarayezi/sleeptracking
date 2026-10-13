@@ -561,14 +561,32 @@ class MedicationManager {
             const url = isUpdate ? `/api/medications/${this._editingMedicationId}` : '/api/medications';
             const method = isUpdate ? 'PUT' : 'POST';
 
-            const resp = await fetch(url, {
-                method,
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data),
-            });
+            const ctrl = new AbortController();
+            const timeoutTimer = setTimeout(() => ctrl.abort(), 90 * 1000);
+            let resp;
+            try {
+                resp = await fetch(url, {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data),
+                    signal: ctrl.signal,
+                });
+            } finally {
+                clearTimeout(timeoutTimer);
+            }
 
-            if (resp.ok) {
-                const saved = await resp.json();
+            // 防御性解析（同 meal.js）：网关偶发返回空体/HTML 错误页，
+            // 直接 resp.json() 会抛 "Unexpected token '<'"，掩盖真实状态。
+            const text = await resp.text();
+            let body;
+            try {
+                body = text ? JSON.parse(text) : null;
+            } catch (e) {
+                body = undefined;   // 非 JSON（HTML 错误页 / 截断响应等）
+            }
+
+            if (resp.ok && body) {
+                const saved = body;
                 this._showMessage(isUpdate ? '✅ 已更新' : '✅ 保存成功！', 'success');
 
                 if (isUpdate) {
@@ -585,12 +603,27 @@ class MedicationManager {
                 if (window.ApiCache) window.ApiCache.invalidatePrefix('/api/medications');
                 await this._loadDaySummary();
                 if (window.ApiCache) ApiCache.invalidateAll();
+            } else if (resp.ok && body === null) {
+                // 2xx 但空响应体：服务端大概率已保存，核对列表防重复。
+                this._showMessage('⚠️ 服务器响应异常（返回空），正在核对是否已保存...', 'error');
+                if (window.ApiCache) ApiCache.invalidateAll();
+                await this.loadDate(this._selectedDate);
             } else {
-                const err = await resp.json();
-                this._showMessage('❌ ' + (err.error || '保存失败'), 'error');
+                const msg = (body && body.error)
+                    ? body.error
+                    : `保存失败 (HTTP ${resp.status}${body === undefined ? '，响应非 JSON' : ''})`;
+                this._showMessage('❌ ' + msg, 'error');
             }
         } catch (err) {
-            this._showMessage('❌ 网络错误: ' + err.message, 'error');
+            if (err && err.name === 'AbortError') {
+                this._showMessage('⚠️ 保存请求超时（90 秒无响应），正在核对是否已保存...', 'error');
+                try {
+                    if (window.ApiCache) ApiCache.invalidateAll();
+                    await this.loadDate(this._selectedDate);
+                } catch (e) { /* 核对失败不掩盖主提示 */ }
+            } else {
+                this._showMessage('❌ 网络错误: ' + err.message, 'error');
+            }
         } finally {
             this.btnSave.disabled = false;
             this.btnSave.textContent = '💾 保存药物';
@@ -605,8 +638,10 @@ class MedicationManager {
     async _deleteById(medId) {
         if (!medId) return;
         if (!confirm('确定要删除这条药物记录吗？')) return;
+        const ctrl = new AbortController();
+        const timeoutTimer = setTimeout(() => ctrl.abort(), 30 * 1000);
         try {
-            const resp = await fetch(`/api/medications/${medId}`, { method: 'DELETE' });
+            const resp = await fetch(`/api/medications/${medId}`, { method: 'DELETE', signal: ctrl.signal });
             if (resp.ok || resp.status === 204) {
                 this._medicationsForDate = this._medicationsForDate.filter(m => m.id !== medId);
                 if (this._editingMedicationId === medId) {
@@ -620,11 +655,19 @@ class MedicationManager {
                 if (window.ApiCache) ApiCache.invalidateAll();
                 this._showMessage('已删除。', 'success');
             } else {
-                const err = await resp.json();
-                this._showMessage('❌ ' + (err.error || '删除失败'), 'error');
+                // 网关可能返回空体/HTML 错误页，防御性解析（同 _save）
+                let errBody = null;
+                try { errBody = await resp.json(); } catch (e) { /* ignore */ }
+                this._showMessage('❌ ' + (errBody?.error || `删除失败 (HTTP ${resp.status})`), 'error');
             }
         } catch (err) {
-            this._showMessage('❌ 网络错误: ' + err.message, 'error');
+            if (err && err.name === 'AbortError') {
+                this._showMessage('❌ 删除请求超时，请稍后刷新页面核对。', 'error');
+            } else {
+                this._showMessage('❌ 网络错误: ' + err.message, 'error');
+            }
+        } finally {
+            clearTimeout(timeoutTimer);
         }
     }
 
