@@ -111,7 +111,7 @@ _DEFAULT_MODEL_LIST = [
     "deepseek-v3.2-chat",       # 性价比强
     "deepseek-v4-pro",
     "gpt-4o-mini",
-    "qwen-max",
+    "qwen3.6-plus",             # qwen-max 已于 2026-10-10 百炼下线，换在售型号
     "claude-3-5-sonnet",
 ]
 
@@ -360,10 +360,21 @@ def summarize(meals):
 
 # ── Vision (image) estimation ──────────────────────────────────────────────
 # Reuses the SAME gateway token as text estimation — only the model differs
-# (a vision-capable model such as qwen-vl-max). Honour LLM_VISION_* env vars
+# (a vision-capable model such as qwen3-vl-plus). Honour LLM_VISION_* env vars
 # so a deployment can point vision at its own endpoint/key if needed.
+#
+# 2026-10-16: 阿里云百炼于 2026-10-10 下线 qwen-vl-max / qwen-vl-plus 等
+# 历史主线模型（官方公告 118177），默认模型升级为在售的 qwen3-vl-plus，
+# 并提供回退列表——网关返回「模型不存在」时自动尝试下一个，避免再次
+# 因上游下线模型导致整个 AI 估算功能瘫痪。
 
-_VISION_MODEL_DEFAULT = "qwen-vl-max"
+_VISION_MODEL_DEFAULT = "qwen3-vl-plus"
+
+_VISION_MODEL_FALLBACKS = [
+    "qwen3-vl-plus",    # 当前在售主力视觉模型
+    "qwen3-vl-flash",   # 低成本高吞吐档
+    "qwen3.6-flash",    # 百炼公告推荐的视觉替代（多模态增强）
+]
 
 _IMAGE_PROMPT_TEMPLATE = """你是资深营养分析师。请仔细识别这张餐食图片里的所有菜品，估算每道菜的重量与营养，并给出整体健康评估。
 
@@ -394,6 +405,45 @@ def _load_vision_config():
     key = os.environ.get("LLM_VISION_API_KEY", "").strip() or key
     model = os.environ.get("LLM_VISION_MODEL", _VISION_MODEL_DEFAULT).strip()
     return base, key, model
+
+
+def _is_model_missing_error(msg):
+    """True when the gateway says this model name doesn't exist (retired/typo)."""
+    low = (msg or "").lower()
+    return ("not exist" in low) or ("model not found" in low) or ("does not exist" in low)
+
+
+def _call_vision_model(content, max_tokens):
+    """Call the vision model with automatic fallback on model-not-exist errors.
+
+    Returns (raw_response, None) on success or (None, error_message) on failure.
+    Tries LLM_VISION_MODEL (or _VISION_MODEL_DEFAULT) first, then
+    _VISION_MODEL_FALLBACKS in order — only falls through when the gateway
+    explicitly reports the model as missing; other errors (auth, quota,
+    network, bad image) surface immediately.
+    """
+    base, key, model = _load_vision_config()
+    if not (base and key):
+        return None, "未配置 LLM 视觉模型（需要网关凭据）。"
+
+    candidates = []
+    for m in (model, *_VISION_MODEL_FALLBACKS):
+        if m and m not in candidates:
+            candidates.append(m)
+
+    last_err = None
+    for i, cand in enumerate(candidates):
+        try:
+            raw = _call_model(content, model_override=cand, base_override=base,
+                              key_override=key, max_tokens=max_tokens)
+            return raw, None
+        except Exception as e:
+            msg = str(e)
+            last_err = msg
+            if _is_model_missing_error(msg):
+                continue  # 模型不存在（如下线）→ 尝试下一个候选
+            return None, msg  # 其他错误（鉴权/配额/图片）立即上报
+    return None, f"{last_err}（已依次尝试模型：{', '.join(candidates)}）"
 
 
 _JPEG_MAX_SIDE = 1600  # qwen-vl 侧尺寸上限以内留余量；也控制请求体大小
@@ -506,11 +556,9 @@ def analyze_meal_image(image_bytes, meal_name="", meal_quantity="normal", meal_t
         {"type": "text", "text": prompt},
     ]
 
-    try:
-        raw = _call_model(content, model_override=model, base_override=base,
-                          key_override=key, max_tokens=2500)
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
+    raw, err = _call_vision_model(content, max_tokens=2500)
+    if err:
+        return {"ok": False, "error": err}
 
     text = _collect_text(raw)
     if not text:
@@ -632,11 +680,9 @@ def analyze_meal_images(before_images, after_images=None, meal_name="", meal_qua
     )
 
     content = blocks + [{"type": "text", "text": prompt}]
-    try:
-        raw = _call_model(content, model_override=model, base_override=base,
-                          key_override=key, max_tokens=3000)
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
+    raw, err = _call_vision_model(content, max_tokens=3000)
+    if err:
+        return {"ok": False, "error": err}
 
     text = _collect_text(raw)
     if not text:

@@ -33,5 +33,7 @@ services:
         sync: false
       - key: LLM_VISION_API_KEY
         sync: false
+      # qwen-vl-max 已于 2026-10-10 在百炼下线（官方公告 118177），改用 qwen3-vl-plus；
+      # 代码侧另有 qwen3-vl-flash / qwen3.6-flash 自动回退。
       - key: LLM_VISION_MODEL
-        value: "qwen-vl-max"
+        value: "qwen3-vl-plus"
