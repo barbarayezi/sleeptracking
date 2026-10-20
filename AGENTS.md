@@ -8,10 +8,15 @@ Sleep Tracker — Flask + Turso (cloud SQLite) 睡眠追踪应用。
 sleeptracking/
 ├── app.py               # Flask 入口，REST API 路由
 ├── database.py          # 数据库连接管理（Turso 优先，本地 SQLite 回退）
-├── models.py            # 睡眠记录 CRUD
-├── meal_models.py       # 饮食记录 CRUD
-├── period_models.py     # 经期记录 CRUD
-├── health_models.py     # HealthKit 数据 CRUD
+├── models/              # 数据模块包（2026-10-20 由根目录扁平模块收拢）
+│   ├── __init__.py      # 睡眠记录 CRUD（原 models.py，`import models` 兼容）
+│   ├── meal.py          # 饮食记录 CRUD（原 meal_models.py）
+│   ├── period.py        # 经期记录 CRUD（原 period_models.py）
+│   ├── health.py        # HealthKit/Whoop 健康数据 CRUD（原 health_models.py）
+│   ├── workout.py       # 训练打卡 CRUD（原 workout_models.py）
+│   ├── medication.py    # 用药记录/类别 CRUD（原 medication_models.py）
+│   ├── daily_report.py  # 日报存取（原 daily_report_models.py）
+│   └── nutrition.py     # LLM 营养估算（原 nutrition.py）
 ├── reports.py           # 报告生成（结构化数据 + CLI 接口）
 ├── requirements.txt     # Python 依赖
 ├── .env.example         # 环境变量模板
