@@ -406,7 +406,7 @@
 
                     <!-- Health metrics (体重/喝水/步数) — only for night sleep, optional -->
                     <div class="form-row" id="health-metrics-group">
-                        <label class="form-label">昨日健康数据 <span class="label-hint">（选填 · 步数与运动距离由 Whoop 自动预填，可改）</span></label>
+                        <label class="form-label">昨日健康数据 <span class="label-hint">（选填 · 步数由 Whoop 自动预填；运动距离默认按步数估算，均可改）</span></label>
                         <div class="health-metrics-row">
                             <div class="health-metric-item">
                                 <label class="health-metric-label" for="weight">体重 <span class="label-hint-2">· 手环不测，手动</span></label>
@@ -441,10 +441,10 @@
                                 </div>
                             </div>
                             <div class="health-metric-item">
-                                <label class="health-metric-label" for="distance-km">运动距离 <span class="label-hint-2">· Whoop 自动</span></label>
+                                <label class="health-metric-label" for="distance-km">运动距离 <span class="label-hint-2" id="distance-source-hint">· 按步数估算</span></label>
                                 <div class="input-with-unit">
                                     <input type="number" id="distance-km" class="form-input" step="0.1" min="0" max="500"
-                                        placeholder="自动预填">
+                                        placeholder="自动估算">
                                     <span class="input-unit">km</span>
                                 </div>
                             </div>
@@ -1009,7 +1009,7 @@
     </footer>
 
     <script src="/static/apiCache.js?v=3"></script>
-    <script src="/static/form.js?v=18"></script>
+    <script src="/static/form.js?v=19"></script>
     <script src="/static/meal.js?v=26"></script>
     <script src="/static/period.js?v=16"></script>
     <script src="/static/medication.js?v=6"></script>

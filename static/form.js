@@ -49,9 +49,11 @@ class FormManager {
     }
 
     /**
-     * Auto-fill steps / distance from Whoop when the form is empty (new record).
-     * Manual values win: only fills inputs that are still blank. Whoop only
-     * provides steps + distance, so weight/water/kcal are left untouched.
+     * Auto-fill steps / distance when the form is empty (new record).
+     * Steps come from Whoop (cycle.step_count). Whoop has no all-day
+     * distance — distance_km only exists for GPS-tracked workouts, so when
+     * that's absent we estimate from steps (stride 0.7 m). Manual values win:
+     * only fills inputs that are still blank. Weight/water/kcal untouched.
      */
     async _prefillFromWhoop() {
         if (this._editingRecordId !== null) return;  // editing — values already populated
@@ -61,18 +63,56 @@ class FormManager {
             if (!resp.ok) return;
             const rows = await resp.json();
             const row = Array.isArray(rows) ? rows[0] : null;
-            if (!row) return;
             const stepsInput = document.getElementById('steps');
             const distInput = document.getElementById('distance-km');
-            if (stepsInput && !stepsInput.value && row.steps != null) {
-                stepsInput.value = Math.round(row.steps);
+            if (!stepsInput || !distInput) return;
+            if (row) {
+                if (!stepsInput.value && row.steps != null) {
+                    stepsInput.value = Math.round(row.steps);
+                }
+                if (!distInput.value && row.distance_km != null) {
+                    // Real Whoop GPS distance (rare — only GPS-tracked workouts)
+                    distInput.value = Number(row.distance_km).toFixed(1);
+                    distInput.dataset.estimated = '0';
+                    this._setDistanceHint('· Whoop 自动');
+                }
             }
-            if (distInput && !distInput.value && row.distance_km != null) {
-                distInput.value = Number(row.distance_km).toFixed(1);
-            }
+            this._updateDistanceEstimate();
         } catch (err) {
             // Never block the form on a failed whoop prefill.
         }
+    }
+
+    /**
+     * Estimate distance from steps when the distance field has no real value.
+     * km = steps × 0.7 m / 1000. Skipped while editing a saved record.
+     */
+    _updateDistanceEstimate() {
+        const stepsInput = document.getElementById('steps');
+        const distInput = document.getElementById('distance-km');
+        if (!stepsInput || !distInput) return;
+        if (this._editingRecordId !== null) return;  // editing: keep saved values
+        const steps = parseFloat(stepsInput.value);
+        if (!steps || steps <= 0) {
+            // Steps gone → drop the estimate we generated (manual values stay)
+            if (distInput.dataset.estimated === '1') {
+                distInput.value = '';
+                distInput.dataset.estimated = '';
+                this._setDistanceHint('');
+            }
+            return;
+        }
+        if (distInput.value && distInput.dataset.estimated !== '1') return;  // real value wins
+        const km = steps * 0.7 / 1000;
+        distInput.value = km.toFixed(1);
+        distInput.dataset.estimated = '1';
+        this._setDistanceHint('· 步数估算，可改');
+    }
+
+    /** Update the provenance hint next to the 运动距离 label ('' resets to default). */
+    _setDistanceHint(text) {
+        const hint = document.getElementById('distance-source-hint');
+        if (hint) hint.textContent = text || '· 按步数估算';
     }
 
     /** Return the currently selected date. */
@@ -106,6 +146,20 @@ class FormManager {
         typeRadios.forEach(radio => {
             radio.addEventListener('change', () => this._handleRecordTypeChange());
         });
+
+        // Distance auto-estimation from steps (Whoop has no all-day distance)
+        const stepsInput = document.getElementById('steps');
+        const distInput = document.getElementById('distance-km');
+        if (stepsInput) {
+            stepsInput.addEventListener('input', () => this._updateDistanceEstimate());
+        }
+        if (distInput) {
+            distInput.addEventListener('input', () => {
+                // User typed a manual value — stop treating it as estimated
+                distInput.dataset.estimated = '';
+                this._setDistanceHint('· 手动');
+            });
+        }
     }
 
     /* ── Conditional Logic ────────────────── */
@@ -136,6 +190,11 @@ class FormManager {
             document.getElementById('steps').value = '';
             document.getElementById('activity-kcal').value = '';
             document.getElementById('distance-km').value = '';
+            const distInput = document.getElementById('distance-km');
+            if (distInput) {
+                distInput.dataset.estimated = '';
+                this._setDistanceHint('');
+            }
         }
     }
 
@@ -312,7 +371,11 @@ class FormManager {
         const kcalInput = document.getElementById('activity-kcal');
         if (kcalInput) kcalInput.value = '';
         const distInput = document.getElementById('distance-km');
-        if (distInput) distInput.value = '';
+        if (distInput) {
+            distInput.value = '';
+            distInput.dataset.estimated = '';
+        }
+        this._setDistanceHint('');
         const deviceScoreInput = document.getElementById('device-score');
         if (deviceScoreInput) deviceScoreInput.value = '';
     }
@@ -368,6 +431,8 @@ class FormManager {
             document.getElementById('steps').value = record.steps != null ? record.steps : '';
             document.getElementById('activity-kcal').value = record.activity_kcal != null ? record.activity_kcal : '';
             document.getElementById('distance-km').value = record.distance_km != null ? record.distance_km : '';
+            const distInput = document.getElementById('distance-km');
+            if (distInput) distInput.dataset.estimated = '';
         } else {
             this.healthMetricsGroup.style.display = 'none';
             document.getElementById('weight').value = '';
@@ -375,6 +440,11 @@ class FormManager {
             document.getElementById('steps').value = '';
             document.getElementById('activity-kcal').value = '';
             document.getElementById('distance-km').value = '';
+            const distInput = document.getElementById('distance-km');
+            if (distInput) {
+                distInput.dataset.estimated = '';
+                this._setDistanceHint('');
+            }
         }
     }
 
