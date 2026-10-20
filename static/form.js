@@ -87,13 +87,13 @@ class FormManager {
 
     /**
      * Estimate distance from steps when the distance field has no real value.
-     * km = steps × STRIDE_M / 1000. Skipped while editing a saved record.
+     * km = steps × STRIDE_M / 1000. Runs in new-record AND edit mode, but
+     * only touches a blank distance field — real saved/manual values win.
      */
     _updateDistanceEstimate() {
         const stepsInput = document.getElementById('steps');
         const distInput = document.getElementById('distance-km');
         if (!stepsInput || !distInput) return;
-        if (this._editingRecordId !== null) return;  // editing: keep saved values
         const steps = parseFloat(stepsInput.value);
         if (!steps || steps <= 0) {
             // Steps gone → drop the estimate we generated (manual values stay)
@@ -448,6 +448,8 @@ class FormManager {
                 this._setDistanceHint('');
             }
         }
+        // Blank distance + steps present → suggest an estimate (edit mode too)
+        this._updateDistanceEstimate();
     }
 
     /* ── Save / Delete ────────────────────── */
