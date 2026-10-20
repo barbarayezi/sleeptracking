@@ -22,9 +22,9 @@ import zipfile
 import xml.etree.ElementTree as ET
 
 # Make project imports resolvable when run directly
-# 脚本位于 scripts/ 时，需把项目根目录（上级）加入 path 才能 import health_models
+# 脚本位于 scripts/ 时，需把项目根目录（上级）加入 path 才能 import models 包
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import health_models
+from models import health as health_models
 
 STEP_TYPE = "HKQuantityTypeIdentifierStepCount"
 ENERGY_TYPE = "HKQuantityTypeIdentifierActiveEnergyBurned"

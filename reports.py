@@ -366,7 +366,7 @@ def _compute_period_correlation(from_dt, to_dt, by_date):
         period data is available to compare against.
     """
     try:
-        import period_models
+        from models import period as period_models
         periods = period_models.get_all_periods(
             from_date=from_dt.isoformat(), to_date=to_dt.isoformat())
         summary = period_models.get_cycle_summary()

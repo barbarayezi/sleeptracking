@@ -17,11 +17,11 @@ from werkzeug.exceptions import HTTPException
 from database import init_db, get_connection
 from reports import generate_report, get_quick_stats
 import models as models
-import meal_models as meal_models
-import nutrition as nutrition
-import period_models as period_models
-import daily_report_models as daily_report_models
-import medication_models as medication_models
+from models import meal as meal_models
+from models import nutrition as nutrition
+from models import period as period_models
+from models import daily_report as daily_report_models
+from models import medication as medication_models
 import time
 import socket
 
@@ -1940,7 +1940,7 @@ def medication_correlation_route():
         return jsonify({'error': 'to 参数格式应为 YYYY-MM-DD'}), 400
 
     try:
-        from health_models import medication_correlation
+        from models.health import medication_correlation
         result = medication_correlation(from_date=from_date, to_date=to_date)
     except Exception as e:
         return jsonify({'error': f'关联分析失败：{e}'}), 500
@@ -1951,7 +1951,7 @@ def medication_correlation_route():
 #  Workout Check-ins (dance classes etc.)
 # ──────────────────────────────────────────────
 
-import workout_models
+from models import workout as workout_models
 
 _WORKOUT_TYPES = set(workout_models.WORKOUT_TYPES)
 _WORKOUT_INTENSITIES = set(workout_models.INTENSITIES)
@@ -2095,7 +2095,7 @@ def workout_correlation_route():
         return jsonify({'error': 'to 参数格式应为 YYYY-MM-DD'}), 400
 
     try:
-        from health_models import workout_correlation
+        from models.health import workout_correlation
         result = workout_correlation(from_date=from_date, to_date=to_date)
     except Exception as e:
         return jsonify({'error': f'关联分析失败：{e}'}), 500
@@ -2438,7 +2438,7 @@ def whoop_daily():
     """Return Whoop daily metrics (recovery + strain/HR) for a date range."""
     from_date = request.args.get('from')
     to_date = request.args.get('to')
-    from health_models import get_whoop_daily
+    from models.health import get_whoop_daily
     return jsonify(get_whoop_daily(from_date, to_date))
 
 
@@ -2447,7 +2447,7 @@ def whoop_workouts():
     """Return Whoop workout sessions for a date range."""
     from_date = request.args.get('from')
     to_date = request.args.get('to')
-    from health_models import get_workouts
+    from models.health import get_workouts
     return jsonify(get_workouts(from_date, to_date))
 
 
@@ -2475,7 +2475,7 @@ def healthkit_ingest():
                   "局域网 / Tailscale 内任意设备可写入健康数据，建议配置共享密钥。")
             _ingest_key_warned = True
 
-    from health_models import bulk_upsert_health_metrics, upsert_health_metric
+    from models.health import bulk_upsert_health_metrics, upsert_health_metric
     try:
         payload = request.get_json(force=True, silent=True)
     except Exception:
@@ -2542,7 +2542,7 @@ def healthkit_metrics():
     metric_type = request.args.get('type', 'steps')
     from_date = request.args.get('from')
     to_date = request.args.get('to')
-    from health_models import get_health_metrics
+    from models.health import get_health_metrics
     return jsonify(get_health_metrics(metric_type, from_date, to_date))
 
 
@@ -2555,7 +2555,7 @@ def health_overview():
         from datetime import datetime, timedelta
         to_date = datetime.now().strftime('%Y-%m-%d')
         from_date = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
-    from health_models import get_health_overview
+    from models.health import get_health_overview
     return jsonify(get_health_overview(from_date, to_date))
 
 

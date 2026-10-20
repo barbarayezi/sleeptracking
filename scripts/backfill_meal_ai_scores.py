@@ -34,7 +34,7 @@ socket.setdefaulttimeout(20)
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import nutrition  # noqa: E402  (imports only stdlib, safe)
+from models import nutrition as nutrition  # noqa: E402  (imports only stdlib, safe)
 
 
 def _load_env(path):
