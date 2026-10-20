@@ -5,6 +5,8 @@
  */
 
 class FormManager {
+    /* Stride for distance estimation: height 163.4 cm × 0.413 (female factor) ≈ 0.67 m */
+    static STRIDE_M = 0.67;
     constructor() {
         this.form = document.getElementById('sleep-form');
         this.btnSave = document.getElementById('btn-save');
@@ -52,7 +54,7 @@ class FormManager {
      * Auto-fill steps / distance when the form is empty (new record).
      * Steps come from Whoop (cycle.step_count). Whoop has no all-day
      * distance — distance_km only exists for GPS-tracked workouts, so when
-     * that's absent we estimate from steps (stride 0.7 m). Manual values win:
+     * that's absent we estimate from steps (stride STRIDE_M). Manual values win:
      * only fills inputs that are still blank. Weight/water/kcal untouched.
      */
     async _prefillFromWhoop() {
@@ -85,7 +87,7 @@ class FormManager {
 
     /**
      * Estimate distance from steps when the distance field has no real value.
-     * km = steps × 0.7 m / 1000. Skipped while editing a saved record.
+     * km = steps × STRIDE_M / 1000. Skipped while editing a saved record.
      */
     _updateDistanceEstimate() {
         const stepsInput = document.getElementById('steps');
@@ -103,7 +105,7 @@ class FormManager {
             return;
         }
         if (distInput.value && distInput.dataset.estimated !== '1') return;  // real value wins
-        const km = steps * 0.7 / 1000;
+        const km = steps * FormManager.STRIDE_M / 1000;
         distInput.value = km.toFixed(1);
         distInput.dataset.estimated = '1';
         this._setDistanceHint('· 步数估算，可改');
