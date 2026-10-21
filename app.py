@@ -216,6 +216,39 @@ def get_record(record_id):
     return jsonify(record)
 
 
+def _auto_attach_activity(record):
+    """创建/更新睡眠记录后，steps/distance_km 缺失时从 Whoop 当日行自动补齐。
+
+    手动值永远优先（只填 None）；distance_km 按步幅 0.67m 估算。
+    与 whoop.sync.auto_attach_activity（同步期批量回填）构成双保险，
+    用户无需在表单里看预填后再手动保存一遍。
+    """
+    if not record or (record.get('record_type') and record['record_type'] != 'night'):
+        return record
+    if record.get('steps') is not None and record.get('distance_km') is not None:
+        return record
+    d = record.get('record_date')
+    if not d:
+        return record
+    from whoop.sync import STRIDE_M
+    conn = get_connection()
+    try:
+        wd = conn.execute(
+            "SELECT steps FROM whoop_daily_metrics WHERE record_date=?", (d,)).fetchone()
+        whoop_steps = wd["steps"] if wd else None
+    finally:
+        conn.close()
+    steps = record['steps'] if record.get('steps') is not None else whoop_steps
+    patch = {}
+    if record.get('steps') is None and whoop_steps is not None:
+        patch['steps'] = int(whoop_steps)
+    if record.get('distance_km') is None and steps is not None:
+        patch['distance_km'] = round(float(steps) * STRIDE_M / 1000.0, 1)
+    if not patch:
+        return record
+    return models.update_record_by_id(record['id'], patch)
+
+
 @app.route('/api/records', methods=['POST'])
 def create_record():
     """Create a new sleep record. Multiple records per date are allowed."""
@@ -228,6 +261,7 @@ def create_record():
         return jsonify({'error': errors[0]}), 400
 
     record = models.create_record(data)
+    record = _auto_attach_activity(record)
     return jsonify(record), 201
 
 
@@ -245,6 +279,7 @@ def update_record(record_id):
     record = models.update_record_by_id(record_id, data)
     if record is None:
         return jsonify({'error': 'Record not found'}), 404
+    record = _auto_attach_activity(record)
     return jsonify(record)
 
 

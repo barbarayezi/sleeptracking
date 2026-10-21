@@ -343,6 +343,42 @@ def _date_from_ts(ts_str):
     return s[:10] if s else None
 
 
+# 与 static/form.js 的 FormManager.STRIDE_M 保持一致（身高163.4cm×0.413）。
+# 后端自动回填 distance_km 时用它估算，避免用户在表单里看到预填后还要手动存一遍。
+STRIDE_M = 0.67
+
+
+def auto_attach_activity(from_date):
+    """把 Whoop 步数/估算距离自动写进已存在的夜间睡眠记录。
+
+    row D（whoop_daily_metrics）= 醒来日期 D 的昨日白天活动。
+    只填空位：steps 为 NULL 才写 Whoop 步数（手动值永远优先）；
+    distance_km 为 NULL 且已有 steps（含刚回填的）才按步幅估算写入。
+    在每次 sync_daily_metrics 后调用，用户无需在表单里手动誊抄保存。
+    """
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT record_date, steps FROM whoop_daily_metrics "
+            "WHERE steps IS NOT NULL AND record_date >= ?",
+            (from_date,)).fetchall()
+        attached = 0
+        for r in rows:
+            d, steps = r["record_date"], r["steps"]
+            cur = conn.execute(
+                "UPDATE sleep_records SET steps=? WHERE record_type='night' "
+                "AND record_date=? AND steps IS NULL", (steps, d))
+            attached += max(cur.rowcount or 0, 0)
+            conn.execute(
+                "UPDATE sleep_records SET distance_km=? WHERE record_type='night' "
+                "AND record_date=? AND distance_km IS NULL AND steps IS NOT NULL",
+                (round(float(steps) * STRIDE_M / 1000.0, 1), d))
+        conn.commit()
+        return {"attached": attached}
+    finally:
+        conn.close()
+
+
 def sync_daily_metrics(days_back=30):
     """Sync Whoop recovery (full) + daily strain/HR into whoop_daily_metrics (keyed by date)."""
     client = WhoopClient()
@@ -466,7 +502,9 @@ def sync_daily_metrics(days_back=30):
         synced += 1
     conn.commit()
     conn.close()
-    return {"synced": synced}
+    # 步数/距离自动附到当日已存在的睡眠记录上（手动值优先，只填空位）
+    attach = auto_attach_activity(from_date)
+    return {"synced": synced, **attach}
 
 
 def sync_workouts(days_back=30):
