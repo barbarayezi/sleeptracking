@@ -353,26 +353,36 @@ def sync_daily_metrics(days_back=30):
     from_date = (today - timedelta(days=days_back)).strftime("%Y-%m-%d")
     to_date = today.strftime("%Y-%m-%d")
 
-    # 1) Cycles → daily strain / kilojoule / HR (keyed by cycle date)
+    # 1) Cycles → daily strain / kilojoule / HR
+    # 行语义：row D = 「醒来日期 D」的昨日白天活动 + 当天恢复分。
+    # Cycle 覆盖 [入睡onset → 下一次onset]，其白天活动归属规则：
+    #   onset 当地时间 ≥18:00（夜猫子正常入睡）→ 白天 = onset 次日；否则 → onset 当天。
+    # 行 key = 白天日期 + 1 天（= 醒来日期）。
+    # 此前按 end 日期归属：夜猫子一天内两次入睡（如 00:52 与 23:26）会让两个
+    # cycle 撞到同一行，API 按新→旧排序导致旧 cycle 覆盖新数据（10/20 白天的
+    # 9842 步被 10/19 的 9358 挤掉，表单 10/21 因此预填不到）。
     daily = {}
+    now_cn = datetime.utcnow() + timedelta(hours=8)
+    today_str = now_cn.strftime("%Y-%m-%d")
+    yesterday_str = (now_cn - timedelta(days=1)).strftime("%Y-%m-%d")
     try:
         cycles = client.get_all_cycle_data(start_date=from_date, end_date=to_date)
         for c in cycles:
-            end = c.get("end")
-            if not end:
-                # 未闭合周期（end=None）：可能是今天正在进行中的真实周期，
-                # 也可能是手环更早某天起就离线、冻结的旧周期。后者会带着恒定
-                # 的初始 strain/kj 被反复归到“今天”写入，污染 9/19、9/20 这类
-                # 历史日期（见 2026-09-20 断档排查）。只有 start 确属“今天”的
-                # 才视为今日真实进行中周期并写入；其余离线冻结周期直接跳过。
-                start_date = _date_from_ts(c.get("start"))
-                if start_date != today.strftime("%Y-%m-%d"):
+            start_d = _date_from_ts(c.get("start"))
+            start_hm = _parse_whoop_time(c.get("start"))
+            if not start_d or not start_hm:
+                continue
+            daytime = start_d
+            if int(start_hm[11:13]) >= 18:
+                daytime = (datetime.strptime(start_d, "%Y-%m-%d")
+                           + timedelta(days=1)).strftime("%Y-%m-%d")
+            if not c.get("end"):
+                # 未闭合周期：只接受昨晚/今晨开始的（进行中的真实周期）；
+                # 更早起就离线冻结的旧周期直接跳过，见 2026-09-20 断档排查。
+                if start_d not in (today_str, yesterday_str):
                     continue
-                d = today.strftime("%Y-%m-%d")
-            else:
-                d = _date_from_ts(end)
-                if not d:
-                    continue
+            d = (datetime.strptime(daytime, "%Y-%m-%d")
+                 + timedelta(days=1)).strftime("%Y-%m-%d")
             score = c.get("score") or {}
             row = daily.setdefault(d, {})
             row["strain"] = score.get("strain")
