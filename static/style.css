@@ -62,6 +62,7 @@
     /* 圆角（ds.css：sm4 / md6 / lg8 / xl12 / 2xl16 / full999） */
     --radius:       12px;
     --radius-sm:    6px;
+    --radius-md:    8px;
     --radius-lg:    16px;
     --radius-xl:    20px;
     --radius-pill:  999px;
@@ -867,6 +868,24 @@ body {
 }
 .btn-quick-med:active { transform: translateY(0); }
 .btn-quick-med:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+.btn-quick-workout {
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--bg-card);
+    color: var(--text);
+    font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: .15s;
+    text-align: center;
+    font-family: inherit;
+}
+.btn-quick-workout:hover {
+    border-color: var(--success);
+    background: var(--success-soft);
+    transform: translateY(-1px);
+}
+.btn-quick-workout:active { transform: translateY(0); }
+.btn-quick-workout:disabled { opacity: .5; cursor: not-allowed; transform: none; }
 .medication-quickfill-hint {
     margin-top: 8px;
     font-size: 12px;
