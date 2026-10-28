@@ -337,11 +337,12 @@ def get_health_overview(from_date, to_date):
             day["workout_count"] = wk["count"]
             day["workout_strain"] = round(wk["strain"], 1)
             day["sports"] = wk["sports"]
-        # 活动字段来源（2026-09-29 起）：手动录入优先，Whoop 自动兜底。
+        # 活动字段来源（2026-10-28 更新）：手动录入优先，Whoop 自动兜底。
         #   - steps / distance_km：表单手填优先；为空时回退 whoop_daily_metrics
         #     的 steps（cycle.step_count）与 distance_km（当日 workout 距离求和）。
-        #   - activity_kcal：Whoop 只有全天总消耗 kilojoule（含基础代谢、单位为千焦），
-        #     没有"活动热量 kcal"这一口径，硬换算会误导，故保持手动唯一来源。
+        #   - activity_kcal：Whoop 无独立"活动热量"口径，但 cycle 的全天总消耗
+        #     kilojoule（含基础代谢）经 auto_attach_activity 换算成 kcal 写入
+        #     sleep_records（2026-10-28 起，只填空位）；手动值仍永远优先。
         #   一律不读 health_metrics（苹果健康/外部同步），即便有也不取。
         if s:
             day["steps"] = s["steps"]

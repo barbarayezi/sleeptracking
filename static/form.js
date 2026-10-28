@@ -51,11 +51,12 @@ class FormManager {
     }
 
     /**
-     * Auto-fill steps / distance when the form is empty (new record).
+     * Auto-fill steps / distance / kcal when the form is empty (new record).
      * Steps come from Whoop (cycle.step_count). Whoop has no all-day
      * distance — distance_km only exists for GPS-tracked workouts, so when
-     * that's absent we estimate from steps (stride STRIDE_M). Manual values win:
-     * only fills inputs that are still blank. Weight/water/kcal untouched.
+     * that's absent we estimate from steps (stride STRIDE_M). kcal comes
+     * from Whoop's all-day kilojoule (÷4.184, includes BMR). Manual values win:
+     * only fills inputs that are still blank. Weight/water untouched.
      */
     async _prefillFromWhoop() {
         if (this._editingRecordId !== null) return;  // editing — values already populated
@@ -67,6 +68,7 @@ class FormManager {
             const row = Array.isArray(rows) ? rows[0] : null;
             const stepsInput = document.getElementById('steps');
             const distInput = document.getElementById('distance-km');
+            const kcalInput = document.getElementById('activity-kcal');
             if (!stepsInput || !distInput) return;
             if (row) {
                 if (!stepsInput.value && row.steps != null) {
@@ -77,6 +79,9 @@ class FormManager {
                     distInput.value = Number(row.distance_km).toFixed(1);
                     distInput.dataset.estimated = '0';
                     this._setDistanceHint('· Whoop 自动');
+                }
+                if (kcalInput && !kcalInput.value && row.kilojoule != null) {
+                    kcalInput.value = Math.round(row.kilojoule / 4.184);
                 }
             }
             this._updateDistanceEstimate();

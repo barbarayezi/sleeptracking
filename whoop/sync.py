@@ -349,30 +349,39 @@ STRIDE_M = 0.67
 
 
 def auto_attach_activity(from_date):
-    """把 Whoop 步数/估算距离自动写进已存在的夜间睡眠记录。
+    """把 Whoop 步数/估算距离/热量消耗自动写进已存在的夜间睡眠记录。
 
     row D（whoop_daily_metrics）= 醒来日期 D 的昨日白天活动。
-    只填空位：steps 为 NULL 才写 Whoop 步数（手动值永远优先）；
-    distance_km 为 NULL 且已有 steps（含刚回填的）才按步幅估算写入。
+    只填空位（手动值永远优先）：
+    - steps 为 NULL 才写 Whoop 步数；
+    - distance_km 为 NULL 且已有 steps（含刚回填的）才按步幅估算写入；
+    - activity_kcal 为 NULL 且当日有 kilojoule 才写 Whoop 全天总消耗
+      （kJ ÷ 4.184 → kcal，含基础代谢——UI 标签为「热量消耗 · Whoop 自动」）。
     在每次 sync_daily_metrics 后调用，用户无需在表单里手动誊抄保存。
     """
     conn = get_connection()
     try:
         rows = conn.execute(
-            "SELECT record_date, steps FROM whoop_daily_metrics "
-            "WHERE steps IS NOT NULL AND record_date >= ?",
+            "SELECT record_date, steps, kilojoule FROM whoop_daily_metrics "
+            "WHERE (steps IS NOT NULL OR kilojoule IS NOT NULL) AND record_date >= ?",
             (from_date,)).fetchall()
         attached = 0
         for r in rows:
-            d, steps = r["record_date"], r["steps"]
-            cur = conn.execute(
-                "UPDATE sleep_records SET steps=? WHERE record_type='night' "
-                "AND record_date=? AND steps IS NULL", (steps, d))
-            attached += max(cur.rowcount or 0, 0)
-            conn.execute(
-                "UPDATE sleep_records SET distance_km=? WHERE record_type='night' "
-                "AND record_date=? AND distance_km IS NULL AND steps IS NOT NULL",
-                (round(float(steps) * STRIDE_M / 1000.0, 1), d))
+            d, steps, kj = r["record_date"], r["steps"], r["kilojoule"]
+            if steps is not None:
+                cur = conn.execute(
+                    "UPDATE sleep_records SET steps=? WHERE record_type='night' "
+                    "AND record_date=? AND steps IS NULL", (steps, d))
+                attached += max(cur.rowcount or 0, 0)
+                conn.execute(
+                    "UPDATE sleep_records SET distance_km=? WHERE record_type='night' "
+                    "AND record_date=? AND distance_km IS NULL AND steps IS NOT NULL",
+                    (round(float(steps) * STRIDE_M / 1000.0, 1), d))
+            if kj is not None:
+                conn.execute(
+                    "UPDATE sleep_records SET activity_kcal=? WHERE record_type='night' "
+                    "AND record_date=? AND activity_kcal IS NULL",
+                    (round(float(kj) / 4.184), d))
         conn.commit()
         return {"attached": attached}
     finally:

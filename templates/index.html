@@ -406,7 +406,7 @@
 
                     <!-- Health metrics (体重/喝水/步数) — only for night sleep, optional -->
                     <div class="form-row" id="health-metrics-group">
-                        <label class="form-label">昨日健康数据 <span class="label-hint">（选填 · 步数由 Whoop 自动预填；运动距离默认按步数估算，均可改）</span></label>
+                        <label class="form-label">昨日健康数据 <span class="label-hint">（选填 · 步数/热量消耗由 Whoop 自动预填；运动距离默认按步数估算，均可改）</span></label>
                         <div class="health-metrics-row">
                             <div class="health-metric-item">
                                 <label class="health-metric-label" for="weight">体重 <span class="label-hint-2">· 手环不测，手动</span></label>
@@ -433,10 +433,10 @@
                                 </div>
                             </div>
                             <div class="health-metric-item">
-                                <label class="health-metric-label" for="activity-kcal">活动热量 <span class="label-hint-2">· 手动</span></label>
+                                <label class="health-metric-label" for="activity-kcal">热量消耗 <span class="label-hint-2">· Whoop 自动（含基础代谢），可改</span></label>
                                 <div class="input-with-unit">
-                                    <input type="number" id="activity-kcal" class="form-input" step="10" min="0" max="10000"
-                                        placeholder="-">
+                                    <input type="number" id="activity-kcal" class="form-input" step="1" min="0" max="10000"
+                                        placeholder="自动预填">
                                     <span class="input-unit">kcal</span>
                                 </div>
                             </div>
@@ -1009,7 +1009,7 @@
     </footer>
 
     <script src="/static/apiCache.js?v=3"></script>
-    <script src="/static/form.js?v=21"></script>
+    <script src="/static/form.js?v=22"></script>
     <script src="/static/meal.js?v=26"></script>
     <script src="/static/period.js?v=16"></script>
     <script src="/static/medication.js?v=6"></script>

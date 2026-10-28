@@ -217,15 +217,17 @@ def get_record(record_id):
 
 
 def _auto_attach_activity(record):
-    """创建/更新睡眠记录后，steps/distance_km 缺失时从 Whoop 当日行自动补齐。
+    """创建/更新睡眠记录后，steps/distance_km/activity_kcal 缺失时从 Whoop 当日行自动补齐。
 
-    手动值永远优先（只填 None）；distance_km 按步幅 0.67m 估算。
+    手动值永远优先（只填 None）；distance_km 按步幅 0.67m 估算；
+    activity_kcal 由 Whoop 全天总消耗 kilojoule 换算（kJ ÷ 4.184，含基础代谢）。
     与 whoop.sync.auto_attach_activity（同步期批量回填）构成双保险，
     用户无需在表单里看预填后再手动保存一遍。
     """
     if not record or (record.get('record_type') and record['record_type'] != 'night'):
         return record
-    if record.get('steps') is not None and record.get('distance_km') is not None:
+    if (record.get('steps') is not None and record.get('distance_km') is not None
+            and record.get('activity_kcal') is not None):
         return record
     d = record.get('record_date')
     if not d:
@@ -234,8 +236,9 @@ def _auto_attach_activity(record):
     conn = get_connection()
     try:
         wd = conn.execute(
-            "SELECT steps FROM whoop_daily_metrics WHERE record_date=?", (d,)).fetchone()
+            "SELECT steps, kilojoule FROM whoop_daily_metrics WHERE record_date=?", (d,)).fetchone()
         whoop_steps = wd["steps"] if wd else None
+        whoop_kj = wd["kilojoule"] if wd else None
     finally:
         conn.close()
     steps = record['steps'] if record.get('steps') is not None else whoop_steps
@@ -244,6 +247,8 @@ def _auto_attach_activity(record):
         patch['steps'] = int(whoop_steps)
     if record.get('distance_km') is None and steps is not None:
         patch['distance_km'] = round(float(steps) * STRIDE_M / 1000.0, 1)
+    if record.get('activity_kcal') is None and whoop_kj is not None:
+        patch['activity_kcal'] = round(float(whoop_kj) / 4.184)
     if not patch:
         return record
     return models.update_record_by_id(record['id'], patch)
