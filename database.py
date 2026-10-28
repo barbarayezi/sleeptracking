@@ -46,6 +46,23 @@ def _is_retryable_db_error(exc):
     )
 
 
+def _connect_turso():
+    """Open a raw libsql connection to Turso (no wrapper, no retry)."""
+    # The libsql Python package was renamed from `libsql_experimental` to
+    # `libsql` at v0.1.x. Support both so the app runs on either install.
+    try:
+        import libsql_experimental as libsql
+    except ImportError:
+        import libsql
+
+    raw_conn = libsql.connect(
+        database=TURSO_URL,
+        auth_token=TURSO_AUTH_TOKEN,
+    )
+    raw_conn.execute("PRAGMA foreign_keys=ON")
+    return raw_conn
+
+
 def _with_retry(fn, retries=3, delay=1.0):
     """Call fn, retrying on transient Turso/Hrana errors with exponential backoff."""
     last_exc = None
@@ -71,6 +88,36 @@ class _TursoConnectionWrapper:
         self._conn = conn
         self.row_factory = None
 
+    def _reconnect(self):
+        """Swap in a fresh underlying connection after a stream-level failure.
+
+        Hrana stream errors (EOF / connection reset / "interactive transaction
+        was rolled back because the stream was idle for too long") mean the
+        current connection is dead — retrying on it just fails again.
+        """
+        try:
+            self._conn.close()
+        except Exception:
+            pass
+        self._conn = _with_retry(_connect_turso, retries=3, delay=1.0)
+
+    def _run(self, op, retries=3):
+        """Run op(conn), reconnecting + retrying on transient stream errors."""
+        last_exc = None
+        for attempt in range(retries):
+            try:
+                return op(self._conn)
+            except Exception as exc:
+                last_exc = exc
+                if not _is_retryable_db_error(exc):
+                    raise
+                # Stream-level failure: the connection is unusable, replace it
+                # before retrying instead of hammering the same dead stream.
+                self._reconnect()
+                if attempt < retries - 1:
+                    time.sleep(0.5 * (2 ** attempt))
+        raise last_exc
+
     def execute(self, sql, params=None):
         # libsql_experimental only accepts tuples for parameters, not lists.
         if params is None:
@@ -78,22 +125,28 @@ class _TursoConnectionWrapper:
         elif isinstance(params, (list, dict)):
             params = tuple(params)
 
-        def _do():
-            cur = self._conn.execute(sql, params)
+        def _op(conn):
+            cur = conn.execute(sql, params)
             return _TursoCursorWrapper(cur, self.row_factory)
 
-        return _with_retry(_do, retries=3, delay=1.0)
+        return self._run(_op)
 
     def executemany(self, sql, seq_of_params):
         if seq_of_params is None:
             seq_of_params = []
         seq = [tuple(p) if not isinstance(p, (tuple, list)) else tuple(p)
                for p in seq_of_params]
-        self._conn.executemany(sql, seq)
-        return self
+
+        def _op(conn):
+            return conn.executemany(sql, seq)
+
+        return self._run(_op)
 
     def commit(self):
-        self._conn.commit()
+        def _op(conn):
+            return conn.commit()
+
+        return self._run(_op)
 
     def close(self):
         # 连接复用（线程本地缓存）：不真正关闭底层连接，仅提交未决事务。
@@ -231,20 +284,8 @@ def _create_connection():
     get_connection() below.
     """
     if USE_TURSO:
-        # The libsql Python package was renamed from `libsql_experimental` to
-        # `libsql` at v0.1.x. Support both so the app runs on either install.
-        try:
-            import libsql_experimental as libsql
-        except ImportError:
-            import libsql
-
         def _connect():
-            raw_conn = libsql.connect(
-                database=TURSO_URL,
-                auth_token=TURSO_AUTH_TOKEN,
-            )
-            raw_conn.execute("PRAGMA foreign_keys=ON")
-            return _TursoConnectionWrapper(raw_conn)
+            return _TursoConnectionWrapper(_connect_turso())
 
         # Turso/Hrana 连接抖动自动重试 + 线程本地复用
         return _with_retry(_connect, retries=3, delay=1.0)

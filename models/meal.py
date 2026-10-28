@@ -293,7 +293,12 @@ def add_meal_images(meal_id, images):
             ),
         )
         ids.append(cursor.lastrowid)
-    conn.commit()
+        # 每张照片单独提交：libsql 的 INSERT 会隐式开启交互事务，而 Turso
+        # 服务端对事务内语句间隔有 ~5s 空闲超时——多张大图 BLOB 放进同一个
+        # 事务时，两条 INSERT 之间的传输时间会超时并被服务端回滚
+        # （SQLITE_BUSY: interactive transaction was rolled back ...）。
+        # 逐张提交让每个 BLOB 上传都成为独立的短事务，从根上消除该问题。
+        conn.commit()
     conn.close()
     return ids
 
