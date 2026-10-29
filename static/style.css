@@ -8,58 +8,71 @@
 /* ── Reset & Tokens ───────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* ═══ 明快配色系统 v2（2026-10-29）═══════════════════════════════
+   基调：冷调浅蓝底 + 纯白卡 + 亮蓝主色，中性色一律带蓝不脏；
+   语义色统一提亮，并扩出 violet / teal / pink / orange / lime
+   五个辅助色，用于模块与分类区分，减少「一片灰」的观感。
+   ═══════════════════════════════════════════════════════════════ */
 :root {
-    /* 品牌蓝（唯一真源，同 ds.css） */
-    --primary:         #2563eb;
-    --primary-deep:    #1d4ed8;
-    --primary-active:  #1e40af;
-    --primary-soft:    #eff6ff;
-    --primary-softer:  #f5f9ff;
+    /* 品牌蓝：提亮一档，配靛紫做渐变 */
+    --primary:         #2f6bfa;
+    --primary-deep:    #1f56e0;
+    --primary-active:  #1a45bd;
+    --primary-soft:    #e9f1ff;
+    --primary-softer:  #f4f9ff;
     --accent:          var(--primary);
     --accent-hover:    var(--primary-deep);
     --accent-bg:       var(--primary-soft);
 
-    /* 语义色（同 ds.css） */
-    --success:   #16a34a;  --success-soft: #dcfce7;
-    --warning:   #d97706;  --warning-soft: #fef3c7;
-    --danger:    #dc2626;  --danger-soft:  #fee2e2;
-    --info:      #0891b2;  --info-soft:    #cffafe;
-    --green:     #16a34a;  --green-bg:     rgba(22,163,74,.10);
-    --red:       #dc2626;  --red-bg:       rgba(220,38,38,.08);
-    --yellow:    #d97706;  --yellow-soft:  #fef3c7;
-    --pink:      #dc2626;  --pink-soft:    #fee2e2;
-    --mint:      #16a34a;  --mint-soft:    #dcfce7;
-    --sky:       #0891b2;  --sky-soft:     #cffafe;
+    /* 语义色：全部提亮加饱和 */
+    --success:   #06935f;  --success-soft: #d9fbee;
+    --warning:   #c9730f;  --warning-soft: #fff4d9;
+    --danger:    #e11d48;  --danger-soft:  #ffe6ec;
+    --info:      #0284c7;  --info-soft:    #dcf3ff;
 
-    /* 中性灰阶（slate，同 ds.css —— gray-200 深一档让分隔线/边框更清晰） */
-    --gray-900: #0f172a; --gray-800:#1e293b; --gray-700:#334155;
-    --gray-600: #475569; --gray-500:#64748b; --gray-400:#94a3b8;
-    --gray-300: #cbd5e1; --gray-200:#d5dbe5; --gray-100:#f1f5f9;
-    --gray-50:  #f8fafc;
+    /* 扩展色：给模块/分类做色彩区分，替代原来的灰标签 */
+    --violet:      #7c5cf6;  --violet-soft: #ece8ff;
+    --teal:        #10b5a5;  --teal-soft:   #d3f8f3;
+    --pink:        #ec4899;  --pink-soft:   #ffe3f2;
+    --orange:      #fb7a3c;  --orange-soft: #ffeade;
+    --lime:        #84cc16;  --lime-soft:   #eefbd6;
+    --sky:         #0ea5e9;  --sky-soft:    #dcf3ff;
+    --mint:        #06935f;  --mint-soft:   #d9fbee;
 
-    /* 背景 / 文字（在 DS slate 基础上适度下压：不过白、不过亮，边界清晰）
-       --bg 用独立中性灰（非 gray-50），让白卡浮起且整体不发白 */
-    --bg:           #eef0f5;    /* 页面底：中浅灰（不再近白） */
-    --bg-soft:      #e4e7ee;    /* 次级底 */
+    /* 兼容旧命名 */
+    --green:     #06935f;  --green-bg:    rgba(6,147,95,.12);
+    --red:       #e11d48;  --red-bg:      rgba(225,29,72,.10);
+    --yellow:    #c9730f;  --yellow-soft: #fff4d9;
+
+    /* 中性色：不用死灰，全部带蓝调，明度高、不发脏 */
+    --gray-900: #0f1f3d; --gray-800: #1b3057; --gray-700: #30456d;
+    --gray-600: #4a5f88; --gray-500: #5d7194; --gray-400: #7789ae;
+    --gray-300: #c8d6ec; --gray-200: #dfe8f8; --gray-100: #eef4ff;
+    --gray-50:  #f7faff;
+
+    /* 背景 / 文字：页面底改冷调浅蓝，白卡浮起 */
+    --bg:           #e9f1ff;
+    --bg-soft:      #e2ebfd;
     --bg-card:      #ffffff;
-    --bg-card-hover:#f8fafc;
-    --bg-tint:      #f2f4f8;    /* 卡内浅底 */
-    --text:         #161f37;    /* 主文字：深蓝灰（对比明确） */
-    --text-muted:   #455066;    /* 次文字 */
-    --text-dim:     #64748b;    /* 弱文字（从 gray-400 提一档，保证不糊） */
-    --border:       #ccd3df;    /* 卡片边界：清晰可见 */
-    --border-strong:#aab5c6;
+    --bg-card-hover:#f8fbff;
+    --bg-tint:      #f3f7ff;
+    --text:         #0f1f3d;
+    --text-muted:   #41567e;
+    --text-dim:     #5f7398;
+    --border:       #d7e2f5;
+    --border-strong:#b2c5e6;
 
-    /* 渐变占位 → 纯色（DS 无渐变，纯色背景更规范） */
-    --grad-primary: #2563eb;
-    --grad-purple:  #4f46e5;
-    --grad-pink:    #dc2626;
-    --grad-green:   #16a34a;
-    --grad-yellow:  #d97706;
-    --grad-orange:  #ea580c;
-    --grad-soft:    #eff6ff;
+    /* 渐变（这次真的用起来：品牌块 / 主按钮 / 头部细线 / 强调条） */
+    --grad-primary: linear-gradient(135deg, #4b83ff 0%, #6366f1 100%);
+    --grad-purple:  linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+    --grad-teal:    linear-gradient(135deg, #2dd4bf 0%, #0ea5e9 100%);
+    --grad-green:   linear-gradient(135deg, #34d399 0%, #0bbf7a 100%);
+    --grad-yellow:  linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+    --grad-orange:  linear-gradient(135deg, #fb923c 0%, #fb7a3c 100%);
+    --grad-pink:    linear-gradient(135deg, #f472b6 0%, #fb7185 100%);
+    --grad-soft:    linear-gradient(135deg, #eef4ff 0%, #f3efff 100%);
 
-    /* 圆角（ds.css：sm4 / md6 / lg8 / xl12 / 2xl16 / full999） */
+    /* 圆角 */
     --radius:       12px;
     --radius-sm:    6px;
     --radius-md:    8px;
@@ -67,16 +80,16 @@
     --radius-xl:    20px;
     --radius-pill:  999px;
 
-    /* 阴影（ds.css 微阴影） */
-    --shadow:       0 1px 2px rgba(15,23,42,.06), 0 1px 3px rgba(15,23,42,.05);
-    --shadow-sm:    0 1px 2px rgba(15,23,42,.05);
-    --shadow-lg:    0 4px 12px rgba(15,23,42,.08);
-    --shadow-pop:   0 4px 12px rgba(37,99,235,.16);
-    --shadow-inner: inset 0 1px 0 rgba(255,255,255,.6);
+    /* 阴影：带蓝调，比纯黑阴影干净 */
+    --shadow:       0 1px 2px rgba(19,44,86,.05), 0 10px 26px -16px rgba(19,44,86,.22);
+    --shadow-sm:    0 1px 2px rgba(19,44,86,.05);
+    --shadow-lg:    0 14px 34px -16px rgba(19,44,86,.26);
+    --shadow-pop:   0 10px 24px -10px rgba(47,107,250,.45);
+    --shadow-inner: inset 0 1px 0 rgba(255,255,255,.9);
 
     --transition:   0.15s ease;
 
-    /* 字体（同 ds.css --ds-font） */
+    /* 字体 */
     --font-sans: -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",
         "Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",Arial,sans-serif;
 }
@@ -85,7 +98,11 @@ html { scroll-behavior: smooth; }
 
 body {
     font-family: var(--font-sans);
-    background: var(--bg);
+    background-color: var(--bg);
+    background-image:
+        radial-gradient(1200px 560px at 4% -12%, rgba(99,102,241,.16), transparent 60%),
+        radial-gradient(1000px 520px at 100% -6%, rgba(45,212,191,.16), transparent 58%),
+        linear-gradient(180deg, #f2f7ff 0%, #e9f1ff 48%, #f5f1ff 100%);
     color: var(--text);
     line-height: 1.6;
     min-height: 100vh;
@@ -97,9 +114,18 @@ body {
     position: sticky;
     top: 0;
     z-index: 20;
-    background: var(--bg-card);
+    background: rgba(255,255,255,.84);
+    -webkit-backdrop-filter: saturate(180%) blur(14px);
+    backdrop-filter: saturate(180%) blur(14px);
     border-bottom: 1px solid var(--gray-200);
-    box-shadow: var(--shadow-sm);
+    box-shadow: 0 6px 20px -16px rgba(19,44,86,.45);
+}
+.app-topbar::before {
+    content: '';
+    position: absolute;
+    left: 0; right: 0; top: 0;
+    height: 3px;
+    background: var(--grad-primary);
 }
 
 .app-header {
@@ -127,10 +153,10 @@ body {
     width: 26px;
     height: 26px;
     border-radius: 7px;
-    background: var(--primary);
+    background: var(--grad-primary);
     color: #fff;
     font-size: 13px;
-    box-shadow: 0 1px 3px rgba(30,64,175,.35);
+    box-shadow: 0 4px 10px -4px rgba(47,107,250,.65);
 }
 
 .header-right { display: flex; align-items: center; gap: 12px; }
@@ -234,9 +260,10 @@ body {
 }
 .cat-nav-item:hover { background: var(--gray-100); color: var(--gray-900); }
 .cat-nav-item.active {
-    background: var(--primary-soft);
-    color: var(--primary);
-    border-color: color-mix(in srgb, var(--primary) 25%, transparent);
+    background: var(--grad-primary);
+    color: #fff;
+    border-color: transparent;
+    box-shadow: 0 6px 16px -9px rgba(47,107,250,.85);
 }
 
 /* ── Category Groups & Banners ── */
@@ -269,7 +296,7 @@ body {
     width: 4px;
     height: 18px;
     border-radius: 2px;
-    background: var(--primary);
+    background: var(--grad-primary);
     display: inline-block;
 }
 .category-banner span { font-size: 1rem; }
@@ -542,8 +569,8 @@ body {
 }
 .meal-card__tag {
     font-size: 12px;
-    color: var(--gray-600);
-    background: var(--gray-100, rgba(148,163,184,.14));
+    color: var(--violet);
+    background: var(--violet-soft);
     border-radius: var(--radius-lg);
     padding: 2px 8px;
 }
@@ -553,15 +580,15 @@ body {
     align-items: center;
     gap: 8px;
     padding: 7px 14px;
-    background: var(--bg-card);
-    border: 1px solid var(--gray-300);
+    background: var(--gray-50);
+    border: 1px solid var(--gray-200);
     border-radius: var(--radius-lg);
     cursor: pointer;
     font-size: 13px;
     font-weight: 500;
     transition: all var(--transition);
     user-select: none;
-    color: var(--gray-600);
+    color: var(--gray-700);
 }
 .radio-label:hover, .checkbox-label:hover { border-color: var(--primary); color: var(--primary); }
 .radio-label input, .checkbox-label input { display: none; }
@@ -597,9 +624,10 @@ body {
 }
 .radio-label:has(input:checked), .checkbox-label:has(input:checked) {
     border-color: var(--primary);
-    background: var(--primary-soft);
-    color: var(--primary);
+    background: linear-gradient(180deg, #eef4ff 0%, #e6efff 100%);
+    color: var(--primary-deep);
     font-weight: 600;
+    box-shadow: 0 4px 10px -8px rgba(47,107,250,.7);
 }
 
 /* ── Buttons（ds-btn） ── */
@@ -618,14 +646,14 @@ body {
     align-items: center;
     gap: 6px;
 }
-.btn-primary { background: var(--primary); color: #fff; }
-.btn-primary:hover { background: var(--primary-deep); }
+.btn-primary { background: var(--grad-primary); color: #fff; box-shadow: 0 8px 18px -10px rgba(47,107,250,.85); }
+.btn-primary:hover { filter: brightness(1.06); transform: translateY(-1px); box-shadow: 0 12px 22px -10px rgba(47,107,250,.9); }
 .btn-secondary { background: var(--bg-card); color: var(--gray-900); border-color: var(--gray-200); }
 .btn-secondary:hover { border-color: var(--primary); color: var(--primary); }
 .btn-danger { background: var(--bg-card); color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
 .btn-danger:hover { background: var(--danger-soft); }
 
-.btn-ai { background: var(--primary); color: #fff !important; border-radius: var(--radius-lg); padding: 6px 14px; font-size: 13px; font-weight: 600; cursor: pointer; transition: .15s; }
+.btn-ai { background: var(--grad-primary); color: #fff !important; border-radius: var(--radius-lg); padding: 6px 14px; font-size: 13px; font-weight: 600; cursor: pointer; transition: .15s; }
 .btn-ai:hover:not(:disabled) { background: var(--primary-deep); }
 .btn-ai:disabled { opacity: .5; cursor: not-allowed; }
 
@@ -679,10 +707,25 @@ body {
     background: var(--bg-card);
     border: 1px solid var(--gray-200);
     border-radius: var(--radius);
-    padding: 14px;
+    padding: 16px 14px 14px;
     text-align: center;
+    position: relative;
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
 }
-.stat-card .stat-value { font-size: 24px; font-weight: 800; letter-spacing: -.02em; color: var(--gray-900); font-variant-numeric: tabular-nums; }
+.stat-card::before {
+    content: '';
+    position: absolute; left: 0; right: 0; top: 0;
+    height: 3px;
+    background: var(--grad-primary);
+}
+.stat-card:nth-child(4n+2)::before { background: var(--grad-teal); }
+.stat-card:nth-child(4n+3)::before { background: var(--grad-purple); }
+.stat-card:nth-child(4n+4)::before { background: var(--grad-orange); }
+.stat-card:nth-child(4n+2) .stat-value { color: #0a7a70; }
+.stat-card:nth-child(4n+3) .stat-value { color: #6c4df0; }
+.stat-card:nth-child(4n+4) .stat-value { color: #b4560f; }
+.stat-card .stat-value { font-size: 26px; font-weight: 800; letter-spacing: -.02em; color: var(--primary-deep); font-variant-numeric: tabular-nums; }
 .stat-card .stat-label { font-size: 12px; color: var(--gray-500); margin-top: 4px; }
 
 .report-breakdown { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
@@ -752,9 +795,9 @@ body {
 .dist-card__legend { flex: 1; min-width: 0; }
 .dist-card__insight {
     font-size: 12px;
-    color: var(--gray-500);
+    color: var(--text-muted);
     padding: 8px 10px;
-    background: var(--gray-50);
+    background: var(--primary-softer);
     border-radius: var(--radius-sm);
     line-height: 1.5;
 }
@@ -848,11 +891,11 @@ body {
 .record-card__duration { font-size: 13px; font-weight: 700; color: var(--primary); }
 .record-card__quality { font-size: 12px; }
 .record-card__device-score {
-    font-size: 12px; color: var(--gray-600); background: var(--gray-100);
+    font-size: 12px; color: #0a7a70; background: var(--teal-soft);
     padding: 2px 8px; border-radius: var(--radius-pill); font-variant-numeric: tabular-nums; font-weight: 600;
 }
 .record-card__chips {
-    font-size: 13px; color: var(--gray-700); background: var(--gray-100);
+    font-size: 13px; color: var(--primary-deep); background: var(--primary-soft);
     padding: 2px 10px; border-radius: var(--radius-pill); font-variant-numeric: tabular-nums; font-weight: 500;
 }
 .record-card__actions { display: flex; gap: 6px; flex-shrink: 0; }
@@ -878,9 +921,22 @@ body {
 .record-type--segment, .meal-type--lunch { color: var(--success); background: var(--success-soft); }
 .meal-type--snack   { color: var(--danger); background: var(--danger-soft); }
 
+/* 记录行内的活动指标彩色胶囊（体重/喝水/步数/热量/距离各一色） */
+.rc-chips { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.rc-chip {
+    font-size: 12px; font-weight: 600; line-height: 1.5;
+    padding: 1px 8px; border-radius: var(--radius-pill);
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.rc-chip--weight { color: #5b3ce0; background: var(--violet-soft); }
+.rc-chip--water  { color: #0a6fa8; background: var(--sky-soft); }
+.rc-chip--steps  { color: #0a7a70; background: var(--teal-soft); }
+.rc-chip--kcal   { color: #a8480a; background: var(--orange-soft); }
+.rc-chip--km     { color: #3f6a10; background: var(--lime-soft); }
+
 /* ── Meal card details ── */
 .meal-card__name { font-size: 14px; color: var(--gray-900); font-weight: 600; }
-.meal-card__quantity { font-size: 12px; color: var(--gray-500); background: var(--gray-100); padding: 1px 8px; border-radius: var(--radius-pill); }
+.meal-card__quantity { font-size: 12px; color: #a8480a; background: var(--orange-soft); padding: 1px 8px; border-radius: var(--radius-pill); }
 .meal-card__allergy { font-size: 12px; color: var(--danger); cursor: help; font-weight: 600; }
 .meal-card__kcal { font-size: 12px; color: var(--primary); background: var(--primary-soft); padding: 1px 8px; border-radius: var(--radius-pill); font-weight: 600; }
 .meal-card__score { font-size: 12px; padding: 1px 8px; border-radius: var(--radius-pill); font-weight: 600; }
@@ -1429,7 +1485,7 @@ body {
 .ho2-tooltip {
     position: absolute;
     pointer-events: none;
-    background: #0f172a;
+    background: #0f1f3d;
     color: #f5f3ff;
     padding: 8px 10px;
     border-radius: var(--radius-sm);
@@ -1444,7 +1500,7 @@ body {
 }
 .ho2-tooltip strong { color: #fff; font-weight: 700; }
 .ho2-tooltip .ho2-tip-row { display: flex; gap: 10px; justify-content: space-between; }
-.ho2-tooltip .ho2-tip-label { color: #cbd5e1; }
+.ho2-tooltip .ho2-tip-label { color: #c8d6ec; }
 .ho2-tooltip .ho2-tip-outlier { color: #fbbf24; font-weight: 700; }
 
 .ho2-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 10px; padding: 8px 12px; background: var(--gray-50); border: 1px solid var(--gray-200); border-radius: var(--radius-sm); font-size: 12.5px; color: var(--gray-600); }
@@ -1730,7 +1786,7 @@ body {
 .meal-lightbox__backdrop { position: absolute; inset: 0; background: rgba(74, 62, 44, .78); backdrop-filter: blur(2px); }
 .meal-lightbox__panel { position: relative; max-width: 92vw; max-height: 92vh; display: flex; flex-direction: column; align-items: center; gap: 10px; }
 .meal-lightbox__img { max-width: 92vw; max-height: 80vh; border-radius: var(--radius); background: #fff; box-shadow: 0 12px 48px rgba(74, 62, 44, .35); object-fit: contain; }
-.meal-lightbox__caption { color: #f1f5f9; font-size: 13px; letter-spacing: .02em; }
+.meal-lightbox__caption { color: #eef4ff; font-size: 13px; letter-spacing: .02em; }
 .meal-lightbox__close { position: absolute; top: -10px; right: -10px; width: 36px; height: 36px; border-radius: 50%; border: none; background: var(--primary); color: #fff; font-size: 22px; line-height: 1; cursor: pointer; box-shadow: 0 4px 12px rgba(74, 62, 44, .25); }
 
 /* File inputs are triggered by the preceding <label for="…"> button — hide the

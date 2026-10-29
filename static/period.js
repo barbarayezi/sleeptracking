@@ -68,7 +68,7 @@ class PeriodManager {
         if (emptyEl) emptyEl.style.display = 'none';
 
         const flowLabels = { none: '无', light: '量少', normal: '量中', heavy: '量多' };
-        const flowColors = { none: '#94a3b8', light: '#fb7185', normal: '#f43f5e', heavy: '#dc2626' };
+        const flowColors = { none: '#7789ae', light: '#fb7185', normal: '#f43f5e', heavy: '#e11d48' };
         const symptomNames = {
             cramps: '痛经', headache: '头痛', bloating: '腹胀',
             breast_tender: '胸胀', mood_swings: '情绪波动',
@@ -80,7 +80,7 @@ class PeriodManager {
         for (const p of this._periodsForDate) {
             const isEditing = (this._editingPeriodId === p.id);
             const flowLabel = flowLabels[p.flow] || p.flow;
-            const flowColor = flowColors[p.flow] || '#94a3b8';
+            const flowColor = flowColors[p.flow] || '#7789ae';
             const symptoms = Array.isArray(p.symptoms) ? p.symptoms : [];
             const mood = Array.isArray(p.mood) && p.mood.length ? p.mood[0] : (p.mood || '');
 

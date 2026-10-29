@@ -35,13 +35,13 @@ class Timeline {
 
         // ── Colors ──
         this.stageColors = { deep: '#3C3489', rem: '#7F77DD', light: '#CECBF6', awake: '#FAC775' };
-        this.qualityColors = { good: '#16a34a', average: '#d97706', poor: '#dc2626' };
-        this.noQualityColor = '#94a3b8';
-        this.napColor = '#cbd5e1';
+        this.qualityColors = { good: '#06935f', average: '#c9730f', poor: '#e11d48' };
+        this.noQualityColor = '#7789ae';
+        this.napColor = '#c8d6ec';
         this.onsetColor = '#185FA5';
         this.wakeColor = '#D85A30';
         this.gridColor = '#e8e6df';
-        this.axisTextColor = '#94a3b8';
+        this.axisTextColor = '#7789ae';
 
         this._hitRegions = [];
         this._initInteraction();
@@ -207,7 +207,7 @@ class Timeline {
 
         ctx.textAlign = 'left';
         ctx.font = '500 13px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
-        ctx.fillStyle = '#0f172a';
+        ctx.fillStyle = '#0f1f3d';
         ctx.fillText('每天睡多少 · 结构怎么样', this.PAD_LEFT, this.TITLE_A_Y);
 
         // 横网格线 + 小时刻度
@@ -307,7 +307,7 @@ class Timeline {
         for (const [label, color] of stageItems) {
             ctx.fillStyle = color;
             ctx.fillRect(lx, y - 9, 10, 10);
-            ctx.fillStyle = '#64748b';
+            ctx.fillStyle = '#5d7194';
             ctx.fillText(label, lx + 14, y);
             lx += 14 + ctx.measureText(label).width + 16;
         }
@@ -319,7 +319,7 @@ class Timeline {
             ctx.beginPath();
             ctx.arc(lx + 4, y - 4, 4, 0, Math.PI * 2);
             ctx.fill();
-            ctx.fillStyle = '#64748b';
+            ctx.fillStyle = '#5d7194';
             ctx.fillText(label, lx + 12, y);
             lx += 12 + ctx.measureText(label).width + 14;
         }
@@ -329,7 +329,7 @@ class Timeline {
         ctx.beginPath();
         ctx.arc(lx + 4, y - 4, 3, 0, Math.PI * 2);
         ctx.fill();
-        ctx.fillStyle = '#64748b';
+        ctx.fillStyle = '#5d7194';
         ctx.fillText('午睡', lx + 11, y);
     }
 
@@ -349,7 +349,7 @@ class Timeline {
 
         ctx.textAlign = 'left';
         ctx.font = '500 13px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
-        ctx.fillStyle = '#0f172a';
+        ctx.fillStyle = '#0f1f3d';
         ctx.fillText('作息稳不稳 · 入睡×醒来节律', this.PAD_LEFT, this.TITLE_B_Y);
 
         // 行内图例（右侧）
@@ -358,11 +358,11 @@ class Timeline {
         ctx.strokeStyle = this.onsetColor;
         ctx.lineWidth = 1.5;
         ctx.beginPath(); ctx.moveTo(W - 148, ty - 4); ctx.lineTo(W - 128, ty - 4); ctx.stroke();
-        ctx.fillStyle = '#64748b';
+        ctx.fillStyle = '#5d7194';
         ctx.fillText('入睡', W - 122, ty);
         ctx.strokeStyle = this.wakeColor;
         ctx.beginPath(); ctx.moveTo(W - 78, ty - 4); ctx.lineTo(W - 58, ty - 4); ctx.stroke();
-        ctx.fillStyle = '#64748b';
+        ctx.fillStyle = '#5d7194';
         ctx.fillText('醒来', W - 52, ty);
 
         // 横网格线（每 2 小时）
@@ -436,7 +436,7 @@ class Timeline {
         const skip = pitch < 34 ? 2 : 1; // 30 天视图隔一个标一个
         dates.forEach((date, i) => {
             if (i % skip !== 0 && date !== today) return;
-            ctx.fillStyle = date === today ? '#0f172a' : '#64748b';
+            ctx.fillStyle = date === today ? '#0f1f3d' : '#5d7194';
             ctx.fillText(date.slice(5), cx(i), y);
         });
     }

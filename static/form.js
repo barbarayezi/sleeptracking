@@ -226,7 +226,7 @@ class FormManager {
             const duration = this._calcDuration(r.sleep_time, r.wake_time);
             const typeLabel = typeLabels[r.record_type] || r.record_type;
             const qualLabel = qualLabels[r.sleep_quality] || r.sleep_quality;
-            const qualColor = qualColors[r.sleep_quality] || '#94a3b8';
+            const qualColor = qualColors[r.sleep_quality] || '#7789ae';
 
             html += `<div class="record-card${isEditing ? ' record-card--editing' : ''}">`;
             html += '<div class="record-card__body">';
@@ -238,14 +238,15 @@ class FormManager {
                 html += `<span class="record-card__device-score" title="手环评分">⌚ ${r.device_score}</span>`;
             }
             // Manually-entered activity chips (weight / water / steps / kcal / km)
+            // 每个指标一个独立彩色小胶囊，比原来一条灰胶囊更易扫读
             const manualChips = [];
-            if (r.weight != null) manualChips.push(`⚖️ ${r.weight}kg`);
-            if (r.water_cups != null) manualChips.push(`🥤 ${r.water_cups}杯`);
-            if (r.steps != null) manualChips.push(`🚶 ${Number(r.steps).toLocaleString()}步`);
-            if (r.activity_kcal != null) manualChips.push(`🔥 ${Math.round(r.activity_kcal)}kcal`);
-            if (r.distance_km != null) manualChips.push(`📏 ${Number(r.distance_km).toFixed(1)}km`);
+            if (r.weight != null) manualChips.push(`<span class="rc-chip rc-chip--weight">⚖️ ${r.weight}kg</span>`);
+            if (r.water_cups != null) manualChips.push(`<span class="rc-chip rc-chip--water">🥤 ${r.water_cups}杯</span>`);
+            if (r.steps != null) manualChips.push(`<span class="rc-chip rc-chip--steps">🚶 ${Number(r.steps).toLocaleString()}步</span>`);
+            if (r.activity_kcal != null) manualChips.push(`<span class="rc-chip rc-chip--kcal">🔥 ${Math.round(r.activity_kcal)}kcal</span>`);
+            if (r.distance_km != null) manualChips.push(`<span class="rc-chip rc-chip--km">📏 ${Number(r.distance_km).toFixed(1)}km</span>`);
             if (manualChips.length > 0) {
-                html += `<span class="record-card__chips">${manualChips.join(' · ')}</span>`;
+                html += `<span class="rc-chips">${manualChips.join('')}</span>`;
             }
             html += '</div>';
             html += '<div class="record-card__actions">';

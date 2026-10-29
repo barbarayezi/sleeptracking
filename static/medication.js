@@ -12,14 +12,14 @@
 class MedicationManager {
     // 网络异常 / 旧后端时的兜底类别，保证表单依旧可用
     static FALLBACK_CATEGORIES = [
-        { id: 0, category_key: 'supplement',     label: '保健类',   emoji: '🍃', color: '#16a34a', sort_order: 0, is_system: 1 },
-        { id: 1, category_key: 'antidepressant', label: '抗抑郁药', emoji: '💊', color: '#2563eb', sort_order: 1, is_system: 1 },
-        { id: 2, category_key: 'cold',           label: '感冒药',   emoji: '🤧', color: '#0891b2', sort_order: 2, is_system: 1 },
-        { id: 3, category_key: 'analgesic',      label: '止痛退烧', emoji: '🤕', color: '#d97706', sort_order: 3, is_system: 1 },
+        { id: 0, category_key: 'supplement',     label: '保健类',   emoji: '🍃', color: '#06935f', sort_order: 0, is_system: 1 },
+        { id: 1, category_key: 'antidepressant', label: '抗抑郁药', emoji: '💊', color: '#2f6bfa', sort_order: 1, is_system: 1 },
+        { id: 2, category_key: 'cold',           label: '感冒药',   emoji: '🤧', color: '#0284c7', sort_order: 2, is_system: 1 },
+        { id: 3, category_key: 'analgesic',      label: '止痛退烧', emoji: '🤕', color: '#c9730f', sort_order: 3, is_system: 1 },
         { id: 4, category_key: 'digestive',      label: '肠胃药',   emoji: '🌿', color: '#4d7c0f', sort_order: 4, is_system: 1 },
-        { id: 5, category_key: 'allergy',        label: '抗过敏',   emoji: '🌸', color: '#be185d', sort_order: 5, is_system: 1 },
-        { id: 6, category_key: 'sleep_aid',      label: '助眠药',   emoji: '😴', color: '#6d28d9', sort_order: 6, is_system: 1 },
-        { id: 7, category_key: 'other',          label: '其他',     emoji: '📦', color: '#64748b', sort_order: 7, is_system: 1 },
+        { id: 5, category_key: 'allergy',        label: '抗过敏',   emoji: '🌸', color: '#ec4899', sort_order: 5, is_system: 1 },
+        { id: 6, category_key: 'sleep_aid',      label: '助眠药',   emoji: '😴', color: '#7c5cf6', sort_order: 6, is_system: 1 },
+        { id: 7, category_key: 'other',          label: '其他',     emoji: '📦', color: '#5d7194', sort_order: 7, is_system: 1 },
     ];
 
     constructor() {
@@ -187,7 +187,7 @@ class MedicationManager {
 
     _catColor(key) {
         const c = this._catByKey(key);
-        return c ? c.color : '#64748b';
+        return c ? c.color : '#5d7194';
     }
 
     /** Render one summary chip. Colour comes from the category row so custom
@@ -195,7 +195,7 @@ class MedicationManager {
     _chipHtml(count, cat) {
         const emoji = cat.emoji || '📦';
         const label = cat.label || '其他';
-        const color = cat.color || '#64748b';
+        const color = cat.color || '#5d7194';
         return `<span class="med-summary-chip" style="background:${color}1a; color:${color}">` +
                `${emoji} ${this._escapeHtml(label)} ${count}</span>`;
     }
@@ -356,7 +356,7 @@ class MedicationManager {
             Object.keys(byCategory).forEach((key) => {
                 if (this._catByKey(key)) return;
                 chips.push(this._chipHtml(byCategory[key],
-                    { emoji: '📦', label: key, color: '#64748b' }));
+                    { emoji: '📦', label: key, color: '#5d7194' }));
             });
         } else {
             const buckets = [
@@ -367,7 +367,7 @@ class MedicationManager {
             chips = buckets
                 .filter(([n]) => (n || 0) > 0)
                 .map(([n, key]) => this._chipHtml(n, this._catByKey(key) ||
-                    { emoji: '📦', label: '其他', color: '#64748b' }));
+                    { emoji: '📦', label: '其他', color: '#5d7194' }));
         }
         chips.push(`<span class="med-summary-chip med-summary-chip--total">合计 ${total}</span>`);
 

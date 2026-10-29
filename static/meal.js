@@ -960,7 +960,7 @@ class MealManager {
             const isEditing = (this._editingMealId === m.id);
             const typeLabel = typeLabels[m.meal_type] || m.meal_type;
             const ratingLabel = ratingLabels[m.health_rating] || m.health_rating;
-            const ratingColor = ratingColors[m.health_rating] || '#94a3b8';
+            const ratingColor = ratingColors[m.health_rating] || '#7789ae';
 
             html += `<div class="record-card meal-card${isEditing ? ' record-card--editing' : ''}">`;
             html += '<div class="record-card__body">';

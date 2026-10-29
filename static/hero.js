@@ -139,10 +139,10 @@ const HeroOverview = {
 
     _ringColor(score) {
         // DS 语义色：≥75 蓝(良好)、≥50 黄(一般)、<50 红(较差)
-        if (score == null) return '#cbd5e1';
-        if (score >= 75) return '#2563eb';
-        if (score >= 50) return '#d97706';
-        return '#dc2626';
+        if (score == null) return '#c8d6ec';
+        if (score >= 75) return '#2f6bfa';
+        if (score >= 50) return '#c9730f';
+        return '#e11d48';
     },
 
     // ── 近 7 天 · 睡眠 × 恢复 × 运动（合并卡）：睡眠质量色块 / Whoop 恢复分 / 运动打卡 ──

@@ -200,15 +200,15 @@ class HealthOverview {
         const coreMetrics = [
             { key: 'device_score', label: '睡眠分', sub: '手环评分', unit: '', min: 0, max: 100,
               higher: true, goodAt: 80, badAt: 50,
-              color: '#2563eb', colorRgba: 'rgba(37,99,235,',
+              color: '#2f6bfa', colorRgba: 'rgba(37,99,235,',
               explain: 'Whoop/手环睡眠质量评分，0–100，越高越好' },
             { key: 'recovery_score', label: '恢复分', sub: 'Whoop Recovery', unit: '', min: 0, max: 100,
               higher: true, goodAt: 70, badAt: 40,
-              color: '#16a34a', colorRgba: 'rgba(22,163,74,',
+              color: '#06935f', colorRgba: 'rgba(22,163,74,',
               explain: '身体恢复程度，综合 HRV、静息心率、休息状态；>70 良好，<40 偏低' },
             { key: 'meal_health_score', label: '饮食健康分', sub: '日均餐食评分', unit: '/10', min: 0, max: 10,
               higher: true, goodAt: 7, badAt: 4,
-              color: '#d97706', colorRgba: 'rgba(217,119,6,',
+              color: '#c9730f', colorRgba: 'rgba(217,119,6,',
               explain: '每日饮食健康评分（0–10），基于营养均衡与食物质量' },
         ];
 
@@ -220,7 +220,7 @@ class HealthOverview {
               explain: '当日训练/压力负荷。<10 休息日，10–14 中等，>14 高负荷' },
             { key: 'hrv', label: 'HRV', sub: '心率变异性', unit: 'ms', min: null, max: null,
               higher: true,
-              color: '#0891b2', colorRgba: 'rgba(8,145,178,',
+              color: '#0284c7', colorRgba: 'rgba(8,145,178,',
               explain: '心率变异性(ms)，越高代表自主神经恢复越好、压力越低' },
             { key: 'resting_heart_rate', label: '静息心率', sub: 'RHR', unit: 'bpm', min: null, max: null,
               higher: false, goodAt: 60, badAt: 75,
@@ -228,7 +228,7 @@ class HealthOverview {
               explain: '静息心率(bpm)，越低通常代表心肺功能越好' },
             { key: 'spo2_percentage', label: '血氧', sub: 'SpO₂', unit: '%', min: 90, max: 100,
               higher: true, goodAt: 96, badAt: 92,
-              color: '#2563eb', colorRgba: 'rgba(37,99,235,',
+              color: '#2f6bfa', colorRgba: 'rgba(37,99,235,',
               explain: '血氧饱和度。正常 ≥96%，<92% 需注意' },
             { key: 'skin_temp_celsius', label: '皮温', sub: '皮肤温度', unit: '°C', min: null, max: null,
               higher: null,
@@ -288,7 +288,7 @@ class HealthOverview {
                     <span class="ho2-legend__group">
                         <span class="ho2-legend__group-title">分布参考</span>
                         <span class="ho2-legend__item" title="过去一段时间的 ±1 标准差带——大多数正常日都落在里面"><span class="ho2-legend__swatch ho2-legend__swatch--band" style="background:${m.colorRgba}0.13)"></span>±1 SD</span>
-                        <span class="ho2-legend__item" title="均值附近的 95% 置信带——判断今天是否异常"><span class="ho2-legend__swatch" style="background:${m.colorRgba}0.20); border-top:1px dashed #475569"></span>95% CI均值</span>
+                        <span class="ho2-legend__item" title="均值附近的 95% 置信带——判断今天是否异常"><span class="ho2-legend__swatch" style="background:${m.colorRgba}0.20); border-top:1px dashed #4a5f88"></span>95% CI均值</span>
                         <span class="ho2-legend__item" title="小框 = 当前点的 25–75 百分位跨度（中段 50% 数据范围）"><span class="ho2-legend__swatch ho2-legend__swatch--box" style="color:${m.color}"></span>P25–P75</span>
                     </span>
                     <span class="ho2-legend__group">
@@ -585,13 +585,13 @@ class HealthOverview {
                 const pct = eAvg !== 0 ? (diff / eAvg * 100) : 0;
                 if (diff > 0.5) {
                     trendEl.innerHTML = `<span class="ho2-trend ho2-trend--up">↑ ${pct.toFixed(0)}%</span>`;
-                    trendEl.style.color = m.higher !== false ? '#16a34a' : '#dc2626';
+                    trendEl.style.color = m.higher !== false ? '#06935f' : '#e11d48';
                 } else if (diff < -0.5) {
                     trendEl.innerHTML = `<span class="ho2-trend ho2-trend--down">↓ ${Math.abs(pct).toFixed(0)}%</span>`;
-                    trendEl.style.color = m.higher === false ? '#16a34a' : '#dc2626';
+                    trendEl.style.color = m.higher === false ? '#06935f' : '#e11d48';
                 } else {
                     trendEl.innerHTML = `<span class="ho2-trend ho2-trend--flat">→ 持平</span>`;
-                    trendEl.style.color = '#94a3b8';
+                    trendEl.style.color = '#7789ae';
                 }
             } else {
                 trendEl.textContent = '';
@@ -615,7 +615,7 @@ class HealthOverview {
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
         if (N < 1) {
-            ctx.fillStyle = '#64748b';
+            ctx.fillStyle = '#5d7194';
             ctx.font = '13px -apple-system, "PingFang SC", sans-serif';
             ctx.textAlign = 'center';
             ctx.fillText('暂无数据', cssW / 2, cssH / 2);
@@ -753,7 +753,7 @@ class HealthOverview {
         // Reference threshold lines + labels
         if (m.goodAt != null && m.goodAt >= lo && m.goodAt <= hi) {
             const gy = yOfMain(m.goodAt);
-            ctx.strokeStyle = '#16a34a';
+            ctx.strokeStyle = '#06935f';
             ctx.lineWidth = 1;
             ctx.setLineDash([3, 3]);
             ctx.beginPath();
@@ -761,7 +761,7 @@ class HealthOverview {
             ctx.lineTo(ml + chartW, gy);
             ctx.stroke();
             ctx.setLineDash([]);
-            ctx.fillStyle = '#16a34a';
+            ctx.fillStyle = '#06935f';
             ctx.font = 'bold 9px -apple-system, "PingFang SC", sans-serif';
             ctx.textAlign = 'right';
             const lbl = (m.higher === false ? '↓ 良 ≤' : '↑ 优 ≥') + this._fmt(m.goodAt);
@@ -769,7 +769,7 @@ class HealthOverview {
         }
         if (m.badAt != null && m.badAt >= lo && m.badAt <= hi) {
             const by = yOfMain(m.badAt);
-            ctx.strokeStyle = '#dc2626';
+            ctx.strokeStyle = '#e11d48';
             ctx.lineWidth = 1;
             ctx.setLineDash([3, 3]);
             ctx.beginPath();
@@ -780,7 +780,7 @@ class HealthOverview {
             // Avoid double-label if both lines are very close
             const bothLines = m.goodAt != null && Math.abs(yOfMain(m.goodAt) - by) < 12;
             if (!bothLines) {
-                ctx.fillStyle = '#dc2626';
+                ctx.fillStyle = '#e11d48';
                 ctx.font = 'bold 9px -apple-system, "PingFang SC", sans-serif';
                 ctx.textAlign = 'right';
                 const lbl = (m.higher === false ? '↑ 警 >' : '↓ 警 <') + this._fmt(m.badAt);
@@ -898,7 +898,7 @@ class HealthOverview {
             ctx.lineWidth = 0.5;
             ctx.fillRect(left, by - 9, labelW, 13);
             ctx.strokeRect(left, by - 9, labelW, 13);
-            ctx.fillStyle = '#475569';
+            ctx.fillStyle = '#4a5f88';
             ctx.fillText(txt, right - 4, by);
         }
 
@@ -943,7 +943,7 @@ class HealthOverview {
                 // Current point ring will be redrawn later (after both panels)
             }
             if (isOutlier) {
-                ctx.fillStyle = '#d97706';
+                ctx.fillStyle = '#c9730f';
                 ctx.font = 'bold 8px -apple-system, sans-serif';
                 ctx.textAlign = 'center';
                 ctx.fillText('⚠', px, py - 6);
@@ -961,14 +961,14 @@ class HealthOverview {
             ctx.moveTo(ml, y);
             ctx.lineTo(ml + chartW, y);
             ctx.stroke();
-            ctx.fillStyle = '#64748b';
+            ctx.fillStyle = '#5d7194';
             ctx.font = '9px -apple-system, sans-serif';
             ctx.textAlign = 'right';
             ctx.fillText(this._fmtAxis(val, m.key), ml - 4, y + 3);
         }
 
         // X-axis date labels (weekly stride)
-        ctx.fillStyle = '#64748b';
+        ctx.fillStyle = '#5d7194';
         ctx.font = '9px -apple-system, sans-serif';
         ctx.textAlign = 'center';
         const xLabelStep = Math.max(1, Math.floor(Ntotal / 8));
@@ -1041,14 +1041,14 @@ class HealthOverview {
             ctx.stroke();
 
             // Mean cross marker (+)
-            ctx.strokeStyle = '#475569';
+            ctx.strokeStyle = '#4a5f88';
             ctx.lineWidth = 1.2;
             const meanY = yOfBox(mean);
             ctx.beginPath();
             ctx.moveTo(boxCx - 4, meanY); ctx.lineTo(boxCx + 4, meanY);
             ctx.moveTo(boxCx, meanY - 4); ctx.lineTo(boxCx, meanY + 4);
             ctx.stroke();
-            ctx.fillStyle = '#475569';
+            ctx.fillStyle = '#4a5f88';
             ctx.font = '9px -apple-system, sans-serif';
             ctx.textAlign = 'left';
             ctx.fillText('μ', boxX1 + 12, meanY + 3);
@@ -1063,13 +1063,13 @@ class HealthOverview {
             ctx.fillText('Md ' + this._fmt(p50), boxX1 + 4, yMd + 3);
 
             // Box-plot column heading
-            ctx.fillStyle = '#94a3b8';
+            ctx.fillStyle = '#7789ae';
             ctx.font = '8px -apple-system, "PingFang SC", sans-serif';
             ctx.textAlign = 'center';
             ctx.fillText('分布（P25–P75， 须=1.5×IQR， +=均值）', boxCx, MAIN_PX + GAP + BOX_PX - 1);
         } else {
             // Too few points — short placeholder
-            ctx.fillStyle = '#94a3b8';
+            ctx.fillStyle = '#7789ae';
             ctx.font = '10px -apple-system, "PingFang SC", sans-serif';
             ctx.textAlign = 'center';
             ctx.fillText('需 ≥3 天有效数据才能绘制盒须分布', ml + chartW / 2, MAIN_PX + GAP + 16);
@@ -1087,7 +1087,7 @@ class HealthOverview {
             ctx.stroke();
             ctx.setLineDash([]);
             // Red ring on main panel point
-            ctx.strokeStyle = '#ef4444';
+            ctx.strokeStyle = '#e11d48';
             ctx.lineWidth = 2.2;
             ctx.beginPath();
             ctx.arc(currentX, yOfMain(last.y), 7, 0, Math.PI * 2);
@@ -1100,7 +1100,7 @@ class HealthOverview {
                 const insideBox = currentX >= boxX0 && currentX <= boxX1;
                 if (!insideBox) {
                     // current day is outside the box-plot column → draw a small red tick
-                    ctx.strokeStyle = '#ef4444';
+                    ctx.strokeStyle = '#e11d48';
                     ctx.lineWidth = 1.5;
                     ctx.beginPath();
                     ctx.moveTo(boxX1 + 8, yOfBox(last.y));
@@ -1124,26 +1124,26 @@ class HealthOverview {
             if (N >= 3) {
                 const up = slope > 0;
                 const color = Math.abs(slope) < 1e-6
-                    ? '#94a3b8'
-                    : (m.higher === false ? (up ? '#dc2626' : '#16a34a') : (up ? '#16a34a' : '#dc2626'));
+                    ? '#7789ae'
+                    : (m.higher === false ? (up ? '#e11d48' : '#06935f') : (up ? '#06935f' : '#e11d48'));
                 const arrow = Math.abs(slope) < 1e-6 ? '→' : (up ? '↑' : '↓');
                 html += `<span class="ho2-stat" style="color:${color}">${arrow} 趋势 ${this._fmt(Math.abs(slope * 7))}/周 · R²=${r2.toFixed(2)}</span>`;
             } else {
                 html += `<span class="ho2-stat" style="opacity:0.6">趋势 · 需 ≥3 天有效数据</span>`;
             }
             if (outliers.length > 0) {
-                html += `<span class="ho2-stat" style="color:#f59e0b">⚠ ${outliers.length} 个异常值</span>`;
+                html += `<span class="ho2-stat" style="color:#c9730f">⚠ ${outliers.length} 个异常值</span>`;
             }
             if (Nmiss > 0) {
-                html += `<span class="ho2-stat" style="color:#94a3b8">${Nmiss} 天无数据</span>`;
+                html += `<span class="ho2-stat" style="color:#7789ae">${Nmiss} 天无数据</span>`;
             }
             html += `<span class="ho2-stat ho2-stat--dim">n=${N}/${Ntotal}</span>`;
             if (percentile != null && zLast != null) {
                 const lastFmt = m.key === 'meal_health_score'
                     ? last.y.toFixed(1) : Math.round(last.y).toString();
                 const pctColor = zLast >= 0
-                    ? (m.higher === false ? '#dc2626' : '#16a34a')
-                    : (m.higher === false ? '#16a34a' : '#dc2626');
+                    ? (m.higher === false ? '#e11d48' : '#06935f')
+                    : (m.higher === false ? '#06935f' : '#e11d48');
                 html += `<span class="ho2-stat" style="color:${pctColor};font-weight:700">当前 ${lastFmt} · 击败 ${percentile.toFixed(0)}% 历史 · Z=${zLast.toFixed(2)}</span>`;
             }
             statsEl.innerHTML = html;
@@ -1300,7 +1300,7 @@ class HealthOverview {
         ctx.clearRect(0, 0, cssW, cssH);
 
         if (pts.length === 0) {
-            ctx.fillStyle = '#64748b';
+            ctx.fillStyle = '#5d7194';
             ctx.font = '11px -apple-system, sans-serif';
             ctx.textAlign = 'center';
             ctx.fillText('暂无数据', cssW / 2, cssH / 2);
@@ -1399,7 +1399,7 @@ class HealthOverview {
         const q = (p) => s[Math.max(0, Math.min(s.length - 1, Math.floor(s.length * p)))] || 0;
         const p25 = q(0.25), p75 = q(0.75);
         const enough = s.length >= 5;
-        const toneColor = { good: '#22c55e', neutral: '#64748b', bad: '#d97706' };
+        const toneColor = { good: '#22c55e', neutral: '#5d7194', bad: '#c9730f' };
 
         if (m.higher === true) {
             const hi = enough ? p75 : (m.goodAt != null ? m.goodAt : Infinity);

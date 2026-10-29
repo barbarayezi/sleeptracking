@@ -184,7 +184,7 @@ class ResearchDashboard {
             <svg viewBox="0 0 680 390" class="rd-flow-svg" role="img" aria-label="数据流与计算链路">
                 <defs>
                     <marker id="rd-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
-                        <path d="M2 1L8 5L2 9" fill="none" stroke="#94a3b8" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M2 1L8 5L2 9" fill="none" stroke="#7789ae" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
                     </marker>
                 </defs>`;
 
@@ -197,7 +197,7 @@ class ResearchDashboard {
             // Bezier curve
             const cp1y = sy + (ty - sy) * 0.5;
             const cp2y = ty - (ty - sy) * 0.5;
-            svg += `<path d="M${sx} ${sy} C${sx} ${cp1y}, ${tx} ${cp2y}, ${tx} ${ty}" fill="none" stroke="#cbd5e1" stroke-width="1" marker-end="url(#rd-arrow)" opacity="0.7"/>`;
+            svg += `<path d="M${sx} ${sy} C${sx} ${cp1y}, ${tx} ${cp2y}, ${tx} ${ty}" fill="none" stroke="#c8d6ec" stroke-width="1" marker-end="url(#rd-arrow)" opacity="0.7"/>`;
         }
 
         // Draw nodes
@@ -209,7 +209,7 @@ class ResearchDashboard {
                 svg += `<g class="rd-flow-node" data-node="${n.id}">
                     <rect x="${x}" y="${y}" width="${nodeWidth}" height="${nodeHeight}" rx="8" fill="${c.fill}" stroke="${c.stroke}" stroke-width="0.8"/>
                     <text x="${n.x}" y="${n.y - 3}" text-anchor="middle" dominant-baseline="central" font-size="12" font-weight="500" fill="${c.text}">${this._escape(n.label)}</text>
-                    <text x="${n.x}" y="${n.y + 12}" text-anchor="middle" dominant-baseline="central" font-size="10" fill="#64748b">${this._escape(n.sub)}</text>
+                    <text x="${n.x}" y="${n.y + 12}" text-anchor="middle" dominant-baseline="central" font-size="10" fill="#5d7194">${this._escape(n.sub)}</text>
                 </g>`;
             }
         }
@@ -350,7 +350,7 @@ class ResearchDashboard {
                 let isGood = null;
                 if (m.dir === 'lo') isGood = diff < 0;
                 else if (m.dir === 'hi') isGood = diff > 0;
-                const color = isGood === true ? '#16a34a' : isGood === false ? '#dc2626' : '#94a3b8';
+                const color = isGood === true ? '#06935f' : isGood === false ? '#e11d48' : '#7789ae';
                 const arrow = diff > 0 ? '↑' : diff < 0 ? '↓' : '→';
                 trendHtml = `<span class="rd-trend" style="color:${color}">${arrow} ${Math.abs(pctDiff).toFixed(0)}% 周环比</span>`;
             }
@@ -399,7 +399,7 @@ class ResearchDashboard {
         const yOf = (v) => H - ((v - minY) / (maxY - minY)) * H;
         let path = `M${xOf(pts[0].i)} ${yOf(pts[0].v)}`;
         for (let k = 1; k < pts.length; k++) path += ` L${xOf(pts[k].i)} ${yOf(pts[k].v)}`;
-        const color = key === 'resting_heart_rate' ? '#f97316' : '#2563eb';
+        const color = key === 'resting_heart_rate' ? '#f97316' : '#2f6bfa';
         return `<svg class="rd-card__spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
             <path d="${path}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             <circle cx="${xOf(pts[pts.length - 1].i)}" cy="${yOf(pts[pts.length - 1].v)}" r="2.5" fill="${color}"/>
