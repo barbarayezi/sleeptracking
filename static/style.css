@@ -383,10 +383,35 @@ body {
 .input-with-unit .form-input { flex: 1; max-width: 200px; }
 .input-unit { font-size: 13px; color: var(--gray-500); font-weight: 600; }
 
-.health-metrics-row { display: flex; gap: 16px; flex-wrap: wrap; }
-.health-metric-item { flex: 1; min-width: 120px; }
-.health-metric-label { display: block; font-size: 14px; color: var(--gray-500); margin-bottom: 4px; }
-.health-metric-item .input-with-unit .form-input { max-width: 100%; }
+/* 昨日健康数据：紧凑磁贴（短标签 + 来源角标），避免长文案换行 */
+.health-metrics-row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+.health-metric-item {
+    background: var(--bg-tint);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 10px 12px;
+    min-width: 0;
+    transition: border-color var(--transition), background var(--transition);
+}
+.health-metric-item:hover { border-color: var(--gray-300); background: var(--bg-card-hover); }
+.health-metric-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 6px; }
+.health-metric-label { font-size: 13px; font-weight: 600; color: var(--gray-700); margin: 0; white-space: nowrap; }
+.metric-badge {
+    flex: none;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1;
+    padding: 3px 7px;
+    border-radius: var(--radius-pill);
+    white-space: nowrap;
+    letter-spacing: .02em;
+}
+.metric-badge--auto { color: var(--success); background: var(--success-soft); }
+.metric-badge--manual { color: var(--gray-500); background: var(--gray-100); }
+.metric-badge--estimate { color: var(--info); background: var(--info-soft); }
+.health-metric-item .input-with-unit { gap: 6px; }
+.health-metric-item .input-with-unit .form-input { max-width: 100%; min-width: 0; padding: 6px 10px; font-weight: 600; background: #fff; }
+.health-metric-item .input-unit { font-size: 12px; }
 .form-textarea { resize: vertical; min-height: 80px; }
 
 /* ── Fieldset & Radio/Checkbox（胶囊选中=蓝 soft） ── */
@@ -1815,6 +1840,7 @@ i.algo-lg-line { background: transparent; border-left: 1px solid var(--gray-400)
 @media (max-width: 1024px) {
     .app-main { padding: 16px 14px; gap: 16px; }
     .card { padding: 16px; }
+    .health-metrics-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (max-width: 640px) {
     .app-header { flex-direction: column; gap: 8px; padding: 10px 14px; }
@@ -1830,7 +1856,7 @@ i.algo-lg-line { background: transparent; border-left: 1px solid var(--gray-400)
     .form-row-2col { grid-template-columns: 1fr; gap: 10px; }
     .form-input, .form-textarea { font-size: 16px; min-height: 40px; }
     .radio-label, .checkbox-label { padding: 6px 12px; font-size: 13px; }
-    .health-metrics-row { flex-direction: column; gap: 8px; }
+    .health-metrics-row { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
     .record-card__time { font-size: 13px; width: 100%; }
     .whoop-detail { grid-template-columns: repeat(2, 1fr); }
     .report-breakdown { grid-template-columns: 1fr; }

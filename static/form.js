@@ -78,7 +78,7 @@ class FormManager {
                     // Real Whoop GPS distance (rare — only GPS-tracked workouts)
                     distInput.value = Number(row.distance_km).toFixed(1);
                     distInput.dataset.estimated = '0';
-                    this._setDistanceHint('· Whoop 自动');
+                    this._setDistanceHint('Whoop');
                 }
                 if (kcalInput && !kcalInput.value && row.kilojoule != null) {
                     kcalInput.value = Math.round(row.kilojoule / 4.184);
@@ -113,13 +113,13 @@ class FormManager {
         const km = steps * FormManager.STRIDE_M / 1000;
         distInput.value = km.toFixed(1);
         distInput.dataset.estimated = '1';
-        this._setDistanceHint('· 步数估算，可改');
+        this._setDistanceHint('步数估算');
     }
 
     /** Update the provenance hint next to the 运动距离 label ('' resets to default). */
     _setDistanceHint(text) {
         const hint = document.getElementById('distance-source-hint');
-        if (hint) hint.textContent = text || '· 按步数估算';
+        if (hint) hint.textContent = text || '估算';
     }
 
     /** Return the currently selected date. */
