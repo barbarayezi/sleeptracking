@@ -167,6 +167,17 @@ class FormManager {
                 this._setDistanceHint('· 手动');
             });
         }
+
+        // 磁贴整块可点：空值格子的输入只有几十像素宽，点到空白处也应聚焦
+        const metricsRow = document.querySelector('.health-metrics-row');
+        if (metricsRow) {
+            metricsRow.addEventListener('click', (e) => {
+                if (e.target.closest('input, select, textarea, button, a')) return;
+                const tile = e.target.closest('.health-metric-item');
+                const input = tile && tile.querySelector('input');
+                if (input) input.focus();
+            });
+        }
     }
 
     /* ── Conditional Logic ────────────────── */
