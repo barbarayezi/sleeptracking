@@ -309,25 +309,36 @@ class WorkoutManager {
     async _deleteById(id) {
         if (!id) return;
         if (!confirm('确定要删除这条运动打卡吗？')) return;
+
+        // 本地实例和 Render 共用同一个 Turso 库：一条记录可能在另一端已经删掉，
+        // 这时 DELETE 返回 404，按「已删除」处理，不要让界面卡着不动。
+        const removeFromUi = () => {
+            this._workoutsForDate = this._workoutsForDate.filter(x => x.id !== id);
+            if (this._editingId === id) {
+                this._editingId = null;
+                this._resetForm();
+                this._updateFormMode();
+            }
+            this._renderList();
+            this._renderDaySummary();
+            if (window.ApiCache) { window.ApiCache.invalidatePrefix('/api/workouts'); window.ApiCache.invalidateAll(); }
+        };
+
         try {
             const resp = await fetch(`/api/workouts/${id}`, { method: 'DELETE' });
-            if (resp.ok || resp.status === 204) {
-                this._workoutsForDate = this._workoutsForDate.filter(x => x.id !== id);
-                if (this._editingId === id) {
-                    this._editingId = null;
-                    this._resetForm();
-                    this._updateFormMode();
-                }
-                this._renderList();
-                this._renderDaySummary();
-                if (window.ApiCache) { window.ApiCache.invalidatePrefix('/api/workouts'); window.ApiCache.invalidateAll(); }
+            if (resp.ok || resp.status === 204 || resp.status === 404) {
+                removeFromUi();
                 this._showMessage('已删除。', 'success');
             } else {
-                const err = await resp.json();
-                this._showMessage('❌ ' + (err.error || '删除失败'), 'error');
+                let detail = 'HTTP ' + resp.status;
+                try { const err = await resp.json(); detail = err.error || detail; } catch (_) {}
+                this._showMessage('❌ ' + detail, 'error');
+                alert('删除失败：' + detail + '\n\n可能是服务端暂时不可用，稍后再试。');
             }
         } catch (err) {
+            // 请求压根没到服务器（服务卡死 / 断网）时，光在表单下面写一行小字没人看得见
             this._showMessage('❌ 网络错误: ' + err.message, 'error');
+            alert('删除失败：网络错误（' + err.message + '）\n请确认服务是否在运行，然后刷新页面重试。');
         }
     }
 

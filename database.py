@@ -46,6 +46,25 @@ def _is_retryable_db_error(exc):
     )
 
 
+def _is_db_panic(exc):
+    """True if exc is a libsql/PyO3 Rust panic.
+
+    Why this exists: libsql-experimental 的 Rust 层 panic 会以
+    `pyo3_runtime.PanicException` 抛出，而它继承的是 BaseException 而不是
+    Exception —— 也就是说 `except Exception` 根本抓不到它。
+
+    后果非常隐蔽：panic 逃出请求处理函数后，waitress 的工作线程直接消失
+    （waitress 不会为死掉的线程补位）。几次之后 12 个工作线程全没了，
+    端口还在 LISTEN，但没人 accept：所有请求（包括删除）都卡住超时，
+    前端看起来就是「点了没反应」。本文件此前的 99 次 panic 就是这么把
+    本机实例彻底挂死的。
+
+    所以这里把 panic 统一识别出来：换连接重试，重试耗尽则转成普通
+    RuntimeError 抛给 Flask，绝不让它继续逃出请求线程。
+    """
+    return type(exc).__name__ == 'PanicException'
+
+
 def _connect_turso():
     """Open a raw libsql connection to Turso (no wrapper, no retry)."""
     # The libsql Python package was renamed from `libsql_experimental` to
@@ -69,13 +88,30 @@ def _with_retry(fn, retries=3, delay=1.0):
     for attempt in range(retries):
         try:
             return fn()
-        except Exception as exc:
+        except (KeyboardInterrupt, SystemExit, GeneratorExit):
+            raise
+        except BaseException as exc:
             last_exc = exc
-            if not _is_retryable_db_error(exc):
-                raise
+            retryable = _is_db_panic(exc) or (
+                isinstance(exc, Exception) and _is_retryable_db_error(exc)
+            )
+            if not retryable:
+                raise _as_regular_error(exc)
             if attempt < retries - 1:
                 time.sleep(delay * (2 ** attempt))
-    raise last_exc
+    raise _as_regular_error(last_exc)
+
+
+def _as_regular_error(exc):
+    """Turn a non-Exception (PyO3 panic) into a normal Exception.
+
+    Only PyO3 panics need converting; KeyboardInterrupt/SystemExit are re-raised
+    by the callers before reaching here. Returning instead of raising lets
+    callers do `raise _as_regular_error(exc)` in one line.
+    """
+    if isinstance(exc, Exception):
+        return exc
+    return RuntimeError(f"数据库底层错误（{type(exc).__name__}）：{exc}")
 
 
 class _TursoConnectionWrapper:
@@ -97,7 +133,7 @@ class _TursoConnectionWrapper:
         """
         try:
             self._conn.close()
-        except Exception:
+        except BaseException:
             pass
         self._conn = _with_retry(_connect_turso, retries=3, delay=1.0)
 
@@ -107,16 +143,26 @@ class _TursoConnectionWrapper:
         for attempt in range(retries):
             try:
                 return op(self._conn)
-            except Exception as exc:
+            except (KeyboardInterrupt, SystemExit, GeneratorExit):
+                raise
+            except BaseException as exc:
                 last_exc = exc
-                if not _is_retryable_db_error(exc):
-                    raise
+                # libsql 的 PyO3 panic 也是「连接已损坏」：换一条连接重试，
+                # 否则 panic 会逃出请求线程并把 waitress 工作线程一起带走。
+                retryable = _is_db_panic(exc) or (
+                    isinstance(exc, Exception) and _is_retryable_db_error(exc)
+                )
+                if not retryable:
+                    raise _as_regular_error(exc)
                 # Stream-level failure: the connection is unusable, replace it
                 # before retrying instead of hammering the same dead stream.
-                self._reconnect()
+                try:
+                    self._reconnect()
+                except BaseException:
+                    pass
                 if attempt < retries - 1:
                     time.sleep(0.5 * (2 ** attempt))
-        raise last_exc
+        raise _as_regular_error(last_exc)
 
     def execute(self, sql, params=None):
         # libsql_experimental only accepts tuples for parameters, not lists.
@@ -153,7 +199,7 @@ class _TursoConnectionWrapper:
         # 底层连接由所属线程持有，空闲断开时由 get_connection() 自动重建。
         try:
             self._conn.commit()
-        except Exception:
+        except BaseException:
             pass
 
 
@@ -320,10 +366,13 @@ def get_connection():
     else:
         try:
             _ping(conn)
-        except Exception:
+        except (KeyboardInterrupt, SystemExit, GeneratorExit):
+            raise
+        except BaseException:
+            # 也包含 libsql 的 PyO3 panic（BaseException 子类，except Exception 抓不到）
             try:
                 conn.close()
-            except Exception:
+            except BaseException:
                 pass
             conn = _create_connection()
             _local.conn = conn
@@ -587,6 +636,13 @@ def _migrate(conn):
     version = _get_schema_version(conn)
     if version < 19:
         _migrate_v19(conn)
+
+    # v20: ai_usage_log — 逐次记录 LLM 调用的 token 用量。网关（TokenHub）
+    #      没有余额/用量查询端点，剩余额度查不到，只能自己记账来回答
+    #      「今天用了多少 / 累计用了多少」。
+    version = _get_schema_version(conn)
+    if version < 20:
+        _migrate_v20(conn)
 
 
 def _migrate_v12(conn):
@@ -968,6 +1024,34 @@ def _migrate_v19(conn):
 
     _set_schema_version(conn, 19)
     print("  Migration v18 -> v19 completed.")
+
+
+def _migrate_v20(conn):
+    """Migrate from v19 to v20: ai_usage_log for LLM token accounting.
+
+    网关（TokenHub）只开放 /v1/models，余额/用量端点全部 404，剩余额度无法
+    查询；但每次响应的 usage 是真实值。逐次记下来，就能回答「今天用了多少 /
+    累计用了多少」。Idempotent: CREATE IF NOT EXISTS。
+    """
+    print("  Running migration v19 -> v20 ...")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS ai_usage_log (
+            id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at         TEXT NOT NULL,
+            kind               TEXT NOT NULL DEFAULT 'text',
+            model              TEXT DEFAULT '',
+            input_tokens       INTEGER NOT NULL DEFAULT 0,
+            output_tokens      INTEGER NOT NULL DEFAULT 0,
+            cache_read_tokens  INTEGER NOT NULL DEFAULT 0,
+            source             TEXT DEFAULT 'app'
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_ai_usage_created
+        ON ai_usage_log(created_at)
+    """)
+    _set_schema_version(conn, 20)
+    print("  Migration v19 -> v20 completed.")
 
 
 def _migrate_v6(conn):
@@ -1456,6 +1540,24 @@ def init_db():
     conn.execute("""
         CREATE INDEX IF NOT EXISTS idx_meal_images_meal
         ON meal_images(meal_id)
+    """)
+
+    # LLM token 用量记账（v20）。网关没有余额查询接口，只能逐次自记。
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS ai_usage_log (
+            id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at         TEXT NOT NULL,
+            kind               TEXT NOT NULL DEFAULT 'text',
+            model              TEXT DEFAULT '',
+            input_tokens       INTEGER NOT NULL DEFAULT 0,
+            output_tokens      INTEGER NOT NULL DEFAULT 0,
+            cache_read_tokens  INTEGER NOT NULL DEFAULT 0,
+            source             TEXT DEFAULT 'app'
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_ai_usage_created
+        ON ai_usage_log(created_at)
     """)
 
     # Workout check-ins table (v16) — manual exercise log (dance classes etc.).
