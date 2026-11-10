@@ -131,13 +131,29 @@ class WorkoutManager {
             return;
         }
         const totalMin = list.reduce((s, w) => s + (w.duration_min || 0), 0);
-        const chips = list.map(w =>
-            `<span class="med-summary-chip med-summary-chip--supplement">${WORKOUT_TYPE_EMOJI[w.workout_type] || '🏃'} ${WORKOUT_TYPE_LABELS[w.workout_type] ? WORKOUT_TYPE_LABELS[w.workout_type].split(' ')[1] : w.workout_type} ${w.duration_min}min</span>`);
+        // 每个 chip 自带删除：这张汇总卡是「当天打了几次」的摘要，以前只能去下方
+        // 列表里找那条记录再点 🗑️，看起来就像「这张卡根本删不掉」。
+        const chips = list.map(w => {
+            const name = WORKOUT_TYPE_LABELS[w.workout_type]
+                ? WORKOUT_TYPE_LABELS[w.workout_type].split(' ')[1]
+                : w.workout_type;
+            return `<span class="med-summary-chip med-summary-chip--supplement summary-chip--deletable">`
+                + `${WORKOUT_TYPE_EMOJI[w.workout_type] || '🏃'} ${name} ${w.duration_min}min`
+                + `<button type="button" class="summary-chip__del" data-id="${w.id}" title="删除这条运动打卡" aria-label="删除这条运动打卡">×</button>`
+                + `</span>`;
+        });
         chips.push(`<span class="med-summary-chip med-summary-chip--total">合计 ${totalMin} 分钟</span>`);
         this.daySummaryEl.innerHTML = `
-            <div class="summary-title">今日运动打卡 <span class="summary-hint">${this._selectedDate}</span></div>
+            <div class="summary-title">今日运动打卡 <span class="summary-hint">${this._selectedDate} · 点 × 可删除</span></div>
             <div class="med-summary-chips">${chips.join('')}</div>`;
         this.daySummaryEl.classList.remove('hidden');
+
+        this.daySummaryEl.querySelectorAll('.summary-chip__del').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this._deleteById(parseInt(e.currentTarget.dataset.id, 10));
+            });
+        });
     }
 
     /* ── List ─────────────────────────────── */
