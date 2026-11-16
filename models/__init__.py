@@ -6,7 +6,7 @@ Works with both local SQLite and Turso (cloud SQLite).
 
 import json
 from datetime import datetime, date
-from database import get_connection
+from database import get_connection, insert_and_fetch
 
 
 def row_to_dict(row):
@@ -106,7 +106,11 @@ def create_record(data):
     sleep_problems = json.dumps(data.get("sleep_problems", []), ensure_ascii=False)
     record_type = data.get("record_type", "night")
 
-    cursor = conn.execute(
+    # INSERT ... RETURNING * — the created row comes back from the same
+    # statement that wrote it, so a reconnect can no longer make the
+    # read-back come back empty (which used to yield a `null` API body).
+    row = insert_and_fetch(
+        conn,
         """
         INSERT INTO sleep_records
             (record_date, record_type, sleep_time, wake_time, classification,
@@ -147,13 +151,6 @@ def create_record(data):
             data.get("hrv"),
         ),
     )
-
-    record_id = cursor.lastrowid
-    conn.commit()
-
-    # Read back by id (works reliably with both SQLite and Turso)
-    cursor = conn.execute("SELECT * FROM sleep_records WHERE id = ?", (record_id,))
-    row = cursor.fetchone()
     conn.close()
     return row_to_dict(row)
 

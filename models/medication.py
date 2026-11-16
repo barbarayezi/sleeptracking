@@ -8,7 +8,7 @@ day — each entry is independent, not "one record per day".
 Works with both local SQLite and Turso (cloud SQLite).
 """
 
-from database import get_connection, MEDICATION_CATEGORY_PALETTE
+from database import get_connection, insert_and_fetch, MEDICATION_CATEGORY_PALETTE
 
 
 def row_to_dict(row):
@@ -81,7 +81,12 @@ def create_medication(data):
     """Insert a new medication record. Returns the created dict."""
     conn = get_connection()
 
-    cursor = conn.execute(
+    # INSERT ... RETURNING * — the row comes back from the same statement
+    # that wrote it. The old lastrowid-then-SELECT-back pattern could lose
+    # the row to a reconnect and return None, which the API serialised as
+    # `null` and the frontend then crashed on.
+    row = insert_and_fetch(
+        conn,
         """
         INSERT INTO medication_records
             (record_date, record_time, medication_name, dosage,
@@ -99,12 +104,6 @@ def create_medication(data):
             data.get("notes", ""),
         ),
     )
-    med_id = cursor.lastrowid
-    conn.commit()
-
-    # Read back by id
-    cursor = conn.execute("SELECT * FROM medication_records WHERE id = ?", (med_id,))
-    row = cursor.fetchone()
     conn.close()
     return row_to_dict(row)
 
@@ -273,17 +272,13 @@ def add_medication_category(label, emoji='📦'):
     color = MEDICATION_CATEGORY_PALETTE[len(existing) % len(MEDICATION_CATEGORY_PALETTE)]
     emoji = (emoji or '📦').strip() or '📦'
 
-    cursor = conn.execute(
+    row = insert_and_fetch(
+        conn,
         "INSERT INTO medication_categories "
         "(category_key, label, emoji, color, sort_order, is_system) "
         "VALUES (?, ?, ?, ?, ?, 0)",
         (key, label, emoji, color, max_sort + 1),
     )
-    new_id = cursor.lastrowid
-    conn.commit()
-    row = conn.execute(
-        "SELECT * FROM medication_categories WHERE id = ?", (new_id,)
-    ).fetchone()
     conn.close()
     return row_to_dict(row), True
 

@@ -78,6 +78,8 @@ class PeriodManager {
 
         let html = '';
         for (const p of this._periodsForDate) {
+            // 防御：接口偶尔会返回 null 元素，直接读 p.id 会抛 TypeError。
+            if (!p || typeof p !== 'object') continue;
             const isEditing = (this._editingPeriodId === p.id);
             const flowLabel = flowLabels[p.flow] || p.flow;
             const flowColor = flowColors[p.flow] || '#7789ae';
@@ -208,8 +210,18 @@ class PeriodManager {
                 body: JSON.stringify(data)
             });
 
-            if (resp.ok) {
-                const saved = await resp.json();
+            // 防御性解析：网关/后端偶发返回空体或 HTML 错误页，
+            // 直接 resp.json() 会抛解析错误并掩盖真实状态。
+            const text = await resp.text();
+            let body;
+            try {
+                body = text ? JSON.parse(text) : null;
+            } catch (e) {
+                body = undefined;
+            }
+
+            if (resp.ok && body && typeof body === 'object' && body.id !== undefined) {
+                const saved = body;
                 this._showMessage('✅ 保存成功！', 'success');
 
                 if (isUpdate) {
@@ -228,9 +240,17 @@ class PeriodManager {
                 if (typeof App !== 'undefined' && App.onPeriodSaved) {
                     App.onPeriodSaved();
                 }
+            } else if (resp.ok) {
+                // 2xx 但响应体不是一条记录：不能塞进列表（渲染时会崩），
+                // 重新拉当天列表核对，避免用户直接重试造成重复记录。
+                this._showMessage('⚠️ 服务器响应异常，正在核对是否已保存...', 'error');
+                if (window.ApiCache) window.ApiCache.invalidateAll();
+                await this.loadDate(this._selectedDate);
             } else {
-                const err = await resp.json();
-                this._showMessage('❌ ' + (err.error || '保存失败'), 'error');
+                const msg = (body && body.error)
+                    ? body.error
+                    : `保存失败 (HTTP ${resp.status}${body === undefined ? '，响应非 JSON' : ''})`;
+                this._showMessage('❌ ' + msg, 'error');
             }
         } catch (err) {
             this._showMessage('❌ 网络错误: ' + err.message, 'error');

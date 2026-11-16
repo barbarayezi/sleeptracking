@@ -10,7 +10,7 @@ Works with both local SQLite and Turso (cloud SQLite).
 
 import json
 from datetime import date, timedelta
-from database import get_connection
+from database import get_connection, insert_and_fetch
 
 
 def row_to_dict(row):
@@ -98,7 +98,9 @@ def create_period(data):
     mood = json.dumps(data.get("mood", []), ensure_ascii=False)
     is_start = 1 if data.get("is_period_start") else 0
 
-    cursor = conn.execute(
+    # INSERT ... RETURNING * — created row comes back with the write.
+    row = insert_and_fetch(
+        conn,
         """
         INSERT INTO period_records
             (record_date, is_period_start, flow, symptoms, mood, phase, notes)
@@ -114,12 +116,6 @@ def create_period(data):
             data.get("notes", ""),
         ),
     )
-
-    pid = cursor.lastrowid
-    conn.commit()
-
-    cursor = conn.execute("SELECT * FROM period_records WHERE id = ?", (pid,))
-    row = cursor.fetchone()
     conn.close()
     return row_to_dict(row)
 

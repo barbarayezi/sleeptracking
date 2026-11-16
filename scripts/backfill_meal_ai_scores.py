@@ -138,7 +138,13 @@ def main():
             )
             if not res.get("ok"):
                 fail += 1
-                print(f"[{i}/{total}] id={rid} 失败：{res.get('error')}")
+                err = str(res.get("error") or "")
+                print(f"[{i}/{total}] id={rid} 失败：{err}")
+                # 额度/鉴权问题：后面每条都会同样失败，立刻收工。
+                if nutrition.is_quota_error(err):
+                    print(f"\n⛔ 检测到额度不足 / 鉴权失败，本轮提前结束。"
+                          f"剩余 {total - i} 条仍待回填，额度恢复后重跑本脚本即可。")
+                    break
                 continue
 
             d = res["data"]
@@ -179,6 +185,10 @@ def main():
         except Exception as e:  # noqa: BLE001
             fail += 1
             print(f"[{i}/{total}] id={rid} 异常：{e}")
+            if nutrition.is_quota_error(str(e)):
+                print(f"\n⛔ 检测到额度不足 / 鉴权失败，本轮提前结束。"
+                      f"剩余 {total - i} 条仍待回填，额度恢复后重跑本脚本即可。")
+                break
             # Keep going; the row stays NULL and a re-run will pick it up.
 
         time.sleep(0.2)  # gentle pace; avoid hammering the gateway

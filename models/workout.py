@@ -11,7 +11,7 @@ Works with both local SQLite and Turso (cloud SQLite).
 
 from datetime import date as _date, timedelta as _td
 
-from database import get_connection
+from database import get_connection, insert_and_fetch
 
 WORKOUT_TYPES = ('jazz', 'hiphop', 'kpop', 'urban', 'breaking', 'other')
 INTENSITIES = ('low', 'medium', 'high')
@@ -85,7 +85,9 @@ def get_whoop_workouts_by_date(workout_date):
 
 def create_workout(data):
     conn = get_connection()
-    cursor = conn.execute(
+    # INSERT ... RETURNING * — created row comes back with the write.
+    row = insert_and_fetch(
+        conn,
         """
         INSERT INTO workout_checkins
             (workout_date, workout_type, duration_min, intensity, content, notes)
@@ -100,9 +102,6 @@ def create_workout(data):
             data.get("notes", ""),
         ),
     )
-    wid = cursor.lastrowid
-    conn.commit()
-    row = conn.execute("SELECT * FROM workout_checkins WHERE id = ?", (wid,)).fetchone()
     conn.close()
     return row_to_dict(row)
 

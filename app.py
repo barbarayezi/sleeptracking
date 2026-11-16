@@ -98,6 +98,22 @@ def index():
 # ──────────────────────────────────────────────
 
 
+def _created(record, entity='记录'):
+    """Build the 201 response for a newly created record.
+
+    Guards against a `null` body: jsonify(None) produces a valid HTTP 201
+    whose body is the literal `null`, which the frontend happily pushes
+    into its list and then crashes on when rendering. A create that could
+    not confirm the write must fail loudly instead.
+    """
+    if record is None:
+        return jsonify({
+            'error': f'{entity}写入后未能确认保存，请重试',
+            'status': 500,
+        }), 500
+    return jsonify(record), 201
+
+
 def _validate_record_data(data):
     """Validate sleep record data. Returns (errors, cleaned_data)."""
     errors = []
@@ -267,7 +283,7 @@ def create_record():
 
     record = models.create_record(data)
     record = _auto_attach_activity(record)
-    return jsonify(record), 201
+    return _created(record, '睡眠记录')
 
 
 @app.route('/api/records/<int:record_id>', methods=['PUT'])
@@ -436,13 +452,15 @@ def create_meal():
         return jsonify({'error': errors[0]}), 400
 
     meal = meal_models.create_meal(data)
-    if images and meal and meal.get('id'):
+    if meal is None:
+        return _created(None, '餐食记录')
+    if images and meal.get('id'):
         ids = meal_models.add_meal_images(meal['id'], images)
         meal['images'] = meal_models.get_meal_images(meal['id'])
         meal['image_ids'] = ids
     else:
         meal['images'] = []
-    return jsonify(meal), 201
+    return _created(meal, '餐食记录')
 
 
 @app.route('/api/meals/<int:meal_id>', methods=['PUT'])
@@ -1733,7 +1751,7 @@ def create_period():
         return jsonify({'error': errors[0]}), 400
 
     period = period_models.create_period(data)
-    return jsonify(period), 201
+    return _created(period, '经期记录')
 
 
 @app.route('/api/periods/<int:period_id>', methods=['PUT'])
@@ -1891,6 +1909,8 @@ def create_medication_category():
         category, created = medication_models.add_medication_category(label, emoji)
     except ValueError as e:
         return jsonify({'error': str(e)}), 400
+    if category is None:
+        return jsonify({'error': '类别写入后未能确认保存，请重试'}), 500
     return jsonify(category), (201 if created else 200)
 
 
@@ -1924,7 +1944,7 @@ def create_medication():
         return jsonify({'error': errors[0]}), 400
 
     record = medication_models.create_medication(data)
-    return jsonify(record), 201
+    return _created(record, '用药记录')
 
 
 @app.route('/api/medications/<int:med_id>', methods=['PUT'])
@@ -2086,7 +2106,7 @@ def create_workout():
     if errors:
         return jsonify({'error': errors[0]}), 400
     record = workout_models.create_workout(data)
-    return jsonify(record), 201
+    return _created(record, '运动打卡')
 
 
 @app.route('/api/workouts/<int:wid>', methods=['PUT'])

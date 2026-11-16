@@ -6,7 +6,7 @@ Works with both local SQLite and Turso (cloud SQLite).
 
 import json
 
-from database import get_connection
+from database import get_connection, insert_and_fetch
 
 
 def row_to_dict(row):
@@ -109,7 +109,11 @@ def create_meal(data):
     """Insert a new meal record. Returns the created meal dict."""
     conn = get_connection()
 
-    cursor = conn.execute(
+    # INSERT ... RETURNING * — the created row comes back from the same
+    # statement that wrote it (no separate read-back that a reconnect
+    # could turn into a `null`).
+    row = insert_and_fetch(
+        conn,
         """
         INSERT INTO meal_records
             (meal_date, meal_type, meal_time, meal_name, meal_content,
@@ -143,13 +147,6 @@ def create_meal(data):
             data.get("cooking_method", ""),
         ),
     )
-
-    meal_id = cursor.lastrowid
-    conn.commit()
-
-    # Read back by id
-    cursor = conn.execute("SELECT * FROM meal_records WHERE id = ?", (meal_id,))
-    row = cursor.fetchone()
     conn.close()
     return row_to_dict(row)
 
@@ -430,13 +427,11 @@ def add_meal_option(option_type, option_value):
         "SELECT COALESCE(MAX(sort_order), -1) AS m FROM meal_options WHERE option_type = ?",
         (option_type,),
     ).fetchone()['m']
-    cursor = conn.execute(
+    row = insert_and_fetch(
+        conn,
         "INSERT INTO meal_options (option_type, option_value, sort_order) VALUES (?, ?, ?)",
         (option_type, option_value, max_order + 1),
     )
-    new_id = cursor.lastrowid
-    conn.commit()
-    row = conn.execute("SELECT * FROM meal_options WHERE id = ?", (new_id,)).fetchone()
     conn.close()
     return row_to_dict(row), True
 

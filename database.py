@@ -194,6 +194,30 @@ class _TursoConnectionWrapper:
 
         return self._run(_op)
 
+    def execute_and_commit(self, sql, params=None):
+        """执行一条写语句并立即提交 —— 两步在**同一个**重试单元内完成。
+
+        为什么要合并：原先 execute() 与 commit() 是两个彼此独立的重试单元。
+        Hrana 流在两者之间断开时，_run() 会换一条新连接并在新连接上"提交"，
+        那是一个空事务，提交"成功"但原事务的数据其实没落库（服务端会回滚
+        已断开的流）。把 execute+commit 放进同一个单元后，失败会在新连接上
+        整体重放这条 INSERT，数据不会悄悄丢失。
+
+        返回值：语句产出的行列表（配合 `RETURNING *` 使用）。
+        """
+        if params is None:
+            params = ()
+        elif isinstance(params, (list, dict)):
+            params = tuple(params)
+
+        def _op(conn):
+            cur = conn.execute(sql, params)
+            rows = _TursoCursorWrapper(cur, self.row_factory).fetchall()
+            conn.commit()
+            return rows
+
+        return self._run(_op)
+
     def close(self):
         # 连接复用（线程本地缓存）：不真正关闭底层连接，仅提交未决事务。
         # 底层连接由所属线程持有，空闲断开时由 get_connection() 自动重建。
@@ -298,6 +322,22 @@ class _SqliteConnectionWrapper:
     def commit(self):
         return self._conn.commit()
 
+    def execute_and_commit(self, sql, params=None):
+        """Execute a write statement and commit it as one unit.
+
+        Mirrors _TursoConnectionWrapper.execute_and_commit so callers can
+        use the same code path on both backends. The commit happens inside
+        the same call, so a failure never leaves a half-applied write.
+        """
+        if params is None:
+            params = ()
+        elif isinstance(params, (list, dict)):
+            params = tuple(params)
+        cur = self._conn.execute(sql, params)
+        rows = cur.fetchall()
+        self._conn.commit()
+        return rows
+
     def rollback(self):
         return self._conn.rollback()
 
@@ -377,6 +417,35 @@ def get_connection():
             conn = _create_connection()
             _local.conn = conn
     return conn
+
+
+def insert_and_fetch(conn, sql, params=None):
+    """Insert a row and return it, in one shot.
+
+    Uses `INSERT ... RETURNING *` so the row comes back from the very same
+    statement that wrote it — no separate SELECT, and therefore no window
+    in which a reconnect could make the read-back come back empty.
+
+    Why this matters: the old "INSERT → lastrowid → SELECT by id" pattern
+    returned `None` whenever the connection was replaced between the two
+    statements (Turso stream drop / libsql panic). The API then answered
+    `201 Created` with a body of `null`, and the frontend crashed on it
+    with "Cannot read properties of null (reading 'administration_slot')".
+
+    `RETURNING` is supported by SQLite ≥ 3.35 and by Turso, so both
+    backends are covered. The write and its COMMIT happen inside a single
+    retry unit, so a transient failure replays the INSERT instead of
+    silently dropping it.
+
+    Returns the inserted row (a sqlite3.Row / _TursoRow, so the caller can
+    feed it to its own row_to_dict()), or None if the statement produced
+    no row (should not happen for a plain INSERT).
+    """
+    stmt = sql.strip()
+    if stmt.endswith(';'):
+        stmt = stmt[:-1]
+    rows = conn.execute_and_commit(stmt + ' RETURNING *', params)
+    return rows[0] if rows else None
 
 
 def _get_schema_version(conn):

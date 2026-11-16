@@ -192,12 +192,27 @@ def _extract_json(text):
     return None
 
 
-def _call_model(content, model_override=None, base_override=None, key_override=None, max_tokens=None):
+def _record_usage(model, usage, kind="text"):
+    """把一次成功调用的 token 用量写进 ai_usage_log（best-effort）。
+
+    网关查不到剩余额度，只能靠逐笔记账回答「用了多少」。这里任何异常都吞掉
+    ——记账是旁路，绝不能因为写库失败把已经成功的营养分析变成失败。
+    """
+    try:
+        from models import usage_log
+        usage_log.record(kind=kind, model=model, usage=usage)
+    except Exception:
+        pass
+
+
+def _call_model(content, model_override=None, base_override=None, key_override=None,
+                max_tokens=None, kind="text"):
     """POST to the Anthropic-compatible endpoint.
 
     `content` is either a prompt string (text estimation) or a list of content
     blocks (vision: image + text). Optional overrides let the vision path target
     a different model / base / key — commonly the same gateway, a vision model.
+    `kind` only labels the usage row (text / vision).
     """
     if base_override and key_override:
         base, key, model = base_override, key_override, model_override
@@ -231,7 +246,7 @@ def _call_model(content, model_override=None, base_override=None, key_override=N
     try:
         with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT,
                                     context=ssl.create_default_context()) as resp:
-            return json.loads(resp.read().decode("utf-8"))
+            data = json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         body = ""
         try:
@@ -239,6 +254,10 @@ def _call_model(content, model_override=None, base_override=None, key_override=N
         except Exception:
             pass
         raise RuntimeError(f"LLM 返回 HTTP {e.code}：{body}")
+
+    # 调用成功 → 记账（kind 区分文本/视觉，模型名取自响应，最准确）
+    _record_usage(data.get("model") or model, data.get("usage"), kind)
+    return data
 
 
 def _collect_text(response):
@@ -413,6 +432,27 @@ def _is_model_missing_error(msg):
     return ("not exist" in low) or ("model not found" in low) or ("does not exist" in low)
 
 
+# 额度/账单类错误：额度用尽、欠费、限流、鉴权失效。
+# 这类错误「重试同一条也没用」，批量补算脚本遇到它们应当立刻收工，
+# 而不是把剩下几十条挨个试一遍——否则既刷不出一行结果，又拖慢整批。
+_QUOTA_MARKERS = (
+    "http 402", "http 429", "http 401", "http 403",
+    "insufficient", "quota", "arrearage", "balance",
+    "余额", "欠费", "额度", "超出", "限流", "rate limit",
+    "invalid api key", "unauthorized", "authentication",
+)
+
+
+def is_quota_error(msg):
+    """True when an error message means "out of quota / not authorised".
+
+    Public helper: the batch backfill scripts use it to abort a run early
+    instead of burning through every pending row while the key is dry.
+    """
+    low = (msg or "").lower()
+    return any(m in low for m in _QUOTA_MARKERS)
+
+
 def _call_vision_model(content, max_tokens):
     """Call the vision model with automatic fallback on model-not-exist errors.
 
@@ -435,7 +475,7 @@ def _call_vision_model(content, max_tokens):
     for i, cand in enumerate(candidates):
         try:
             raw = _call_model(content, model_override=cand, base_override=base,
-                              key_override=key, max_tokens=max_tokens)
+                              key_override=key, max_tokens=max_tokens, kind="vision")
             return raw, None
         except Exception as e:
             msg = str(e)

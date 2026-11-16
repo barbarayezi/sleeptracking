@@ -99,12 +99,34 @@ class WorkoutManager {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
             }, 8000);
-            const data = await resp.json();
+
+            // 防御性解析：网关/后端偶发返回空体或 HTML 错误页，
+            // 直接 resp.json() 会抛解析错误并掩盖真实状态。
+            const text = await resp.text();
+            let body;
+            try {
+                body = text ? JSON.parse(text) : null;
+            } catch (e) {
+                body = undefined;
+            }
+
             if (!resp.ok) {
-                this._showMessage('❌ ' + (data.error || '记录失败'), 'error');
+                const msg = (body && body.error)
+                    ? body.error
+                    : `记录失败 (HTTP ${resp.status})`;
+                this._showMessage('❌ ' + msg, 'error');
                 return;
             }
-            this._workoutsForDate.push(data);
+
+            // 2xx 但响应体不是一条记录：不能塞进列表（渲染时会崩）。
+            if (!body || typeof body !== 'object' || body.id === undefined) {
+                this._showMessage('⚠️ 服务器响应异常，正在核对是否已保存...', 'error');
+                if (window.ApiCache) window.ApiCache.invalidateAll();
+                await this.loadDate(this._selectedDate);
+                return;
+            }
+
+            this._workoutsForDate.push(body);
             this._renderList();
             this._renderDaySummary();
             if (window.ApiCache) {
@@ -114,7 +136,14 @@ class WorkoutManager {
             const label = WORKOUT_TYPE_LABELS[payload.workout_type] || payload.workout_type;
             this._showMessage(`✅ 已打卡 ${label} · ${payload.duration_min} 分钟`, 'success');
         } catch (err) {
-            this._showMessage('❌ ' + (err.name === 'AbortError' ? '请求超时，请稍后重试' : '网络错误: ' + err.message), 'error');
+            const isNetworkFailure = err instanceof TypeError
+                && /fetch|network|Failed to fetch/i.test(err.message || '');
+            const msg = err.name === 'AbortError'
+                ? '请求超时，请稍后重试'
+                : (isNetworkFailure
+                    ? '网络错误: ' + err.message
+                    : '页面脚本异常: ' + (err.message || err));
+            this._showMessage('❌ ' + msg, 'error');
         } finally {
             this._quickButtons.forEach((b) => { b.disabled = false; b.textContent = labels.get(b); });
         }
@@ -169,6 +198,8 @@ class WorkoutManager {
 
         let html = '';
         for (const w of this._workoutsForDate) {
+            // 防御：接口偶尔会返回 null 元素，直接读 w.id 会抛 TypeError。
+            if (!w || typeof w !== 'object') continue;
             const isEditing = (this._editingId === w.id);
             const typeLabel = WORKOUT_TYPE_LABELS[w.workout_type] || w.workout_type;
             const intLabel = WORKOUT_INTENSITY_LABELS[w.intensity] || w.intensity;

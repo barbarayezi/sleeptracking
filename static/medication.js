@@ -297,12 +297,35 @@ class MedicationManager {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
             }, 8000);
-            const data = await resp.json();
+
+            // 防御性解析（同 _save）：网关/后端偶发返回空体或 HTML 错误页，
+            // 直接 resp.json() 会抛 "Unexpected token '<'"，掩盖真实状态。
+            const text = await resp.text();
+            let body;
+            try {
+                body = text ? JSON.parse(text) : null;
+            } catch (e) {
+                body = undefined;   // 非 JSON（HTML 错误页 / 截断响应等）
+            }
+
             if (!resp.ok) {
-                this._showMessage('❌ ' + (data.error || '记录失败'), 'error');
+                const msg = (body && body.error)
+                    ? body.error
+                    : `记录失败 (HTTP ${resp.status}${body === undefined ? '，响应非 JSON' : ''})`;
+                this._showMessage('❌ ' + msg, 'error');
                 return;
             }
-            this._medicationsForDate.push(data);
+
+            // 2xx 但响应体不是一条记录：不能把它塞进列表（渲染时会崩），
+            // 也不能当成功。重新拉当天列表核对，避免用户直接重试造成重复。
+            if (!body || typeof body !== 'object' || body.id === undefined) {
+                this._showMessage('⚠️ 服务器响应异常，正在核对是否已保存...', 'error');
+                if (window.ApiCache) window.ApiCache.invalidateAll();
+                await this.loadDate(this._selectedDate);
+                return;
+            }
+
+            this._medicationsForDate.push(body);
             this._renderList();
             // 新记录写入后立刻让药物相关缓存失效，保证汇总和列表是最新值
             if (window.ApiCache) {
@@ -312,7 +335,17 @@ class MedicationManager {
             const slotTxt = {morning:'早',noon:'午',evening:'晚',night:'睡前'}[slot] || '早';
             this._showMessage('✅ 已记录 ' + payload.medication_name + '（' + slotTxt + '）', 'success');
         } catch (err) {
-            this._showMessage('❌ ' + (err.name === 'AbortError' ? '请求超时，请稍后重试' : '网络错误: ' + err.message), 'error');
+            // 只有真正的传输层失败才算「网络错误」；前端自身的 TypeError
+            // （例如读到 null.administration_slot）必须单独报出来，否则
+            // 真实代码缺陷会被伪装成网络抖动，越查越偏。
+            const isNetworkFailure = err instanceof TypeError
+                && /fetch|network|Failed to fetch/i.test(err.message || '');
+            const msg = err.name === 'AbortError'
+                ? '请求超时，请稍后重试'
+                : (isNetworkFailure
+                    ? '网络错误: ' + err.message
+                    : '页面脚本异常: ' + (err.message || err));
+            this._showMessage('❌ ' + msg, 'error');
         } finally {
             this._quickfillButtons.forEach((b) => {
                 b.disabled = false;
@@ -396,6 +429,9 @@ class MedicationManager {
         // Group rows by slot, preserving server-side ordering inside each slot.
         const bySlot = { morning: [], noon: [], evening: [], night: [] };
         for (const m of this._medicationsForDate) {
+            // 防御：接口偶尔会返回 null 元素（历史上由「写入后回读落空」引起），
+            // 直接读 m.administration_slot 会抛 TypeError 让整页白屏。
+            if (!m || typeof m !== 'object') continue;
             const slot = m.administration_slot || 'morning';
             (bySlot[slot] || bySlot.morning).push(m);
         }
@@ -585,7 +621,7 @@ class MedicationManager {
                 body = undefined;   // 非 JSON（HTML 错误页 / 截断响应等）
             }
 
-            if (resp.ok && body) {
+            if (resp.ok && body && typeof body === 'object' && body.id !== undefined) {
                 const saved = body;
                 this._showMessage(isUpdate ? '✅ 已更新' : '✅ 保存成功！', 'success');
 

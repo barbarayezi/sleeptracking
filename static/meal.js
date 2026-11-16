@@ -957,6 +957,8 @@ class MealManager {
 
         let html = '';
         for (const m of this._mealsForDate) {
+            // 防御：接口偶尔会返回 null 元素，直接读 m.id 会抛 TypeError。
+            if (!m || typeof m !== 'object') continue;
             const isEditing = (this._editingMealId === m.id);
             const typeLabel = typeLabels[m.meal_type] || m.meal_type;
             const ratingLabel = ratingLabels[m.health_rating] || m.health_rating;
@@ -1258,7 +1260,7 @@ class MealManager {
                 body = undefined;   // 非 JSON（HTML 错误页 / 截断响应等）
             }
 
-            if (resp.ok && body) {
+            if (resp.ok && body && typeof body === 'object' && body.id !== undefined) {
                 const saved = body;
                 this._showMessage('✅ 保存成功！', 'success');
 

@@ -570,15 +570,15 @@ const App = {
                 alertEl.style.display = 'block';
             } else if (connected && d.has_history && missingDays >= 2) {
                 alertEl.innerHTML = '⚠️ <strong>最近 ' + missingDays +
-                    ' 天没有睡眠数据。</strong>最常见原因是 Whoop 手环蓝牙断开、' +
-                    '没把数据同步到云端。请打开 Whoop App 确认手环已连接并手动同步一次；' +
-                    '重新同步后本应用会在几分钟内自动补上。';
+                    ' 天没有睡眠数据。</strong>数据还没从 Whoop 云端同步过来（可能蓝牙未连、Whoop App 尚未上传、或睡眠周期还没判定完成）。' +
+                    '请打开 Whoop App 确认手环已连接并手动同步一次；' +
+                    '同步后本应用会在几分钟内自动补上。';
                 alertEl.style.display = 'block';
             } else if (connected && d.sleep_count === 0 && hour >= 9) {
                 alertEl.innerHTML = '⚠️ <strong>今天（' + d.date +
-                    '）的睡眠数据还没收到。</strong>最常见原因是 Whoop 手环蓝牙断开、' +
-                    '没把数据同步到云端。请打开 Whoop App 确认手环已连接并手动同步一次；' +
-                    '重新同步后本应用会在几分钟内自动补上。';
+                    '）的睡眠数据还没收到。</strong>数据还没从 Whoop 云端同步过来（可能蓝牙未连、Whoop App 尚未上传、或这段睡眠周期还没判定完成）。' +
+                    '请打开 Whoop App 确认手环已连接并手动同步一次；' +
+                    '同步后本应用会在几分钟内自动补上。';
                 alertEl.style.display = 'block';
             } else {
                 alertEl.style.display = 'none';
