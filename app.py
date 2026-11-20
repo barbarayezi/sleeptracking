@@ -391,6 +391,15 @@ def _validate_meal_data(data):
             elif len(data[field]) > limit:
                 errors.append(f'{field} must be at most {limit} characters')
 
+    # client_request_id (v21): 前端生成的保存幂等键，只做形状校验——
+    # 超长或非字符串直接拒绝，避免把垃圾写进唯一索引列。
+    cid = data.get('client_request_id')
+    if cid is not None and cid != '':
+        if not isinstance(cid, str):
+            errors.append('client_request_id must be a string')
+        elif len(cid) > 64:
+            errors.append('client_request_id must be at most 64 characters')
+
     return errors
 
 
@@ -454,10 +463,15 @@ def create_meal():
     meal = meal_models.create_meal(data)
     if meal is None:
         return _created(None, '餐食记录')
-    if images and meal.get('id'):
+    # 幂等重投（同一 client_request_id 的第二次 POST）：这一行是上一次已经
+    # 写好的，照片也挂过了，再 add 一遍就会让同一张照片出现两份。
+    replayed = bool(meal.pop('_replayed', False))
+    if images and meal.get('id') and not replayed:
         ids = meal_models.add_meal_images(meal['id'], images)
         meal['images'] = meal_models.get_meal_images(meal['id'])
         meal['image_ids'] = ids
+    elif replayed and meal.get('id'):
+        meal['images'] = meal_models.get_meal_images(meal['id'])
     else:
         meal['images'] = []
     return _created(meal, '餐食记录')

@@ -97,6 +97,25 @@ def get_meal_by_id(meal_id):
     return row_to_dict(row)
 
 
+def get_meal_by_client_request_id(client_request_id):
+    """Return the meal saved under this idempotency key, or None.
+
+    v21: 前端每次填表生成一个 client_request_id。弱网下 POST 可能在响应
+    回到浏览器之前断链，但服务端已经落库——有了这个键，重试就能认出
+    「这张表已经存过了」，不会写出第二条。
+    """
+    if not client_request_id:
+        return None
+    conn = get_connection()
+    cursor = conn.execute(
+        "SELECT * FROM meal_records WHERE client_request_id = ?",
+        (client_request_id,),
+    )
+    row = cursor.fetchone()
+    conn.close()
+    return row_to_dict(row)
+
+
 def get_meals_by_date(meal_date):
     """Return all meal records for a given date. Returns a list (may be empty)."""
     return get_all_meals(date=meal_date)
@@ -106,47 +125,78 @@ def get_meals_by_date(meal_date):
 
 
 def create_meal(data):
-    """Insert a new meal record. Returns the created meal dict."""
+    """Insert a new meal record. Returns the created meal dict.
+
+    If `data['client_request_id']` is set, the write is idempotent: a repeat
+    with the same key updates the row from the first attempt instead of
+    inserting a duplicate. That makes it safe for the frontend to retry a
+    save whose response was lost (cross-border link drops are routine here).
+    """
+    cid = (data.get('client_request_id') or '').strip() or None
+    if cid:
+        existing = get_meal_by_client_request_id(cid)
+        if existing:
+            # 同一张表的重投：用本次内容覆盖，既不出重复行，也不会把用户
+            # 在两次点击之间改过的内容丢掉。`_replayed` 是给调用方的信号：
+            # 这一行是上一次写的，照片已经挂过了，别再追加一遍。
+            replay = update_meal_by_id(existing['id'], data) or existing
+            replay['_replayed'] = True
+            return replay
+
     conn = get_connection()
 
     # INSERT ... RETURNING * — the created row comes back from the same
     # statement that wrote it (no separate read-back that a reconnect
     # could turn into a `null`).
-    row = insert_and_fetch(
-        conn,
-        """
-        INSERT INTO meal_records
-            (meal_date, meal_type, meal_time, meal_name, meal_content,
-             meal_quantity, health_rating, notes, allergy_reaction,
-             calorie_kcal, protein_g, fat_g, carbs_g, health_score,
-             items_json, ai_pros, ai_cons, ai_suggestion, ai_analyzed_at,
-             dining_location, cooking_method)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            data["meal_date"],
-            data["meal_type"],
-            data["meal_time"],
-            data.get("meal_name", ""),
-            data.get("meal_content", ""),
-            data.get("meal_quantity", "normal"),
-            data.get("health_rating", "average"),
-            data.get("notes", ""),
-            data.get("allergy_reaction", ""),
-            data.get("calorie_kcal"),
-            data.get("protein_g"),
-            data.get("fat_g"),
-            data.get("carbs_g"),
-            data.get("health_score"),
-            _dump_items(data.get("items_json")),
-            data.get("ai_pros", ""),
-            data.get("ai_cons", ""),
-            data.get("ai_suggestion", ""),
-            data.get("ai_analyzed_at"),
-            data.get("dining_location", ""),
-            data.get("cooking_method", ""),
-        ),
-    )
+    try:
+        row = insert_and_fetch(
+            conn,
+            """
+            INSERT INTO meal_records
+                (meal_date, meal_type, meal_time, meal_name, meal_content,
+                 meal_quantity, health_rating, notes, allergy_reaction,
+                 calorie_kcal, protein_g, fat_g, carbs_g, health_score,
+                 items_json, ai_pros, ai_cons, ai_suggestion, ai_analyzed_at,
+                 dining_location, cooking_method, client_request_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                data["meal_date"],
+                data["meal_type"],
+                data["meal_time"],
+                data.get("meal_name", ""),
+                data.get("meal_content", ""),
+                data.get("meal_quantity", "normal"),
+                data.get("health_rating", "average"),
+                data.get("notes", ""),
+                data.get("allergy_reaction", ""),
+                data.get("calorie_kcal"),
+                data.get("protein_g"),
+                data.get("fat_g"),
+                data.get("carbs_g"),
+                data.get("health_score"),
+                _dump_items(data.get("items_json")),
+                data.get("ai_pros", ""),
+                data.get("ai_cons", ""),
+                data.get("ai_suggestion", ""),
+                data.get("ai_analyzed_at"),
+                data.get("dining_location", ""),
+                data.get("cooking_method", ""),
+                cid,
+            ),
+        )
+    except Exception as exc:
+        # 并发重投（自动重试与手动再点撞在一起）会撞唯一索引：此时那一行
+        # 已经存在，把它读回来按本次内容更新，结果与幂等语义一致。
+        if cid and 'unique' in str(exc).lower():
+            existing = get_meal_by_client_request_id(cid)
+            if existing:
+                conn.close()
+                replay = update_meal_by_id(existing['id'], data) or existing
+                replay['_replayed'] = True
+                return replay
+        conn.close()
+        raise
     conn.close()
     return row_to_dict(row)
 

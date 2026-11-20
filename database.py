@@ -713,6 +713,13 @@ def _migrate(conn):
     if version < 20:
         _migrate_v20(conn)
 
+    # v21: meal_records.client_request_id — 前端一次「保存」生成的幂等键。
+    #      跨境弱网下 POST 有时在收到响应前断链（浏览器报 Failed to fetch），
+    #      而服务端其实已经落库；带幂等键后重试不会写出第二条一样的记录。
+    version = _get_schema_version(conn)
+    if version < 21:
+        _migrate_v21(conn)
+
 
 def _migrate_v12(conn):
     """Migrate from v11 to v12: add medication_records table for daily medication log.
@@ -1121,6 +1128,30 @@ def _migrate_v20(conn):
     """)
     _set_schema_version(conn, 20)
     print("  Migration v19 -> v20 completed.")
+
+
+def _migrate_v21(conn):
+    """Migrate from v20 to v21: meal_records.client_request_id（保存幂等键）.
+
+    为什么需要：用户平时用的是 Render 云端版，写入要跨洋到 Turso（东京）。
+    一次带图保存的往返要 4–9 秒，弱网/代理抖动时浏览器会在拿到响应前断链，
+    界面报「网络错误: Failed to fetch」，而服务端往往已经写进去了。此时用户
+    再点一次保存就会多出一条完全相同的记录。
+
+    前端现在每次填表生成一个 client_request_id 随请求带上；唯一索引让
+    「同一张表重试 N 次」在库里最多只对应一行，重试因此是安全的。
+    """
+    print("  Running migration v20 -> v21 ...")
+    cols = [row[1] for row in conn.execute("PRAGMA table_info('meal_records')").fetchall()]
+    if 'client_request_id' not in cols:
+        conn.execute("ALTER TABLE meal_records ADD COLUMN client_request_id TEXT DEFAULT NULL")
+    conn.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_meal_records_client_req
+        ON meal_records(client_request_id)
+        WHERE client_request_id IS NOT NULL
+    """)
+    _set_schema_version(conn, 21)
+    print("  Migration v20 -> v21 completed.")
 
 
 def _migrate_v6(conn):

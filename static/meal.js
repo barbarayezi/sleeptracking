@@ -36,6 +36,10 @@ class MealManager {
         // Each entry: { file, dataUrl, role: 'before' | 'after' }
         this._imageFiles = [];
 
+        // 保存幂等键（schema v21）：同一次填表的重试 / 手动再点都复用它，
+        // 服务端按它去重，弱网断链后重试不会写出第二条一样的记录。
+        this._clientRequestId = null;
+
         // NOTE: the cross-day AI brief used to live here too, but it duplicated
         // the dedicated "AI 分析" section (same backend, same data, same prompt).
         // It's been removed — see /api/daily-brief and /api/daily-brief/chat in
@@ -1092,6 +1096,8 @@ class MealManager {
     _resetForm() {
         this.form.reset();
         this._showMessage('', '');
+        // 表单清空 = 上一次保存的意图已结束，幂等键随之作废（下一张表换新键）
+        this._clientRequestId = null;
         // Reset meal_type to default
         const breakfastRadio = this.form.querySelector('input[name="meal_type"][value="breakfast"]');
         if (breakfastRadio) breakfastRadio.checked = true;
@@ -1224,93 +1230,171 @@ class MealManager {
         const url = isUpdate ? `/api/meals/${this._editingMealId}` : '/api/meals';
         const method = isUpdate ? 'PUT' : 'POST';
 
+        // 幂等键（schema v21）：一次填表只生成一个，保存成功后才作废。
+        // Render 实例与 Turso（东京）跨洋，一次带图保存要跑 4–9 秒；链路
+        // 抖动时浏览器常在拿到响应前断链，界面只剩一句「Failed to fetch」，
+        // 而服务端其实已经落库。带上这个键之后，自动重试和用户手动再点
+        // 在库里都只对应一行（POST 退化成按 key 的 upsert）。
+        if (!isUpdate) {
+            if (!this._clientRequestId) this._clientRequestId = MealManager._newRequestId();
+            data.client_request_id = this._clientRequestId;
+        }
+
         const hasImages = this._imageFiles.length > 0;
         // 90s 超时：带图 multipart 上传（可达数 MB）遇到网络停滞时，无超时的
         // fetch 会永远挂在「保存中...」。超时后走核对逻辑而非盲目报错，因为
         // 服务端可能已实际落库。
         const SAVE_TIMEOUT_MS = 90 * 1000;
-        const ctrl = new AbortController();
-        const timeoutTimer = setTimeout(() => ctrl.abort(), SAVE_TIMEOUT_MS);
-        const fetchOpts = { method, signal: ctrl.signal };
+        // 网络层失败（TypeError: Failed to fetch）自动重试 2 次。断链多半是
+        // 瞬时的（代理切换 / Wi-Fi 漫游 / 跨境丢包），等一两秒再发通常就过。
+        const MAX_ATTEMPTS = 3;
+
         try {
-            if (hasImages) {
-                // multipart: payload JSON + before/after image files.
-                const fd = new FormData();
-                fd.append('payload', JSON.stringify(data));
-                for (const item of this._imageFiles) {
-                    fd.append(item.role || 'before', item.file, item.file.name || 'photo.jpg');
+            for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+                const ctrl = new AbortController();
+                const timeoutTimer = setTimeout(() => ctrl.abort(), SAVE_TIMEOUT_MS);
+                const fetchOpts = { method, signal: ctrl.signal };
+                let resp = null;
+                let text = '';
+                let netErr = null;
+
+                try {
+                    if (hasImages) {
+                        // multipart: payload JSON + before/after image files.
+                        const fd = new FormData();
+                        fd.append('payload', JSON.stringify(data));
+                        for (const item of this._imageFiles) {
+                            fd.append(item.role || 'before', item.file, item.file.name || 'photo.jpg');
+                        }
+                        fetchOpts.body = fd;
+                    } else {
+                        fetchOpts.headers = { 'Content-Type': 'application/json' };
+                        fetchOpts.body = JSON.stringify(data);
+                    }
+                    resp = await fetch(url, fetchOpts);
+                    // 读响应体也算在同一个失败单元里：断链可能发生在读完
+                    // 状态行之后、拿到 body 之前。
+                    text = await resp.text();
+                } catch (err) {
+                    netErr = err;
+                } finally {
+                    clearTimeout(timeoutTimer);
                 }
-                fetchOpts.body = fd;
-            } else {
-                fetchOpts.headers = { 'Content-Type': 'application/json' };
-                fetchOpts.body = JSON.stringify(data);
-            }
 
-            const resp = await fetch(url, fetchOpts);
+                if (netErr) {
+                    if (netErr.name === 'AbortError') {
+                        // 上传超时：无法确定服务端是否已落库，核对当天列表
+                        // 让用户确认，避免盲目重试造成重复记录。
+                        await this._reconcileAfterFailure(data, isUpdate,
+                            '⚠️ 保存请求超时（90 秒无响应）。');
+                        return;
+                    }
+                    if (attempt < MAX_ATTEMPTS) {
+                        this._showMessage(
+                            `⚠️ 网络中断（${netErr.message}），正在第 ${attempt} 次自动重试…`, 'error');
+                        await new Promise(r => setTimeout(r, 1500 * attempt));
+                        continue;
+                    }
+                    // 三次都断链：服务端照样可能已经落库，先按幂等键核对。
+                    await this._reconcileAfterFailure(data, isUpdate,
+                        `❌ 网络错误：${netErr.message}（已自动重试 ${MAX_ATTEMPTS} 次）`);
+                    return;
+                }
 
-            // Defensive parse: gateway 层（如 Render 免费实例）偶发返回空响应体
-            // 或非 JSON 错误页，直接 resp.json() 会抛 "Unexpected end of JSON
-            // input"，掩盖真实状态。服务端 Turso 写入此时往往已成功，所以
-            // 2xx+空体时先核对列表，而不是让用户盲目重试造成重复记录。
-            const text = await resp.text();
-            let body;
-            try {
-                body = text ? JSON.parse(text) : null;
-            } catch (e) {
-                body = undefined;   // 非 JSON（HTML 错误页 / 截断响应等）
-            }
+                // Defensive parse: gateway 层（如 Render 免费实例）偶发返回空响应体
+                // 或非 JSON 错误页，直接 resp.json() 会抛 "Unexpected end of JSON
+                // input"，掩盖真实状态。服务端 Turso 写入此时往往已成功，所以
+                // 2xx+空体时先核对列表，而不是让用户盲目重试造成重复记录。
+                let body;
+                try {
+                    body = text ? JSON.parse(text) : null;
+                } catch (e) {
+                    body = undefined;   // 非 JSON（HTML 错误页 / 截断响应等）
+                }
 
-            if (resp.ok && body && typeof body === 'object' && body.id !== undefined) {
-                const saved = body;
-                this._showMessage('✅ 保存成功！', 'success');
+                if (resp.ok && body && typeof body === 'object' && body.id !== undefined) {
+                    const saved = body;
 
-                if (isUpdate) {
-                    // Update in-place in the meals list
-                    const idx = this._mealsForDate.findIndex(m => m.id === saved.id);
-                    if (idx >= 0) this._mealsForDate[idx] = saved;
+                    if (isUpdate) {
+                        // Update in-place in the meals list
+                        const idx = this._mealsForDate.findIndex(m => m.id === saved.id);
+                        if (idx >= 0) this._mealsForDate[idx] = saved;
+                    } else {
+                        this._mealsForDate.push(saved);
+                    }
+
+                    // Reset form for next entry
+                    this._editingMealId = null;
+                    this._resetForm();
+                    this._setDefaultTime();
+                    this._updateFormMode();
+                    this._renderMealList();
+                    if (typeof App !== 'undefined' && App._loadToday) App._loadToday();
+                    if (window.ApiCache) ApiCache.invalidateAll();
+                    // 放最后：_resetForm() 会清空提示区，先把表单收尾再报成功，
+                    // 否则「✅ 保存成功」会被立刻擦掉，看起来像没保存。
+                    this._showMessage('✅ 保存成功！', 'success');
+                } else if (resp.ok && body === null) {
+                    // 2xx 但空响应体：服务端大概率已保存（网关把响应体弄丢了）。
+                    // 重新拉取当天列表核对，避免用户直接重试造成重复记录。
+                    await this._reconcileAfterFailure(data, isUpdate,
+                        '⚠️ 服务器响应异常（返回空）。');
                 } else {
-                    this._mealsForDate.push(saved);
+                    const msg = (body && body.error)
+                        ? body.error
+                        : `保存失败 (HTTP ${resp.status}${body === undefined ? '，响应非 JSON' : ''})`;
+                    this._showMessage('❌ ' + msg, 'error');
                 }
+                return;
+            }
+        } finally {
+            this.btnSave.disabled = false;
+            this.btnSave.textContent = '💾 保存饮食';
+        }
+    }
 
-                // Reset form for next entry
+    /** 幂等键生成：一次「保存饮食」的意图标识（schema v21）。 */
+    static _newRequestId() {
+        // crypto.randomUUID 只在安全上下文（https / localhost）存在；局域网
+        // http（如 Tailscale 直连 61023）没有它，退回时间戳 + 随机串。
+        if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+            return window.crypto.randomUUID();
+        }
+        return 'req-' + Date.now().toString(36) + '-' +
+            Math.random().toString(36).slice(2, 10);
+    }
+
+    /**
+     * 保存失败后的核对：不知道服务端到底写没写进去时，拉一次当天列表，
+     * 用幂等键确认。已落库就按成功收尾，没落库才如实报错——并且提示
+     * 「再点一次也不会重复」，让用户敢于重试。
+     */
+    async _reconcileAfterFailure(data, isUpdate, pendingMessage) {
+        if (window.ApiCache) ApiCache.invalidateAll();
+        try {
+            await this.loadDate(this._selectedDate);
+            if (typeof App !== 'undefined' && App._loadToday) App._loadToday();
+        } catch (e) { /* 核对失败不掩盖主提示 */ }
+
+        if (!isUpdate && data.client_request_id) {
+            const found = (this._mealsForDate || []).find(
+                m => m && m.client_request_id === data.client_request_id
+            );
+            if (found) {
                 this._editingMealId = null;
                 this._resetForm();
                 this._setDefaultTime();
                 this._updateFormMode();
                 this._renderMealList();
-                if (typeof App !== 'undefined' && App._loadToday) App._loadToday();
-                if (window.ApiCache) ApiCache.invalidateAll();
-            } else if (resp.ok && body === null) {
-                // 2xx 但空响应体：服务端大概率已保存（网关把响应体弄丢了）。
-                // 重新拉取当天列表核对，避免用户直接重试造成重复记录。
-                this._showMessage('⚠️ 服务器响应异常（返回空），正在核对是否已保存...', 'error');
-                if (window.ApiCache) ApiCache.invalidateAll();
-                await this.loadDate(this._selectedDate);
-                if (typeof App !== 'undefined' && App._loadToday) App._loadToday();
-            } else {
-                const msg = (body && body.error)
-                    ? body.error
-                    : `保存失败 (HTTP ${resp.status}${body === undefined ? '，响应非 JSON' : ''})`;
-                this._showMessage('❌ ' + msg, 'error');
+                // 同样放在 _resetForm() 之后，否则提示会被表单重置擦掉
+                this._showMessage('✅ 记录其实已经保存成功了（响应在断链时丢了）。', 'success');
+                return;
             }
-        } catch (err) {
-            if (err && err.name === 'AbortError') {
-                // 上传超时：无法确定服务端是否已落库，核对当天列表让用户确认，
-                // 避免盲目重试造成重复记录。
-                this._showMessage('⚠️ 保存请求超时（90 秒无响应），正在核对是否已保存...', 'error');
-                try {
-                    if (window.ApiCache) ApiCache.invalidateAll();
-                    await this.loadDate(this._selectedDate);
-                    if (typeof App !== 'undefined' && App._loadToday) App._loadToday();
-                } catch (e) { /* 核对失败不掩盖主提示 */ }
-            } else {
-                this._showMessage('❌ 网络错误: ' + err.message, 'error');
-            }
-        } finally {
-            clearTimeout(timeoutTimer);
-            this.btnSave.disabled = false;
-            this.btnSave.textContent = '💾 保存饮食';
         }
+        this._showMessage(
+            (pendingMessage || '❌ 保存失败。') + ' 记录没有落库，网络恢复后再点一次「保存饮食」即可（不会重复）。',
+            'error'
+        );
     }
 
     async _deleteMeal(mealId) {
