@@ -16,7 +16,7 @@
 固定服药方案（用户 2026-08-15 起）:
     早 08:00  鱼油 2 粒            (supplement)
     早 08:00  健视佳 1 粒          (supplement)
-    早 08:00  草酸艾司西酞普兰口服溶液 1 支 (antidepressant)
+    早 08:00  草酸艾司西酞普兰口服溶液 1 支 (antidepressant；2026-11-22 起 1.5 支)
     早 08:00  解郁除烦胶囊 3 粒    (antidepressant)
     晚 20:00  解郁除烦胶囊 3 粒    (antidepressant)
 """
@@ -42,6 +42,20 @@ PLAN = [
     ("解郁除烦胶囊", 3, "粒", "antidepressant", "morning", "08:00"),
     ("解郁除烦胶囊", 3, "粒", "antidepressant", "evening", "20:00"),
 ]
+
+# 医嘱加量：草酸艾司西酞普兰自 2026-11-22 起由 1 支调整为 1.5 支
+ESCITALOPRAM_BUMP_DATE = "2026-11-22"
+ESCITALOPRAM_NAME = "草酸艾司西酞普兰口服溶液"
+
+
+def plan_for(date_str):
+    """按日期返回当日方案：加量日及以后，艾司西酞普兰按 1.5 支生成。"""
+    if date_str < ESCITALOPRAM_BUMP_DATE:
+        return PLAN
+    return [
+        (p[0], 1.5, p[2], p[3], p[4], p[5]) if p[0] == ESCITALOPRAM_NAME else p
+        for p in PLAN
+    ]
 
 
 def _http(method, url, body=None, retries=4):
@@ -88,7 +102,7 @@ def backfill_date(date_str, dry_run=False, verbose=True):
         if verbose:
             print(f"  {date_str}: 状态未知，跳过（下次重跑）", file=sys.stderr)
         return 0
-    to_add = [p for p in PLAN if (p[0], p[4]) not in have]
+    to_add = [p for p in plan_for(date_str) if (p[0], p[4]) not in have]
     if not to_add:
         if verbose:
             print(f"  {date_str}: 已完整 ({len(have)} 条)，跳过")

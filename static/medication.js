@@ -36,6 +36,20 @@ class MedicationManager {
         this._editingMedicationId = null;
         this._quickfillButtons = Array.from(document.querySelectorAll('.btn-quick-med'));
 
+        // 常用药的「计划剂量」索引：name|slot -> { dosage, unit }。
+        // 一键打卡按钮上的 data-dosage 就是医嘱剂量，记录与之不一致时列表里标出来，
+        // 免得少吃/多服的那天看起来和正常打卡一模一样。
+        this._quickPlans = new Map();
+        this._quickfillButtons.forEach(btn => {
+            const name = (btn.dataset.name || '').trim();
+            const slot = (btn.dataset.slot || 'morning').trim();
+            if (!name) return;
+            this._quickPlans.set(`${name}|${slot}`, {
+                dosage: parseFloat(btn.dataset.dosage || '1') || 1,
+                unit: btn.dataset.unit || '粒',
+            });
+        });
+
         // 类别由后端 /api/medication-categories 提供（可自助新增），首次渲染前加载。
         this._categories = [];
         this._categoriesLoaded = null;   // in-flight promise，避免并发重复拉取
@@ -279,21 +293,36 @@ class MedicationManager {
             return;
         }
 
-        const originalLabel = btn.textContent;
+        // 同一天同一药（同一时段）已经有记录：改成更新那条，而不是再插一条。
+        // 否则连点两下按钮会留下两条重复记录，汇总和依从性都会被算重。
+        const existing = this._medicationsForDate.find(m =>
+            m && m.medication_name === payload.medication_name &&
+            (m.administration_slot || 'morning') === slot);
+        const isUpdate = !!existing;
+        if (isUpdate) {
+            payload.record_date = existing.record_date || this._selectedDate;
+            // 一键打卡自动写的备注可以覆盖；用户自己打的备注保留
+            payload.notes = (!existing.notes || existing.notes.startsWith('一键打卡'))
+                ? '一键打卡'
+                : existing.notes;
+        }
+        const url = isUpdate ? `/api/medications/${existing.id}` : '/api/medications';
+        const method = isUpdate ? 'PUT' : 'POST';
+
         const labels = new Map();
-        // 请求期间禁用全部快速按钮，避免用户连点造成多个 POST 并发、所有按钮都卡在"记录中…"
+        // 请求期间禁用全部快速按钮，避免用户连点造成多次写入并发、所有按钮都卡在"记录中…"
         this._quickfillButtons.forEach((b) => {
             labels.set(b, b.textContent);
             b.disabled = true;
-            if (b === btn) b.textContent = '⏳ 记录中…';
+            if (b === btn) b.textContent = isUpdate ? '⏳ 更新中…' : '⏳ 记录中…';
         });
 
         try {
             const fetchWithTimeout = (window.App && window.App._fetchWithTimeout)
                 ? (url, opts, ms) => window.App._fetchWithTimeout(url, opts, ms)
                 : (url, opts) => fetch(url, opts);
-            const resp = await fetchWithTimeout('/api/medications', {
-                method: 'POST',
+            const resp = await fetchWithTimeout(url, {
+                method,
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
             }, 8000);
@@ -325,15 +354,26 @@ class MedicationManager {
                 return;
             }
 
-            this._medicationsForDate.push(body);
+            if (isUpdate) {
+                const idx = this._medicationsForDate.findIndex(m => m && m.id === body.id);
+                if (idx >= 0) this._medicationsForDate[idx] = body;
+                else this._medicationsForDate.push(body);
+            } else {
+                this._medicationsForDate.push(body);
+            }
             this._renderList();
-            // 新记录写入后立刻让药物相关缓存失效，保证汇总和列表是最新值
+            // 写入后立刻让药物相关缓存失效，保证汇总和列表是最新值
             if (window.ApiCache) {
                 window.ApiCache.invalidatePrefix('/api/medications');
             }
             await this._loadDaySummary();
             const slotTxt = {morning:'早',noon:'午',evening:'晚',night:'睡前'}[slot] || '早';
-            this._showMessage('✅ 已记录 ' + payload.medication_name + '（' + slotTxt + '）', 'success');
+            const doseTxt = `${this._fmtDose(body.dosage)}${body.dosage_unit || ''}`;
+            this._showMessage(
+                (isUpdate ? '✅ 已更新 ' : '✅ 已记录 ') + body.medication_name +
+                '（' + slotTxt + '）' + (isUpdate ? '为 ' + doseTxt : ''),
+                'success'
+            );
         } catch (err) {
             // 只有真正的传输层失败才算「网络错误」；前端自身的 TypeError
             // （例如读到 null.administration_slot）必须单独报出来，否则
@@ -445,14 +485,23 @@ class MedicationManager {
                 const isEditing = (this._editingMedicationId === m.id);
                 const catLabel = this._catLabel(m.category);
                 const catColor = this._catColor(m.category);
-                const dose = (m.dosage === 1 || m.dosage === 1.0) ? m.dosage_unit
-                    : `${m.dosage}${m.dosage_unit}`;
+                const doseUnitText = m.dosage_unit || '粒';
+                const doseText = `${this._fmtDose(m.dosage)}${doseUnitText}`;
+                const plan = this._planFor(m);
 
                 html += `<div class="record-card medication-card${isEditing ? ' record-card--editing' : ''}">`;
                 html += '<div class="record-card__body">';
                 html += `<span class="medication-card__cat" style="background:${catColor}1a; color:${catColor}">${catLabel}</span>`;
                 html += `<span class="medication-card__name">${this._escapeHtml(m.medication_name)}</span>`;
-                html += `<span class="medication-card__dose">${this._escapeHtml(String(dose))}</span>`;
+                // 剂量读数 + 就地加减：当天少吃/多服半支，点两下就记上，不用进表单
+                html += '<span class="medication-card__dose-wrap">';
+                html += `<button type="button" class="btn-dose-step" data-id="${m.id}" data-dir="-1" title="减少剂量" aria-label="减少剂量">−</button>`;
+                html += `<span class="medication-card__dose">${this._escapeHtml(doseText)}</span>`;
+                html += `<button type="button" class="btn-dose-step" data-id="${m.id}" data-dir="1" title="增加剂量" aria-label="增加剂量">+</button>`;
+                html += '</span>';
+                if (plan && plan.text !== doseText) {
+                    html += `<span class="medication-card__plan" title="常用药预设剂量（医嘱），这条记录与之不一致">计划 ${this._escapeHtml(plan.text)}</span>`;
+                }
                 if (m.record_time && m.record_time !== '08:00') {
                     html += `<span class="medication-card__time">⏰ ${m.record_time}</span>`;
                 }
@@ -470,6 +519,13 @@ class MedicationManager {
             }
         }
         this.listEl.innerHTML = html;
+
+        this.listEl.querySelectorAll('.btn-dose-step').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const el = e.currentTarget;
+                this._stepDose(parseInt(el.dataset.id, 10), parseInt(el.dataset.dir, 10), el);
+            });
+        });
 
         this.listEl.querySelectorAll('.btn-record-edit').forEach(btn => {
             btn.addEventListener('click', (e) => {
@@ -711,6 +767,108 @@ class MedicationManager {
         if (!this.msgEl) return;
         this.msgEl.textContent = text;
         this.msgEl.className = 'form-message ' + type;
+    }
+
+    /* ── Dosage stepper ───────────────────── */
+
+    /** 剂量显示：去掉多余的 .0（1.0 -> 1，1.5 -> 1.5），避免出现「1.0支」 */
+    _fmtDose(v) {
+        const n = Number(v);
+        if (!Number.isFinite(n)) return String(v == null ? '' : v);
+        return String(Math.round(n * 100) / 100);
+    }
+
+    /** 这条记录对应的常用药预设剂量（来自一键打卡按钮的 data-dosage） */
+    _planFor(med) {
+        const key = `${med.medication_name}|${med.administration_slot || 'morning'}`;
+        const plan = this._quickPlans.get(key);
+        if (!plan) return null;
+        return { dosage: plan.dosage, text: `${this._fmtDose(plan.dosage)}${plan.unit}` };
+    }
+
+    /** 微调步长：支/ml/mg 按半单位走，粒/片/袋这类按整单位走 */
+    _doseStep(unit) {
+        return ['支', 'ml', 'mg'].includes(unit) ? 0.5 : 1;
+    }
+
+    /** 就地加减剂量：只 PUT 这一条，成功后刷新列表与当日汇总 */
+    async _stepDose(medId, dir, btnEl) {
+        const med = this._medicationsForDate.find(m => m.id === medId);
+        if (!med || !dir) return;
+        const unit = med.dosage_unit || '粒';
+        const step = this._doseStep(unit);
+        const current = Number(med.dosage) || 0;
+        const next = Math.round((current + dir * step) * 100) / 100;
+        if (next <= 0) {
+            this._showMessage('剂量已经到底了，要清零请点 🗑 删掉这条记录。', 'error');
+            return;
+        }
+
+        const card = btnEl ? btnEl.closest('.medication-card') : null;
+        const setDisabled = (on) => {
+            if (card) card.querySelectorAll('.btn-dose-step').forEach(b => { b.disabled = on; });
+        };
+        setDisabled(true);
+
+        try {
+            const ctrl = new AbortController();
+            const timer = setTimeout(() => ctrl.abort(), 30 * 1000);
+            let resp;
+            try {
+                resp = await fetch(`/api/medications/${medId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    // 整条回传，避免后端部分更新时把其他字段写成默认值
+                    body: JSON.stringify({
+                        record_date: med.record_date || this._selectedDate,
+                        record_time: med.record_time || '08:00',
+                        medication_name: med.medication_name,
+                        dosage: next,
+                        dosage_unit: unit,
+                        category: med.category || 'supplement',
+                        administration_slot: med.administration_slot || 'morning',
+                        notes: med.notes || '',
+                    }),
+                    signal: ctrl.signal,
+                });
+            } finally {
+                clearTimeout(timer);
+            }
+
+            const text = await resp.text();
+            let body;
+            try {
+                body = text ? JSON.parse(text) : null;
+            } catch (e) {
+                body = undefined;   // 非 JSON（HTML 错误页 / 截断响应等）
+            }
+
+            if (!resp.ok || !body || typeof body !== 'object' || body.id === undefined) {
+                const msg = (body && body.error)
+                    ? body.error
+                    : `调整失败 (HTTP ${resp.status}${body === undefined ? '，响应非 JSON' : ''})`;
+                this._showMessage('❌ ' + msg, 'error');
+                setDisabled(false);
+                return;
+            }
+
+            const idx = this._medicationsForDate.findIndex(m => m.id === body.id);
+            if (idx >= 0) this._medicationsForDate[idx] = body;
+            this._renderList();
+            if (window.ApiCache) window.ApiCache.invalidatePrefix('/api/medications');
+            // 先把回执给出来，再补当日汇总（汇总要再打一次库，慢的时候别卡着提示）
+            this._showMessage(
+                `✅ ${body.medication_name} 已改为 ${this._fmtDose(body.dosage)}${unit}`,
+                'success'
+            );
+            this._loadDaySummary().catch(() => {});
+        } catch (err) {
+            const msg = err && err.name === 'AbortError'
+                ? '请求超时，请刷新页面核对剂量'
+                : '网络错误: ' + (err && err.message ? err.message : err);
+            this._showMessage('❌ ' + msg, 'error');
+            setDisabled(false);
+        }
     }
 
     /* ── Helpers ──────────────────────────── */

@@ -11,7 +11,7 @@
     <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="/static/icon.svg">
     <title>量化健康 — QHealth</title>
-    <link rel="stylesheet" href="/static/style.css?v=52">
+    <link rel="stylesheet" href="/static/style.css?v=53">
 </head>
 <body>
 
@@ -733,9 +733,9 @@
                             data-category="supplement" data-slot="morning"
                             title="早晨服用 1 粒">👁️ 健视佳 · 1 粒</button>
                         <button type="button" class="btn-quick-med"
-                            data-name="草酸艾司西酞普兰口服溶液" data-dosage="1" data-unit="支"
+                            data-name="草酸艾司西酞普兰口服溶液" data-dosage="1.5" data-unit="支"
                             data-category="antidepressant" data-slot="morning"
-                            title="早晨口服 1 支">💊 草酸艾司西酞普兰 · 1 支</button>
+                            title="早晨口服 1.5 支（2026-11-22 起加量）">💊 草酸艾司西酞普兰 · 1.5 支</button>
                         <button type="button" class="btn-quick-med"
                             data-name="解郁除烦胶囊" data-dosage="3" data-unit="粒"
                             data-category="antidepressant" data-slot="morning"
@@ -745,7 +745,12 @@
                             data-category="antidepressant" data-slot="evening"
                             title="晚上服用 3 粒（抗抑郁药，早 + 晚各一次）">🌿 解郁除烦胶囊 · 晚 3 粒</button>
                     </div>
-                    <div class="medication-quickfill-hint">点击即记录当前日期的服药状态（早 08:00 / 晚 20:00）。</div>
+                    <div class="medication-quickfill-hint">
+                        点击即记录当前日期的服药状态（早 08:00 / 晚 20:00）；已经记过的药再点一次，
+                        是把这一天更新成按钮上的剂量，不会多出一条。<br>
+                        当天少吃/多服了点剂量旁边的 <b>−</b> <b>+</b> 就地改；和常用剂量不一致时，
+                        卡片上会标出「计划 X」。
+                    </div>
                 </div>
 
                 <!-- Medication list for current date -->
@@ -1027,7 +1032,7 @@
     <script src="/static/form.js?v=28"></script>
     <script src="/static/meal.js?v=30"></script>
     <script src="/static/period.js?v=19"></script>
-    <script src="/static/medication.js?v=9"></script>
+    <script src="/static/medication.js?v=10"></script>
     <script src="/static/workout.js?v=4"></script>
     <script src="/static/calendar.js?v=18"></script>
     <script src="/static/timeline.js?v=22"></script>

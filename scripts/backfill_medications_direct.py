@@ -44,6 +44,20 @@ PLAN = [
     ("解郁除烦胶囊", 3, "粒", "antidepressant", "evening", "20:00"),
 ]
 
+# 医嘱加量：草酸艾司西酞普兰自 2026-11-22 起由 1 支调整为 1.5 支
+ESCITALOPRAM_BUMP_DATE = "2026-11-22"
+ESCITALOPRAM_NAME = "草酸艾司西酞普兰口服溶液"
+
+
+def plan_for(date_str):
+    """按日期返回当日方案：加量日及以后，艾司西酞普兰按 1.5 支生成。"""
+    if date_str < ESCITALOPRAM_BUMP_DATE:
+        return PLAN
+    return [
+        (p[0], 1.5, p[2], p[3], p[4], p[5]) if p[0] == ESCITALOPRAM_NAME else p
+        for p in PLAN
+    ]
+
 
 def daterange(start_str, end_str):
     s = dt.date.fromisoformat(start_str)
@@ -82,7 +96,7 @@ def main():
             (d,),
         )
         have = {(r[0], r[1]) for r in cur.fetchall()}
-        to_add = [p for p in PLAN if (p[0], p[4]) not in have]
+        to_add = [p for p in plan_for(d) if (p[0], p[4]) not in have]
         if not to_add:
             continue
         if args.dry_run:
