@@ -1044,6 +1044,83 @@ body {
 }
 .btn-quick-med:active { transform: translateY(0); }
 .btn-quick-med:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+
+/* ── 常用药编辑（改剂量 / 增删）── */
+.medication-quickfill__label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+.quick-med-cell {
+    position: relative;
+    display: flex;
+    min-width: 0;
+}
+.quick-med-cell > .btn-quick-med { flex: 1; width: 100%; }
+.quick-med-cell__actions {
+    position: absolute;
+    top: -8px;
+    right: -6px;
+    display: inline-flex;
+    gap: 2px;
+    background: #fff;
+    border: 1px solid var(--gray-200);
+    border-radius: 999px;
+    padding: 1px 3px;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, .12);
+}
+.btn-quick-med-edit,
+.btn-quick-med-del {
+    width: 24px; height: 24px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border: none; background: transparent;
+    border-radius: 999px;
+    font-size: 13px; line-height: 1;
+    cursor: pointer;
+}
+.btn-quick-med-edit:hover { background: var(--primary-soft); }
+.btn-quick-med-del:hover { background: #fee2e2; }
+.btn-quick-med--add {
+    border-style: dashed;
+    color: var(--primary-deep);
+    background: var(--primary-softer);
+}
+.quick-med-empty {
+    grid-column: 1 / -1;
+    margin: 0;
+    padding: 10px 0;
+    font-size: 13px;
+    color: var(--text-muted);
+}
+.quick-med-form {
+    margin: 10px 0 4px;
+    padding: 12px;
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius-md);
+    background: var(--primary-softer);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.quick-med-form.hidden { display: none; }
+.quick-med-form__row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.quick-med-form__row > .form-input { flex: 1; min-width: 140px; }
+.quick-med-form__emoji { flex: 0 0 64px !important; min-width: 64px !important; text-align: center; }
+.quick-med-form__actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.quick-med-form__hint {
+    margin: 0;
+    font-size: 12px;
+    color: var(--text-muted);
+}
 .btn-quick-workout {
     padding: 10px 14px;
     border: 1px solid var(--border);

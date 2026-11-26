@@ -22,6 +22,7 @@ from models import nutrition as nutrition
 from models import period as period_models
 from models import daily_report as daily_report_models
 from models import medication as medication_models
+from models import quick_med as quick_med_models
 import time
 import socket
 
@@ -1934,6 +1935,73 @@ def delete_medication_category(cat_id):
     ok, err = medication_models.delete_medication_category(cat_id)
     if not ok:
         return jsonify({'error': err}), 400
+    return '', 204
+
+
+def _validate_quick_med_data(data, partial=False):
+    """Validate a 常用药 (quick_meds) payload. Returns a list of error strings."""
+    errors = []
+    if not partial or 'medication_name' in data:
+        if not (data.get('medication_name') or '').strip():
+            errors.append('请填写药名/补剂名。')
+    if 'dosage_unit' in data and data['dosage_unit'] not in _MED_DOSAGE_UNITS:
+        errors.append(f'剂量单位必须是：{"/".join(sorted(_MED_DOSAGE_UNITS))}')
+    if 'category' in data and data['category'] not in _med_category_keys():
+        errors.append('类别取值无效，请从下拉里选择（可点「+ 新类别」添加）。')
+    if 'administration_slot' in data and data['administration_slot'] not in _MED_SLOTS:
+        errors.append('时段取值无效。')
+    if 'dosage' in data:
+        try:
+            d = float(data['dosage'])
+            if d <= 0 or d > 1000:
+                errors.append('剂量必须在 0–1000 之间。')
+        except (ValueError, TypeError):
+            errors.append('剂量必须是数字。')
+    return errors
+
+
+@app.route('/api/quick-meds', methods=['GET'])
+def list_quick_meds():
+    """常用药（一键打卡按钮的真源）。改剂量就是改这里的记录。"""
+    return jsonify(quick_med_models.list_quick_meds())
+
+
+@app.route('/api/quick-meds', methods=['POST'])
+def create_quick_med():
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({'error': 'Request body must be JSON'}), 400
+    errors = _validate_quick_med_data(data)
+    if errors:
+        return jsonify({'error': errors[0]}), 400
+    try:
+        record = quick_med_models.create_quick_med(data)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 409
+    return _created(record, '常用药')
+
+
+@app.route('/api/quick-meds/<int:qid>', methods=['PUT'])
+def update_quick_med(qid):
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({'error': 'Request body must be JSON'}), 400
+    errors = _validate_quick_med_data(data, partial=True)
+    if errors:
+        return jsonify({'error': errors[0]}), 400
+    try:
+        record = quick_med_models.update_quick_med_by_id(qid, data)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 409
+    if record is None:
+        return jsonify({'error': '常用药不存在'}), 404
+    return jsonify(record)
+
+
+@app.route('/api/quick-meds/<int:qid>', methods=['DELETE'])
+def delete_quick_med(qid):
+    if not quick_med_models.delete_quick_med_by_id(qid):
+        return jsonify({'error': '常用药不存在'}), 404
     return '', 204
 
 

@@ -11,7 +11,7 @@
     <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="/static/icon.svg">
     <title>量化健康 — QHealth</title>
-    <link rel="stylesheet" href="/static/style.css?v=53">
+    <link rel="stylesheet" href="/static/style.css?v=54">
 </head>
 <body>
 
@@ -720,10 +720,15 @@
                 <!-- Daily summary chips (保健/抗抑郁打卡数) -->
                 <div id="medication-day-summary" class="medication-day-summary hidden"></div>
 
-                <!-- Quick-fill buttons: 4 commonly used meds -->
+                <!-- Quick-fill buttons: rendered from /api/quick-meds.
+                     下面这组按钮只是接口失败时的静态兜底，正常情况会被库里的数据替换。 -->
                 <div class="medication-quickfill">
-                    <div class="form-label">⚡ 一键打卡常用药</div>
-                    <div class="medication-quick-buttons">
+                    <div class="form-label medication-quickfill__label">
+                        <span>⚡ 一键打卡常用药</span>
+                        <button type="button" id="btn-quick-med-edit" class="btn-link-add"
+                            title="改剂量 / 加药 / 删药，改完对所有日期生效">编辑</button>
+                    </div>
+                    <div class="medication-quick-buttons" id="medication-quick-buttons">
                         <button type="button" class="btn-quick-med"
                             data-name="鱼油" data-dosage="2" data-unit="粒"
                             data-category="supplement" data-slot="morning"
@@ -735,7 +740,7 @@
                         <button type="button" class="btn-quick-med"
                             data-name="草酸艾司西酞普兰口服溶液" data-dosage="1.5" data-unit="支"
                             data-category="antidepressant" data-slot="morning"
-                            title="早晨口服 1.5 支（2026-11-22 起加量）">💊 草酸艾司西酞普兰 · 1.5 支</button>
+                            title="早晨口服 1.5 支">💊 草酸艾司西酞普兰 · 1.5 支</button>
                         <button type="button" class="btn-quick-med"
                             data-name="解郁除烦胶囊" data-dosage="3" data-unit="粒"
                             data-category="antidepressant" data-slot="morning"
@@ -745,11 +750,53 @@
                             data-category="antidepressant" data-slot="evening"
                             title="晚上服用 3 粒（抗抑郁药，早 + 晚各一次）">🌿 解郁除烦胶囊 · 晚 3 粒</button>
                     </div>
+
+                    <!-- 编辑常用药：改剂量 / 增删（写进 quick_meds，对所有日期生效） -->
+                    <form id="quick-med-form" class="quick-med-form hidden" novalidate>
+                        <div class="quick-med-form__row">
+                            <input type="text" id="quick-med-emoji" class="form-input quick-med-form__emoji"
+                                maxlength="4" value="💊" aria-label="图标" title="图标（一个 emoji）">
+                            <input type="text" id="quick-med-name" class="form-input"
+                                placeholder="药名，如：草酸艾司西酞普兰口服溶液" maxlength="50" required>
+                        </div>
+                        <div class="quick-med-form__row">
+                            <input type="number" id="quick-med-dosage" class="form-input" min="0.1" max="1000"
+                                step="0.5" value="1" aria-label="剂量">
+                            <select id="quick-med-unit" class="form-input" aria-label="单位">
+                                <option value="粒" selected>粒</option>
+                                <option value="支">支</option>
+                                <option value="片">片</option>
+                                <option value="袋">袋</option>
+                                <option value="颗">颗</option>
+                                <option value="滴">滴</option>
+                                <option value="ml">ml</option>
+                                <option value="mg">mg</option>
+                            </select>
+                        </div>
+                        <div class="quick-med-form__row">
+                            <select id="quick-med-category" class="form-input" aria-label="类别"></select>
+                            <select id="quick-med-slot" class="form-input" aria-label="服用时段">
+                                <option value="morning" selected>🌅 早上</option>
+                                <option value="noon">☀️ 中午</option>
+                                <option value="evening">🌇 晚上</option>
+                                <option value="night">🌙 睡前</option>
+                            </select>
+                        </div>
+                        <div class="quick-med-form__actions">
+                            <button type="submit" id="btn-quick-med-save" class="btn btn-primary">💾 保存常用药</button>
+                            <button type="button" id="btn-quick-med-cancel" class="btn btn-secondary">取消</button>
+                            <button type="button" id="btn-quick-med-delete" class="btn btn-danger hidden">🗑️ 删掉这条常用药</button>
+                        </div>
+                        <p class="quick-med-form__hint">
+                            这里改的是「医嘱方案」，只影响以后点一键打卡时用的剂量，不会改历史记录。
+                        </p>
+                    </form>
+
                     <div class="medication-quickfill-hint">
                         点击即记录当前日期的服药状态（早 08:00 / 晚 20:00）；已经记过的药再点一次，
                         是把这一天更新成按钮上的剂量，不会多出一条。<br>
-                        当天少吃/多服了点剂量旁边的 <b>−</b> <b>+</b> 就地改；和常用剂量不一致时，
-                        卡片上会标出「计划 X」。
+                        当天少吃/多服点剂量旁边的 <b>−</b> <b>+</b> 就地改；和常用剂量不一致时，
+                        卡片上会标出「计划 X」。要改常用剂量本身，点上面的「编辑」。
                     </div>
                 </div>
 
@@ -1032,7 +1079,7 @@
     <script src="/static/form.js?v=28"></script>
     <script src="/static/meal.js?v=30"></script>
     <script src="/static/period.js?v=19"></script>
-    <script src="/static/medication.js?v=10"></script>
+    <script src="/static/medication.js?v=11"></script>
     <script src="/static/workout.js?v=4"></script>
     <script src="/static/calendar.js?v=18"></script>
     <script src="/static/timeline.js?v=22"></script>

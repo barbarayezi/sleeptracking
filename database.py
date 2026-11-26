@@ -720,6 +720,12 @@ def _migrate(conn):
     if version < 21:
         _migrate_v21(conn)
 
+    # v22: quick_meds —— 「一键打卡常用药」从 index.html 的硬编码搬到库里，
+    #      剂量/类别/时段都能在页面上自己改，不用改代码发版。
+    version = _get_schema_version(conn)
+    if version < 22:
+        _migrate_v22(conn)
+
 
 def _migrate_v12(conn):
     """Migrate from v11 to v12: add medication_records table for daily medication log.
@@ -992,6 +998,59 @@ def _seed_medication_categories(conn):
             "VALUES (?, ?, ?, ?, ?, 1)",
             (key, label, emoji, color, i),
         )
+
+
+def _seed_quick_meds(conn):
+    """插入默认常用药（一键打卡按钮）。只在表为空时播种，改剂量不会冲掉用户设置。"""
+    row = conn.execute("SELECT COUNT(*) FROM quick_meds").fetchone()
+    if row and row[0]:
+        return
+    defaults = [
+        ("🐟", "鱼油", 2, "粒", "supplement", "morning"),
+        ("👁️", "健视佳", 1, "粒", "supplement", "morning"),
+        ("💊", "草酸艾司西酞普兰口服溶液", 1.5, "支", "antidepressant", "morning"),
+        ("🌿", "解郁除烦胶囊", 3, "粒", "antidepressant", "morning"),
+        ("🌿", "解郁除烦胶囊", 3, "粒", "antidepressant", "evening"),
+    ]
+    for i, (emoji, name, dosage, unit, cat, slot) in enumerate(defaults):
+        conn.execute(
+            "INSERT INTO quick_meds "
+            "(emoji, medication_name, dosage, dosage_unit, category, administration_slot, sort_order) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (emoji, name, float(dosage), unit, cat, slot, i),
+        )
+
+
+def _migrate_v22(conn):
+    """Migrate from v21 to v22: quick_meds —— 常用药从写死的 HTML 变成库里的数据。
+
+    原来「一键打卡」的 5 个按钮（药名 / 剂量 / 类别 / 时段）硬编码在 index.html，
+    每次医嘱调剂量都要改代码 + 发版。搬进表之后，页面上就能自己改。
+
+    幂等：建表 IF NOT EXISTS；播种只在表为空时发生。
+    """
+    print("  Running migration v21 -> v22 ...")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS quick_meds (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            emoji               TEXT NOT NULL DEFAULT '💊',
+            medication_name     TEXT NOT NULL,
+            dosage              REAL NOT NULL DEFAULT 1,
+            dosage_unit         TEXT NOT NULL DEFAULT '粒'
+                                CHECK(dosage_unit IN ('粒','支','片','ml','mg','滴','袋','颗')),
+            category            TEXT NOT NULL DEFAULT 'supplement',
+            administration_slot TEXT NOT NULL DEFAULT 'morning'
+                                CHECK(administration_slot IN ('morning','noon','evening','night')),
+            sort_order          INTEGER NOT NULL DEFAULT 0,
+            active              INTEGER NOT NULL DEFAULT 1,
+            created_at          TEXT DEFAULT (datetime('now', 'localtime')),
+            updated_at          TEXT DEFAULT (datetime('now', 'localtime'))
+        )
+    """)
+    _seed_quick_meds(conn)
+    conn.commit()
+    _set_schema_version(conn, 22)
+    print("  Migration v21 -> v22 completed.")
 
 
 def _migrate_v19(conn):

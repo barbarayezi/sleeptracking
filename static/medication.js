@@ -34,21 +34,20 @@ class MedicationManager {
         this._selectedDate = this._todayStr();
         this._medicationsForDate = [];   // All meds for the selected date
         this._editingMedicationId = null;
-        this._quickfillButtons = Array.from(document.querySelectorAll('.btn-quick-med'));
+
+        // 常用药（一键打卡按钮）的真源是 /api/quick-meds，页面上的按钮由数据渲染；
+        // 模板里那组按钮只是接口失败时的静态兜底。
+        this._quickButtonsEl = document.getElementById('medication-quick-buttons');
+        this._quickEditBtn = document.getElementById('btn-quick-med-edit');
+        this._quickForm = document.getElementById('quick-med-form');
+        this._quickMeds = [];
+        this._quickEditing = false;        // 编辑模式：按钮上出现 ✏️ / 🗑，点击不再打卡
+        this._editingQuickMedId = null;    // null = 新增
 
         // 常用药的「计划剂量」索引：name|slot -> { dosage, unit }。
-        // 一键打卡按钮上的 data-dosage 就是医嘱剂量，记录与之不一致时列表里标出来，
-        // 免得少吃/多服的那天看起来和正常打卡一模一样。
+        // 记录与之不一致时列表里标出来，免得少吃/多服的那天看起来和正常打卡一样。
         this._quickPlans = new Map();
-        this._quickfillButtons.forEach(btn => {
-            const name = (btn.dataset.name || '').trim();
-            const slot = (btn.dataset.slot || 'morning').trim();
-            if (!name) return;
-            this._quickPlans.set(`${name}|${slot}`, {
-                dosage: parseFloat(btn.dataset.dosage || '1') || 1,
-                unit: btn.dataset.unit || '粒',
-            });
-        });
+        this._rebuildQuickPlans();
 
         // 类别由后端 /api/medication-categories 提供（可自助新增），首次渲染前加载。
         this._categories = [];
@@ -61,6 +60,9 @@ class MedicationManager {
         this.btnCatCancel = document.getElementById('btn-med-category-cancel');
 
         this._initEvents();
+        this._initQuickMedEditor();
+        // 异步拉库里的常用药；失败就保留模板静态按钮，不影响打卡
+        this._loadQuickMeds();
     }
 
     /* ── Public API ───────────────────────── */
@@ -114,10 +116,25 @@ class MedicationManager {
             this.btnCancel.addEventListener('click', () => this._cancelEdit());
         }
 
-        // One-tap quick-log buttons — POST directly, no form edit needed.
-        this._quickfillButtons.forEach(btn => {
-            btn.addEventListener('click', () => this._quickLog(btn));
-        });
+        // 一键打卡按钮用事件委托：按钮随 /api/quick-meds 重新渲染，不逐个绑。
+        // 编辑模式下 ✏️ / 🗑 优先，按钮本体点击不再打卡。
+        if (this._quickButtonsEl) {
+            this._quickButtonsEl.addEventListener('click', (e) => {
+                const del = e.target.closest('.btn-quick-med-del');
+                if (del) { this._deleteQuickMed(parseInt(del.dataset.id, 10)); return; }
+
+                const edit = e.target.closest('.btn-quick-med-edit');
+                if (edit) { this._openQuickMedForm(parseInt(edit.dataset.id, 10)); return; }
+
+                if (e.target.closest('#btn-quick-med-add')) {
+                    this._openQuickMedForm(null);
+                    return;
+                }
+
+                const btn = e.target.closest('.btn-quick-med');
+                if (btn && !this._quickEditing) this._quickLog(btn);
+            });
+        }
 
         // 自定义类别：展开/收起新增行
         if (this.btnAddCat) {
@@ -311,7 +328,7 @@ class MedicationManager {
 
         const labels = new Map();
         // 请求期间禁用全部快速按钮，避免用户连点造成多次写入并发、所有按钮都卡在"记录中…"
-        this._quickfillButtons.forEach((b) => {
+        this._quickButtons().forEach((b) => {
             labels.set(b, b.textContent);
             b.disabled = true;
             if (b === btn) b.textContent = isUpdate ? '⏳ 更新中…' : '⏳ 记录中…';
@@ -387,10 +404,235 @@ class MedicationManager {
                     : '页面脚本异常: ' + (err.message || err));
             this._showMessage('❌ ' + msg, 'error');
         } finally {
-            this._quickfillButtons.forEach((b) => {
+            this._quickButtons().forEach((b) => {
                 b.disabled = false;
-                b.textContent = labels.get(b);
+                if (labels.has(b)) b.textContent = labels.get(b);
             });
+        }
+    }
+
+    /* ── Quick Meds（常用药 · 数据化）──────── */
+
+    /** 当前屏幕上的快速打卡按钮（可能来自库，也可能是模板兜底） */
+    _quickButtons() {
+        return Array.from(document.querySelectorAll('#medication-quick-buttons .btn-quick-med'));
+    }
+
+    /** 从按钮上的 data-* 重建「计划剂量」索引 —— 屏幕上的按钮就是可见真源 */
+    _rebuildQuickPlans() {
+        this._quickPlans = new Map();
+        this._quickButtons().forEach(btn => {
+            const name = (btn.dataset.name || '').trim();
+            const slot = (btn.dataset.slot || 'morning').trim();
+            if (!name) return;
+            this._quickPlans.set(`${name}|${slot}`, {
+                dosage: parseFloat(btn.dataset.dosage || '1') || 1,
+                unit: btn.dataset.unit || '粒',
+            });
+        });
+    }
+
+    /** 拉库里的常用药。失败就保留模板静态按钮，打卡不受影响。 */
+    async _loadQuickMeds() {
+        try {
+            const fetcher = window.ApiCache
+                ? (u) => window.ApiCache.fetch(u, { ttlMs: 30000 })
+                : (u) => fetch(u).then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))));
+            const data = await fetcher('/api/quick-meds');
+            if (!Array.isArray(data)) return;
+            this._quickMeds = data;
+            this._quickMedsLoaded = true;
+            this._renderQuickMeds();
+        } catch (err) {
+            // 接口不可用：什么都不做，模板里的静态按钮继续用
+        }
+    }
+
+    /** 用库里的数据渲染按钮；编辑模式下每个按钮带 ✏️ / 🗑 */
+    _renderQuickMeds() {
+        const box = this._quickButtonsEl;
+        if (!box || !this._quickMedsLoaded) return;
+
+        const slotTxt = { morning: '早', noon: '午', evening: '晚', night: '睡前' };
+        let html = '';
+        for (const q of this._quickMeds) {
+            const slot = q.administration_slot || 'morning';
+            const suffix = slot === 'morning' ? '' : `${slotTxt[slot] || ''} `;
+            const dose = `${this._fmtDose(q.dosage)} ${q.dosage_unit}`;
+            const label = `${q.emoji || '💊'} ${this._escapeHtml(q.medication_name)} · ${suffix}${dose}`;
+            const title = `记录为 ${suffix}${dose}（点「编辑」可改剂量）`;
+            const chip =
+                `<button type="button" class="btn-quick-med"` +
+                ` data-id="${q.id}"` +
+                ` data-name="${this._escapeAttr(q.medication_name)}"` +
+                ` data-dosage="${q.dosage}"` +
+                ` data-unit="${this._escapeAttr(q.dosage_unit)}"` +
+                ` data-category="${this._escapeAttr(q.category)}"` +
+                ` data-slot="${slot}" title="${this._escapeAttr(title)}">${label}</button>`;
+
+            if (this._quickEditing) {
+                html += '<div class="quick-med-cell">' + chip +
+                    `<span class="quick-med-cell__actions">` +
+                    `<button type="button" class="btn-quick-med-edit" data-id="${q.id}" title="编辑剂量">✏️</button>` +
+                    `<button type="button" class="btn-quick-med-del" data-id="${q.id}" title="删除">🗑</button>` +
+                    `</span></div>`;
+            } else {
+                html += `<div class="quick-med-cell">${chip}</div>`;
+            }
+        }
+
+        if (this._quickEditing) {
+            html += `<button type="button" class="btn-quick-med btn-quick-med--add" id="btn-quick-med-add">＋ 新增常用药</button>`;
+        } else if (!this._quickMeds.length) {
+            html = '<p class="quick-med-empty">还没有常用药。点右上角「编辑」新增一条。</p>';
+        }
+
+        box.innerHTML = html;
+        this._rebuildQuickPlans();
+        this._renderList();   // 「计划 X」提示跟着按钮一起更新
+    }
+
+    _initQuickMedEditor() {
+        if (this._quickEditBtn) {
+            this._quickEditBtn.addEventListener('click', () => this._toggleQuickEdit());
+        }
+        if (this._quickForm) {
+            this._quickForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                this._saveQuickMed();
+            });
+        }
+        const cancel = document.getElementById('btn-quick-med-cancel');
+        if (cancel) cancel.addEventListener('click', () => this._closeQuickMedForm());
+        const del = document.getElementById('btn-quick-med-delete');
+        if (del) del.addEventListener('click', () => this._deleteQuickMed(this._editingQuickMedId));
+    }
+
+    _toggleQuickEdit() {
+        if (!this._quickMedsLoaded) {
+            this._showMessage('常用药没加载出来，刷新页面再试。', 'error');
+            return;
+        }
+        this._quickEditing = !this._quickEditing;
+        if (this._quickEditBtn) this._quickEditBtn.textContent = this._quickEditing ? '完成' : '编辑';
+        if (!this._quickEditing) this._closeQuickMedForm();
+        this._renderQuickMeds();
+    }
+
+    _renderQuickCategorySelect() {
+        const sel = document.getElementById('quick-med-category');
+        if (!sel || !this._categories.length) return;
+        sel.innerHTML = this._categories.map(c =>
+            `<option value="${this._escapeAttr(c.category_key)}">${c.emoji} ${this._escapeHtml(c.label)}</option>`
+        ).join('');
+    }
+
+    /** 打开编辑表单；id 为 null 表示新增 */
+    _openQuickMedForm(id) {
+        if (!this._quickForm) return;
+        const el = (x) => document.getElementById(x);
+        const q = (id != null) ? this._quickMeds.find(m => m.id === id) : null;
+        if (id != null && !q) return;
+
+        this._editingQuickMedId = (q ? q.id : null);
+        if (el('quick-med-emoji')) el('quick-med-emoji').value = q ? (q.emoji || '💊') : '💊';
+        if (el('quick-med-name')) el('quick-med-name').value = q ? q.medication_name : '';
+        if (el('quick-med-dosage')) el('quick-med-dosage').value = q ? this._fmtDose(q.dosage) : '1';
+        if (el('quick-med-unit')) el('quick-med-unit').value = q ? (q.dosage_unit || '粒') : '粒';
+        if (el('quick-med-slot')) el('quick-med-slot').value = q ? (q.administration_slot || 'morning') : 'morning';
+
+        const del = el('btn-quick-med-delete');
+        if (del) del.classList.toggle('hidden', !q);
+
+        this._quickForm.classList.remove('hidden');
+        el('quick-med-name')?.focus();
+
+        // 类别下拉的选项要等 /api/medication-categories 回来才有；
+        // 之前就赋值会落空（选不中），所以在填充之后再设一次。
+        const wantCat = q ? q.category : this._defaultCategoryKey();
+        this._ensureCategories().then(() => {
+            this._renderQuickCategorySelect();
+            const sel = el('quick-med-category');
+            if (sel) sel.value = wantCat;
+        });
+    }
+
+    _closeQuickMedForm() {
+        this._editingQuickMedId = null;
+        if (this._quickForm) this._quickForm.classList.add('hidden');
+    }
+
+    async _saveQuickMed() {
+        const el = (x) => document.getElementById(x);
+        const payload = {
+            emoji: (el('quick-med-emoji')?.value || '💊').trim() || '💊',
+            medication_name: (el('quick-med-name')?.value || '').trim(),
+            dosage: parseFloat(el('quick-med-dosage')?.value || '1') || 1,
+            dosage_unit: el('quick-med-unit')?.value || '粒',
+            category: el('quick-med-category')?.value || 'supplement',
+            administration_slot: el('quick-med-slot')?.value || 'morning',
+        };
+        if (!payload.medication_name) {
+            this._showMessage('请填写药名。', 'error');
+            el('quick-med-name')?.focus();
+            return;
+        }
+
+        const isUpdate = this._editingQuickMedId != null;
+        const url = isUpdate ? `/api/quick-meds/${this._editingQuickMedId}` : '/api/quick-meds';
+        const btn = el('btn-quick-med-save');
+        const oldLabel = btn ? btn.textContent : '';
+        if (btn) { btn.disabled = true; btn.textContent = '保存中…'; }
+
+        try {
+            const resp = await fetch(url, {
+                method: isUpdate ? 'PUT' : 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            const text = await resp.text();
+            let body;
+            try { body = text ? JSON.parse(text) : null; } catch (e) { body = undefined; }
+
+            if (!resp.ok) {
+                const msg = (body && body.error) ? body.error : `保存失败 (HTTP ${resp.status})`;
+                this._showMessage('❌ ' + msg, 'error');
+                return;
+            }
+
+            this._closeQuickMedForm();
+            this._showMessage(isUpdate ? '✅ 常用药已更新' : '✅ 已新增常用药', 'success');
+            if (window.ApiCache) window.ApiCache.invalidatePrefix('/api/quick-meds');
+            await this._loadQuickMeds();
+            this._renderList();
+        } catch (err) {
+            this._showMessage('❌ 网络错误: ' + (err && err.message ? err.message : err), 'error');
+        } finally {
+            if (btn) { btn.disabled = false; btn.textContent = oldLabel; }
+        }
+    }
+
+    async _deleteQuickMed(id) {
+        if (id == null) return;
+        const q = this._quickMeds.find(m => m.id === id);
+        const name = q ? q.medication_name : '这条';
+        if (!confirm(`确定删掉「${name}」这个常用药按钮吗？历史服药记录不受影响。`)) return;
+
+        try {
+            const resp = await fetch(`/api/quick-meds/${id}`, { method: 'DELETE' });
+            if (!resp.ok && resp.status !== 204) {
+                let eb = null;
+                try { eb = await resp.json(); } catch (e) { /* ignore */ }
+                this._showMessage('❌ ' + (eb?.error || `删除失败 (HTTP ${resp.status})`), 'error');
+                return;
+            }
+            this._closeQuickMedForm();
+            if (window.ApiCache) window.ApiCache.invalidatePrefix('/api/quick-meds');
+            await this._loadQuickMeds();
+            this._renderList();
+            this._showMessage(`已删掉常用药「${name}」。`, 'success');
+        } catch (err) {
+            this._showMessage('❌ 网络错误: ' + (err && err.message ? err.message : err), 'error');
         }
     }
 
@@ -884,5 +1126,10 @@ class MedicationManager {
         const div = document.createElement('div');
         div.textContent = text == null ? '' : String(text);
         return div.innerHTML;
+    }
+
+    /** 属性值转义（_escapeHtml 不转引号，塞进 data-* / title 会破标签） */
+    _escapeAttr(text) {
+        return this._escapeHtml(text).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
 }
