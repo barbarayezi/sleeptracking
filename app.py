@@ -2983,7 +2983,7 @@ def export_data():
     from datetime import datetime
     TABLES = ['sleep_records', 'meal_records', 'period_records',
               'whoop_daily_metrics', 'whoop_workouts', 'health_metrics', 'whoop_tokens',
-              'medication_records', 'medication_categories']
+              'medication_records', 'medication_categories', 'quick_meds']
     conn = get_connection()
     data = {'version': 1, 'exported_at': datetime.now().isoformat(), 'tables': {}}
     try:
@@ -3015,7 +3015,7 @@ def import_data():
 
     TABLES = ['sleep_records', 'meal_records', 'period_records',
               'whoop_daily_metrics', 'whoop_workouts', 'health_metrics', 'whoop_tokens',
-              'medication_records', 'medication_categories']
+              'medication_records', 'medication_categories', 'quick_meds']
     summary = {}
     conn = get_connection()
     try:
