@@ -15,6 +15,7 @@ sleeptracking/
 │   ├── health.py        # HealthKit/Whoop 健康数据 CRUD（原 health_models.py）
 │   ├── workout.py       # 训练打卡 CRUD（原 workout_models.py）
 │   ├── medication.py    # 用药记录/类别 CRUD（原 medication_models.py）
+│   ├── quick_med.py     # 常用药（一键打卡按钮）CRUD，schema v22 起代替 HTML 硬编码
 │   ├── daily_report.py  # 日报存取（原 daily_report_models.py）
 │   └── nutrition.py     # LLM 营养估算（原 nutrition.py）
 ├── reports.py           # 报告生成（结构化数据 + CLI 接口）
@@ -65,6 +66,10 @@ python app.py    # 启动在 localhost:5001（或 5002，端口冲突时自动�
 | DELETE | `/api/meals/<id>` | 删除饮食记录 |
 | GET | `/api/report` | 生成报告（`?period=weekly`） |
 | GET | `/api/stats` | 快速统计 |
+| GET/POST | `/api/medications` | 服药记录（`?date=`） |
+| PUT/DELETE | `/api/medications/<id>` | 改 / 删单条服药记录 |
+| GET/POST | `/api/quick-meds` | 常用药（一键打卡按钮的真源，schema v22） |
+| PUT/DELETE | `/api/quick-meds/<id>` | 改剂量 / 药名 / 时段 / 增删常用药 |
 
 ## 记录字段
 
